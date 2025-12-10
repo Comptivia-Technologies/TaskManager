@@ -307,8 +307,8 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
 
         <div className="flex gap-8">
           {/* Vertical Step Indicator on Left */}
-          <div className="w-64 flex-shrink-0">
-            <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="w-16 flex-shrink-0">
+            <div className="bg-white rounded-lg shadow-md p-4">
               <div className="relative">
                 <div className="space-y-8">
                   {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => {
@@ -351,8 +351,13 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
                             </div>
                           )}
                           {isActive && !isCompleted && (
-                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center border-2 border-white hover:bg-blue-600 transition-colors">
-                              <span className="text-white text-xs font-bold">{step}</span>
+                            <div className="relative">
+                              {/* Pulsing ring animation */}
+                              <div className="absolute inset-0 rounded-full bg-blue-500 animate-ping opacity-75" style={{ animationDuration: '2s' }}></div>
+                              {/* Main circle */}
+                              <div className="relative w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center border-2 border-white hover:bg-blue-600 transition-colors shadow-lg">
+                                <span className="text-white text-xs font-bold z-10 relative">{step}</span>
+                              </div>
                             </div>
                           )}
                           {!isActive && !isCompleted && (
@@ -360,26 +365,6 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
                               <span className="text-gray-600 text-xs font-bold">{step}</span>
                             </div>
                           )}
-                        </div>
-
-                        {/* Step label */}
-                        <div 
-                          className={`ml-4 ${
-                            (isCompleted || isActive) ? 'cursor-pointer' : 'cursor-default'
-                          }`}
-                          onClick={() => handleStepClick(step)}
-                        >
-                          <span
-                            className={`font-bold ${
-                              isActive
-                                ? 'text-blue-500 hover:text-blue-600'
-                                : isCompleted
-                                ? 'text-green-500 hover:text-green-600'
-                                : 'text-gray-600'
-                            } transition-colors`}
-                          >
-                            {stepLabels[step - 1]}
-                          </span>
                         </div>
                       </div>
                     );
@@ -397,7 +382,12 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
 
             <div className="flex justify-between">
               <button
-                onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
+                onClick={() => {
+                  const previousStep = Math.max(1, currentStep - 1);
+                  // Remove current step and any steps after it from completed steps
+                  setCompletedSteps(completedSteps.filter(step => step < previousStep));
+                  setCurrentStep(previousStep);
+                }}
                 disabled={currentStep === 1}
                 className="flex items-center px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
