@@ -302,46 +302,55 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
           {/* Vertical Step Indicator on Left */}
           <div className="w-64 flex-shrink-0">
             <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="space-y-0">
-                {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => {
-                  const isCompleted = isStepCompleted(step);
-                  const isActive = step === currentStep;
-                  const isPast = step < currentStep;
+              <div className="relative">
+                <div className="space-y-8">
+                  {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => {
+                    const isCompleted = isStepCompleted(step);
+                    const isActive = step === currentStep;
+                    const isPast = step < currentStep;
 
-                  return (
-                    <div key={step} className="relative">
-                      {/* Step Box */}
-                      <div
-                        className={`relative px-4 py-3 border-2 rounded-lg transition-all ${
-                          isActive
-                            ? 'border-blue-500 bg-blue-50'
-                            : isCompleted
-                            ? 'border-green-500 bg-green-50'
-                            : 'border-gray-300 bg-gray-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
+                    return (
+                      <div key={step} className="relative flex items-center">
+                        {/* Vertical line connecting to next step - passes through circle center */}
+                        {/* Line starts at circle center (top-3 = 12px) and extends to next circle center */}
+                        {/* Height: 12px (remaining half of circle) + 32px (space-y-8 gap) + 12px (half of next circle) = 56px */}
+                        {step < totalSteps && (
+                          <div className="absolute left-3 top-3 w-0.5 z-0" style={{ height: '56px' }}>
+                            <div
+                              className={`w-full h-full ${
+                                isCompleted || isPast ? 'bg-green-500' : 'bg-gray-300'
+                              }`}
+                            />
+                          </div>
+                        )}
+
+                        {/* Circle with number or checkmark - centered on line at left-3 (12px) */}
+                        <div className="relative z-10 flex-shrink-0">
                           {isCompleted && (
-                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                            <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center border-2 border-white">
                               <FiCheck className="text-white text-sm font-bold" />
                             </div>
                           )}
                           {isActive && !isCompleted && (
-                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center border-2 border-white">
                               <span className="text-white text-xs font-bold">{step}</span>
                             </div>
                           )}
                           {!isActive && !isCompleted && (
-                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
+                            <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center border-2 border-white">
                               <span className="text-gray-600 text-xs font-bold">{step}</span>
                             </div>
                           )}
+                        </div>
+
+                        {/* Step label */}
+                        <div className="ml-4">
                           <span
                             className={`font-bold ${
                               isActive
-                                ? 'text-blue-700'
+                                ? 'text-blue-500'
                                 : isCompleted
-                                ? 'text-green-700'
+                                ? 'text-green-500'
                                 : 'text-gray-600'
                             }`}
                           >
@@ -349,20 +358,9 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
                           </span>
                         </div>
                       </div>
-
-                      {/* Arrow between steps */}
-                      {step < totalSteps && (
-                        <div className="flex justify-center py-2">
-                          <div
-                            className={`w-0.5 h-8 ${
-                              isPast || isCompleted ? 'bg-green-500' : 'bg-gray-300'
-                            }`}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
