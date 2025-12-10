@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { workflowService } from '../services/workflowService';
-import { taskService } from '../services/taskService';
-import { Workflow, Task, TaskUpdate } from '../types';
+import { Workflow } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import KanbanBoard from '../components/KanbanBoard';
+import WorkflowStagesView from '../components/WorkflowStagesView';
 import { toast } from 'react-toastify';
 import { FiArrowLeft, FiCode, FiEye } from 'react-icons/fi';
 
@@ -33,61 +32,6 @@ const WorkflowDetail = () => {
     }
   }, [id, navigate]);
 
-  const handleTaskMove = async (taskId: number, newStageId: number | null) => {
-    if (!workflow) return;
-
-    try {
-      const task = workflow.tasks.find((t) => t.taskId === taskId);
-      if (!task) return;
-
-      const update: TaskUpdate = {
-        taskName: task.taskName,
-        description: task.description,
-        status: task.status,
-        priority: task.priority,
-        dueDate: task.dueDate,
-        stageId: newStageId || undefined,
-        assignedToMemberId: task.assignedToMemberId || undefined,
-      };
-
-      await taskService.update(taskId, update);
-
-      // Refresh workflow data
-      const updatedWorkflow = await workflowService.getById(Number(id));
-      setWorkflow(updatedWorkflow);
-      toast.success('Task moved successfully');
-    } catch (error: any) {
-      toast.error('Failed to move task');
-    }
-  };
-
-  const handleTaskUpdate = async (taskId: number, updates: Partial<TaskUpdate>) => {
-    if (!workflow) return;
-
-    try {
-      const task = workflow.tasks.find((t) => t.taskId === taskId);
-      if (!task) return;
-
-      const update: TaskUpdate = {
-        taskName: updates.taskName ?? task.taskName,
-        description: updates.description ?? task.description,
-        status: updates.status ?? task.status,
-        priority: updates.priority ?? task.priority,
-        dueDate: updates.dueDate ?? task.dueDate,
-        stageId: updates.stageId ?? task.stageId ?? undefined,
-        assignedToMemberId: updates.assignedToMemberId ?? task.assignedToMemberId ?? undefined,
-      };
-
-      await taskService.update(taskId, update);
-
-      // Refresh workflow data
-      const updatedWorkflow = await workflowService.getById(Number(id));
-      setWorkflow(updatedWorkflow);
-      toast.success('Task updated successfully');
-    } catch (error: any) {
-      toast.error('Failed to update task');
-    }
-  };
 
   if (loading) {
     return <LoadingSpinner />;
@@ -102,13 +46,13 @@ const WorkflowDetail = () => {
   }
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen font-sans">
+    <div className="p-8 bg-white min-h-screen font-sans">
       <div className="max-w-full">
         {/* Header Section */}
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
+        <div className="bg-white rounded-azure-sm shadow-azure-sm p-6 mb-4 border border-[#434E78]/20">
           <button
             onClick={() => navigate('/workflows')}
-            className="mb-4 flex items-center text-blue-600 hover:text-blue-700 font-medium transition-colors font-sans"
+            className="mb-4 flex items-center text-[#434E78] hover:text-[#434E78]/80 font-medium transition-colors font-sans text-sm"
           >
             <FiArrowLeft className="mr-2" />
             Back to Workflows
@@ -116,36 +60,30 @@ const WorkflowDetail = () => {
           
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h1 className="text-4xl font-bold text-gray-900 mb-3 font-sans">{workflow.workflowName}</h1>
-              <p className="text-gray-600 text-lg mb-4 font-sans">
+              <h1 className="text-3xl font-semibold text-black mb-2 font-sans tracking-tight">{workflow.workflowName}</h1>
+              <p className="text-black/70 text-base mb-4 font-sans">
                 {workflow.description || 'No description provided'}
               </p>
               
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-6 text-sm">
+                <div className="flex items-center space-x-4 text-sm">
                   {workflow.teamName && (
                     <div className="flex items-center">
-                      <span className="text-gray-500 mr-2">Workflow Team:</span>
-                      <span className="font-semibold text-gray-900 bg-blue-50 text-blue-700 px-3 py-1 rounded-lg">
+                      <span className="text-black/60 mr-2 font-sans">Workflow Team:</span>
+                      <span className="font-semibold text-black bg-[#434E78]/10 px-2.5 py-1 rounded-azure-sm text-xs font-sans">
                         {workflow.teamName}
                       </span>
                     </div>
                   )}
                   <div className="flex items-center">
-                    <span className="text-gray-500 mr-2">Stages:</span>
-                    <span className="font-semibold text-gray-900 bg-purple-50 text-purple-700 px-3 py-1 rounded-lg">
+                    <span className="text-black/60 mr-2 font-sans">Stages:</span>
+                    <span className="font-semibold text-black bg-[#434E78]/10 px-2.5 py-1 rounded-azure-sm text-xs font-sans">
                       {workflow.stages?.length || 0}
                     </span>
                   </div>
                   <div className="flex items-center">
-                    <span className="text-gray-500 mr-2">Tasks:</span>
-                    <span className="font-semibold text-gray-900 bg-green-50 text-green-700 px-3 py-1 rounded-lg">
-                      {workflow.tasks?.length || 0}
-                    </span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="text-gray-500 mr-2">Created:</span>
-                    <span className="font-semibold text-gray-900">
+                    <span className="text-black/60 mr-2 font-sans">Created:</span>
+                    <span className="font-semibold text-black font-sans">
                       {new Date(workflow.createdAt).toLocaleDateString()}
                     </span>
                   </div>
@@ -153,24 +91,24 @@ const WorkflowDetail = () => {
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => setViewMode('ui')}
-                    className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
+                    className={`flex items-center px-3 py-1.5 rounded-azure-sm transition-colors text-sm font-medium ${
                       viewMode === 'ui'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? 'bg-[#434E78] text-white shadow-azure-sm'
+                        : 'bg-[#434E78]/10 text-[#434E78] hover:bg-[#434E78]/20'
                     }`}
                   >
-                    <FiEye className="mr-2" />
+                    <FiEye className="mr-1.5 text-sm" />
                     UI View
                   </button>
                   <button
                     onClick={() => setViewMode('json')}
-                    className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
+                    className={`flex items-center px-3 py-1.5 rounded-azure-sm transition-colors text-sm font-medium ${
                       viewMode === 'json'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? 'bg-[#434E78] text-white shadow-azure-sm'
+                        : 'bg-[#434E78]/10 text-[#434E78] hover:bg-[#434E78]/20'
                     }`}
                   >
-                    <FiCode className="mr-2" />
+                    <FiCode className="mr-1.5 text-sm" />
                     JSON View
                   </button>
                 </div>
@@ -180,19 +118,15 @@ const WorkflowDetail = () => {
         </div>
 
         {/* Content Section */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+        <div className="bg-white rounded-azure-sm shadow-azure-sm p-4 border border-[#434E78]/20">
           {viewMode === 'ui' ? (
-            <KanbanBoard
-              workflow={workflow}
-              onTaskMove={handleTaskMove}
-              onTaskUpdate={handleTaskUpdate}
-            />
+            <WorkflowStagesView workflow={workflow} />
           ) : (
             <div>
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex items-center justify-between pb-4 border-b border-[#434E78]/20">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900 font-sans">JSON View</h2>
-                  <p className="text-sm text-gray-600 mt-1 font-sans">
+                  <h2 className="text-lg font-semibold text-black font-sans">JSON View</h2>
+                  <p className="text-sm text-black/70 mt-1 font-sans">
                     Complete workflow structure with all relationships
                   </p>
                 </div>
@@ -208,14 +142,14 @@ const WorkflowDetail = () => {
                     navigator.clipboard.writeText(JSON.stringify(jsonWithTeamNames, null, 2));
                     toast.success('JSON copied to clipboard!');
                   }}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                  className="px-3 py-1.5 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 transition-colors flex items-center gap-2 text-sm font-medium shadow-azure-sm"
                 >
-                  <FiCode className="mr-1" />
+                  <FiCode className="text-sm" />
                   Copy JSON
                 </button>
               </div>
-              <div className="bg-gray-50 p-4 rounded-lg overflow-auto max-h-[600px] border border-gray-200">
-                <pre className="text-sm text-gray-800 whitespace-pre-wrap">
+              <div className="bg-[#434E78]/5 p-4 rounded-azure-sm overflow-auto max-h-[600px] border border-[#434E78]/20">
+                <pre className="text-sm text-black whitespace-pre-wrap font-mono">
                   {JSON.stringify(
                     {
                       ...workflow,

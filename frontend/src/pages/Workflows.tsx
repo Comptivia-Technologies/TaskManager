@@ -45,35 +45,35 @@ const Workflows = () => {
   }
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen font-sans">
+    <div className="p-8 bg-white min-h-screen font-sans">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#434E78]/20">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2 font-sans">Workflows</h1>
-            <p className="text-gray-600 font-sans">Manage and track your workflow processes</p>
+            <h1 className="text-3xl font-semibold text-black mb-1 font-sans tracking-tight">Workflows</h1>
+            <p className="text-black/70 text-sm font-sans">Manage and track your workflow processes</p>
           </div>
           <button
             onClick={() => setIsCreateMode(true)}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 flex items-center shadow-md hover:shadow-lg transition-all"
+            className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
           >
-            <FiPlus className="mr-2 text-lg" />
+            <FiPlus className="mr-2 text-base" />
             Create Workflow
           </button>
         </div>
 
         {workflows.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+          <div className="bg-white rounded-azure-sm shadow-azure-sm p-12 text-center border border-[#434E78]/20">
             <div className="max-w-md mx-auto">
-              <div className="bg-gray-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                <FiLayers className="text-4xl text-gray-400" />
+              <div className="bg-[#434E78]/10 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <FiLayers className="text-3xl text-[#434E78]" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No workflows yet</h3>
-              <p className="text-gray-600 mb-6">
+              <h3 className="text-lg font-semibold text-black mb-2 font-sans">No workflows yet</h3>
+              <p className="text-black/70 mb-6 text-sm font-sans">
                 Create your first workflow to start organizing your tasks and processes.
               </p>
               <button
                 onClick={() => setIsCreateMode(true)}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 inline-flex items-center shadow-md hover:shadow-lg transition-all"
+                className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 inline-flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
               >
                 <FiPlus className="mr-2" />
                 Create Your First Workflow
@@ -81,16 +81,16 @@ const Workflows = () => {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {workflows.map((workflow) => (
               <div
                 key={workflow.workflowId}
-                className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-200 cursor-pointer border border-gray-200 overflow-hidden group"
+                className="bg-white rounded-azure-sm shadow-azure-sm hover:shadow-azure-md transition-all duration-200 cursor-pointer border border-[#434E78]/20 overflow-hidden group"
                 onClick={() => navigate(`/workflows/${workflow.workflowId}`)}
               >
-                <div className="p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <h2 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                <div className="p-5">
+                  <div className="flex justify-between items-start mb-3">
+                    <h2 className="text-lg font-semibold text-black group-hover:text-black/80 transition-colors font-sans">
                       {workflow.workflowName}
                     </h2>
                     <button
@@ -98,36 +98,30 @@ const Workflows = () => {
                         e.stopPropagation();
                         handleDelete(workflow.workflowId);
                       }}
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded transition-colors"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
                       title="Delete workflow"
                     >
-                      <FiTrash2 />
+                      <FiTrash2 className="text-base" />
                     </button>
                   </div>
                   
-                  <p className="text-gray-600 mb-6 text-sm line-clamp-2">
+                  <p className="text-black/70 mb-4 text-sm line-clamp-2 font-sans">
                     {workflow.description || 'No description provided'}
                   </p>
                   
-                  <div className="space-y-3 pt-4 border-t border-gray-100">
+                  <div className="space-y-2.5 pt-4 border-t border-[#434E78]/10">
                     {workflow.teamName && (
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500">Team</span>
-                        <span className="font-medium text-gray-900">{workflow.teamName}</span>
+                        <span className="text-black/60 font-sans">Team</span>
+                        <span className="font-medium text-black font-sans">{workflow.teamName}</span>
                       </div>
                     )}
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-3">
                         <div className="flex items-center text-sm">
-                          <span className="text-gray-500 mr-2">Stages:</span>
-                          <span className="font-semibold text-gray-900 bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                          <span className="text-black/60 mr-2 font-sans">Stages:</span>
+                          <span className="font-semibold text-black bg-[#434E78]/10 px-2 py-0.5 rounded-azure-sm text-xs font-sans">
                             {workflow.stages?.length || 0}
-                          </span>
-                        </div>
-                        <div className="flex items-center text-sm">
-                          <span className="text-gray-500 mr-2">Tasks:</span>
-                          <span className="font-semibold text-gray-900 bg-green-50 text-green-700 px-2 py-1 rounded">
-                            {workflow.tasks?.length || 0}
                           </span>
                         </div>
                       </div>
@@ -135,8 +129,8 @@ const Workflows = () => {
                   </div>
                 </div>
                 
-                <div className="bg-gray-50 px-6 py-3 border-t border-gray-100">
-                  <span className="text-sm text-blue-600 font-medium group-hover:text-blue-700">
+                <div className="bg-[#434E78]/5 px-5 py-2.5 border-t border-[#434E78]/10">
+                  <span className="text-sm text-[#434E78] font-medium group-hover:text-[#434E78]/80 font-sans">
                     View Details →
                   </span>
                 </div>

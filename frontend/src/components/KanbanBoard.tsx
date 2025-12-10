@@ -85,13 +85,13 @@ const KanbanBoard = ({ workflow, onTaskMove, onTaskUpdate }: KanbanBoardProps) =
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 font-sans">
+      <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin font-sans">
         {/* Unassigned Tasks Column */}
         <div className="flex-shrink-0 w-80">
-          <div className="bg-gradient-to-b from-gray-50 to-gray-100 rounded-xl p-5 min-h-[600px] border-2 border-dashed border-gray-300">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-lg text-gray-700">Unassigned</h2>
-              <span className="bg-gray-200 text-gray-700 text-xs font-semibold px-2 py-1 rounded-full">
+          <div className="bg-[#434E78]/5 rounded-azure-sm p-5 min-h-[600px] border-2 border-dashed border-[#434E78]/30">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#434E78]/20">
+              <h2 className="font-semibold text-base text-black font-sans">Unassigned</h2>
+              <span className="bg-[#434E78]/20 text-black text-xs font-semibold px-2 py-1 rounded-azure-sm font-sans">
                 {getTasksByStage(null).length}
               </span>
             </div>
@@ -101,7 +101,7 @@ const KanbanBoard = ({ workflow, onTaskMove, onTaskUpdate }: KanbanBoardProps) =
             >
               <div className="space-y-3">
                 {getTasksByStage(null).length === 0 ? (
-                  <div className="text-center py-8 text-gray-400 text-sm">
+                  <div className="text-center py-8 text-black/50 text-sm font-sans">
                     No unassigned tasks
                   </div>
                 ) : (
@@ -134,30 +134,14 @@ const KanbanBoard = ({ workflow, onTaskMove, onTaskUpdate }: KanbanBoardProps) =
 
       <DragOverlay>
         {activeTask ? (
-          <div className="bg-white p-4 rounded-lg shadow-lg border-2 border-blue-500 w-72">
-            <h3 className="font-bold mb-2">{activeTask.taskName}</h3>
-            <p className="text-sm text-gray-600">{activeTask.description}</p>
+          <div className="bg-white p-4 rounded-azure-sm shadow-azure-xl border-2 border-[#434E78] w-72">
+            <h3 className="font-semibold mb-2 text-black font-sans">{activeTask.taskName}</h3>
+            <p className="text-sm text-black/70 font-sans">{activeTask.description}</p>
             <div className="mt-2 flex items-center gap-2">
-              <span
-                className={`px-2 py-1 rounded text-xs ${
-                  activeTask.priority === 'High'
-                    ? 'bg-red-100 text-red-800'
-                    : activeTask.priority === 'Medium'
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : 'bg-green-100 text-green-800'
-                }`}
-              >
+              <span className="px-2 py-1 rounded-azure-sm text-xs font-medium font-sans bg-[#434E78]/10 text-black">
                 {activeTask.priority}
               </span>
-              <span
-                className={`px-2 py-1 rounded text-xs ${
-                  activeTask.status === 'Completed'
-                    ? 'bg-green-100 text-green-800'
-                    : activeTask.status === 'In Progress'
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}
-              >
+              <span className="px-2 py-1 rounded-azure-sm text-xs font-medium font-sans bg-[#434E78]/10 text-black">
                 {activeTask.status}
               </span>
             </div>

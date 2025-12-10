@@ -101,45 +101,45 @@ const Teams = () => {
 
   if (isDetailView && selectedTeam) {
     return (
-      <div className="p-8">
+      <div className="p-8 bg-white">
         <button
           onClick={() => {
             setIsDetailView(false);
             setSelectedTeam(null);
           }}
-          className="mb-4 text-blue-500 hover:text-blue-700 font-sans"
+          className="mb-4 text-[#434E78] hover:text-[#434E78]/80 font-medium text-sm font-sans flex items-center"
         >
           ← Back to Teams
         </button>
-        <h1 className="text-3xl font-bold mb-4 font-sans">{selectedTeam.teamName}</h1>
-        <p className="text-gray-600 mb-6 font-sans">{selectedTeam.description}</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold mb-4 font-sans">Members</h2>
+        <h1 className="text-3xl font-semibold mb-2 text-black font-sans tracking-tight">{selectedTeam.teamName}</h1>
+        <p className="text-black/70 mb-6 font-sans">{selectedTeam.description}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white rounded-azure-sm shadow-azure-md p-6 border border-[#434E78]/20">
+            <h2 className="text-lg font-semibold mb-4 text-black font-sans">Members</h2>
             {(selectedTeam as any).members?.length > 0 ? (
               <ul className="space-y-2">
                 {(selectedTeam as any).members.map((member: any) => (
-                  <li key={member.memberId} className="border-b pb-2">
-                    {member.firstName} {member.lastName} - {member.role}
+                  <li key={member.memberId} className="border-b border-[#434E78]/20 pb-2 text-black/80 font-sans">
+                    {member.firstName} {member.lastName} - <span className="text-black/60">{member.role}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-gray-500">No members assigned</p>
+              <p className="text-black/60 font-sans">No members assigned</p>
             )}
           </div>
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold mb-4 font-sans">Workflows</h2>
+          <div className="bg-white rounded-azure-sm shadow-azure-md p-6 border border-[#434E78]/20">
+            <h2 className="text-lg font-semibold mb-4 text-black font-sans">Workflows</h2>
             {(selectedTeam as any).workflows?.length > 0 ? (
               <ul className="space-y-2">
                 {(selectedTeam as any).workflows.map((workflow: any) => (
-                  <li key={workflow.workflowId} className="border-b pb-2">
+                  <li key={workflow.workflowId} className="border-b border-[#434E78]/20 pb-2 text-black/80 font-sans">
                     {workflow.workflowName}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-gray-500">No workflows assigned</p>
+              <p className="text-black/60 font-sans">No workflows assigned</p>
             )}
           </div>
         </div>
@@ -148,14 +148,14 @@ const Teams = () => {
   }
 
   return (
-    <div className="p-8 font-sans">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold font-sans">Teams</h1>
+    <div className="p-8 bg-white font-sans">
+      <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#434E78]/20">
+        <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">Teams</h1>
         <button
           onClick={() => handleOpenModal()}
-          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center"
+          className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
         >
-          <FiPlus className="mr-2" />
+          <FiPlus className="mr-2 text-base" />
           Create Team
         </button>
       </div>
@@ -166,62 +166,62 @@ const Teams = () => {
           placeholder="Search teams..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full md:w-1/3 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full md:w-1/3 px-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
         />
       </div>
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="bg-white rounded-azure-sm shadow-azure-sm overflow-hidden border border-[#434E78]/20">
+        <table className="min-w-full divide-y divide-[#434E78]/20">
+          <thead className="bg-[#434E78]/5">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
                 Name
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
                 Description
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-right text-xs font-semibold text-black uppercase tracking-wider font-sans">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white divide-y divide-[#434E78]/20">
             {filteredTeams.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={3} className="px-6 py-8 text-center text-black/60 font-sans">
                   No teams found
                 </td>
               </tr>
             ) : (
               filteredTeams.map((team) => (
-                <tr key={team.teamId} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap font-medium">
+                <tr key={team.teamId} className="hover:bg-[#434E78]/5 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap font-semibold text-black font-sans">
                     {team.teamName}
                   </td>
-                  <td className="px-6 py-4 text-gray-600">
+                  <td className="px-6 py-4 text-black/70 font-sans">
                     {team.description || 'No description'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button
                       onClick={() => handleViewDetails(team)}
-                      className="text-blue-600 hover:text-blue-900 mr-3"
+                      className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-2 rounded-azure-sm mr-2 transition-colors"
                       title="View Details"
                     >
-                      <FiEye />
+                      <FiEye className="text-base" />
                     </button>
                     <button
                       onClick={() => handleOpenModal(team)}
-                      className="text-indigo-600 hover:text-indigo-900 mr-3"
+                      className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-2 rounded-azure-sm mr-2 transition-colors"
                       title="Edit"
                     >
-                      <FiEdit />
+                      <FiEdit className="text-base" />
                     </button>
                     <button
                       onClick={() => handleDelete(team.teamId)}
-                      className="text-red-600 hover:text-red-900"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-azure-sm transition-colors"
                       title="Delete"
                     >
-                      <FiTrash2 />
+                      <FiTrash2 className="text-base" />
                     </button>
                   </td>
                 </tr>
@@ -232,14 +232,14 @@ const Teams = () => {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
+            <h2 className="text-xl font-semibold mb-4 text-black font-sans">
               {isEditMode ? 'Edit Team' : 'Create Team'}
             </h2>
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
+                <label className="block text-black text-sm font-semibold mb-2 font-sans">
                   Team Name
                 </label>
                 <input
@@ -248,12 +248,12 @@ const Teams = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, teamName: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
                   required
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
+                <label className="block text-black text-sm font-semibold mb-2 font-sans">
                   Description
                 </label>
                 <textarea
@@ -261,21 +261,21 @@ const Teams = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
                   rows={4}
                 />
               </div>
-              <div className="flex justify-end space-x-4">
+              <div className="flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                  className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
                 >
                   {isEditMode ? 'Update' : 'Create'}
                 </button>
