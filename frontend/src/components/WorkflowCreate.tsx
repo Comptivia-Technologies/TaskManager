@@ -3,7 +3,7 @@ import { useTeams } from '../hooks/useTeams';
 import { workflowService } from '../services/workflowService';
 import { stageService } from '../services/stageService';
 import { toast } from 'react-toastify';
-import { FiChevronLeft, FiChevronRight, FiX, FiEdit2 } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiX, FiEdit2, FiCheck } from 'react-icons/fi';
 
 interface WorkflowCreateProps {
   onSuccess: (workflowId: number) => void;
@@ -21,7 +21,10 @@ interface StageForm {
 const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
   const { teams } = useTeams();
   const [currentStep, setCurrentStep] = useState(1);
+  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const totalSteps = 3;
+
+  const stepLabels = ['Workflow Name', 'Description', 'Add Stages'];
 
   // Step 1: Workflow Name
   const [workflowName, setWorkflowName] = useState('');
@@ -112,6 +115,10 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
         console.warn('Failed to update workflow JSON:', error);
       }
 
+      // Mark final step as completed
+      if (!completedSteps.includes(3)) {
+        setCompletedSteps([...completedSteps, 3]);
+      }
       toast.success('Workflow created successfully!');
       onSuccess(workflow.workflowId);
     } catch (error: any) {
@@ -126,7 +133,7 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
       case 1:
         return (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Step 1: Workflow Name</h2>
+            <h2 className="text-2xl font-bold mb-4">Workflow Name</h2>
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2">
                 Workflow Name *
@@ -146,7 +153,7 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
       case 2:
         return (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Step 2: Description</h2>
+            <h2 className="text-2xl font-bold mb-4">Description</h2>
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2">
                 Description
@@ -165,7 +172,7 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
       case 3:
         return (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Step 3: Add Stages and Assign Teams</h2>
+            <h2 className="text-2xl font-bold mb-4">Add Stages and Assign Teams</h2>
             <p className="text-gray-600 mb-6">Create stages for your workflow and assign a team to each stage.</p>
             <div className="mb-6 p-4 border border-gray-300 rounded-lg">
               <div className="grid grid-cols-2 gap-4 mb-4">
@@ -276,65 +283,121 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
     }
   };
 
+  const isStepCompleted = (step: number) => completedSteps.includes(step);
+
   return (
     <div className="p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-3xl font-bold">Create Workflow</h1>
-            <button
-              onClick={onCancel}
-              className="text-gray-600 hover:text-gray-800"
-            >
-              <FiX className="text-2xl" />
-            </button>
-          </div>
-          <div className="flex items-center justify-between mb-8">
-            {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
-              <div key={step} className="flex items-center flex-1">
-                <div
-                  className={`flex items-center justify-center w-10 h-10 rounded-full ${
-                    step === currentStep
-                      ? 'bg-blue-500 text-white'
-                      : step < currentStep
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-300 text-gray-600'
-                  }`}
-                >
-                  {step}
-                </div>
-                {step < totalSteps && (
-                  <div
-                    className={`flex-1 h-1 mx-2 ${
-                      step < currentStep ? 'bg-green-500' : 'bg-gray-300'
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-md p-8 mb-6">
-          {renderStepContent()}
-        </div>
-
-        <div className="flex justify-between">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold">Create Workflow</h1>
           <button
-            onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-            disabled={currentStep === 1}
-            className="flex items-center px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={onCancel}
+            className="text-gray-600 hover:text-gray-800"
           >
-            <FiChevronLeft className="mr-2" />
-            Back
+            <FiX className="text-2xl" />
           </button>
+        </div>
+
+        <div className="flex gap-8">
+          {/* Vertical Step Indicator on Left */}
+          <div className="w-64 flex-shrink-0">
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="space-y-0">
+                {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => {
+                  const isCompleted = isStepCompleted(step);
+                  const isActive = step === currentStep;
+                  const isPast = step < currentStep;
+
+                  return (
+                    <div key={step} className="relative">
+                      {/* Step Box */}
+                      <div
+                        className={`relative px-4 py-3 border-2 rounded-lg transition-all ${
+                          isActive
+                            ? 'border-blue-500 bg-blue-50'
+                            : isCompleted
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-300 bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {isCompleted && (
+                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                              <FiCheck className="text-white text-sm font-bold" />
+                            </div>
+                          )}
+                          {isActive && !isCompleted && (
+                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+                              <span className="text-white text-xs font-bold">{step}</span>
+                            </div>
+                          )}
+                          {!isActive && !isCompleted && (
+                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
+                              <span className="text-gray-600 text-xs font-bold">{step}</span>
+                            </div>
+                          )}
+                          <span
+                            className={`font-bold ${
+                              isActive
+                                ? 'text-blue-700'
+                                : isCompleted
+                                ? 'text-green-700'
+                                : 'text-gray-600'
+                            }`}
+                          >
+                            {stepLabels[step - 1]}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Arrow between steps */}
+                      {step < totalSteps && (
+                        <div className="flex justify-center py-2">
+                          <div
+                            className={`w-0.5 h-8 ${
+                              isPast || isCompleted ? 'bg-green-500' : 'bg-gray-300'
+                            }`}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Main Content Area */}
+          <div className="flex-1">
+            <div className="bg-white rounded-lg shadow-md p-8 mb-6">
+              {renderStepContent()}
+            </div>
+
+            <div className="flex justify-between">
+              <button
+                onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
+                disabled={currentStep === 1}
+                className="flex items-center px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FiChevronLeft className="mr-2" />
+                Back
+              </button>
           {currentStep < totalSteps ? (
             <button
               onClick={() => {
+                // Validate step 1 - ensure workflow name is entered
+                if (currentStep === 1 && !workflowName.trim()) {
+                  toast.error('Please enter a workflow name');
+                  return;
+                }
                 // Validate step 3 - ensure all stages have teams assigned
                 if (currentStep === 3 && stages.some(s => !s.teamId || s.teamId === 0)) {
                   toast.error('Please assign a team to all stages before proceeding');
                   return;
+                }
+                // Mark current step as completed
+                if (!completedSteps.includes(currentStep)) {
+                  setCompletedSteps([...completedSteps, currentStep]);
                 }
                 setCurrentStep(Math.min(totalSteps, currentStep + 1));
               }}
@@ -352,6 +415,8 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
               {loading ? 'Creating...' : 'Create Workflow'}
             </button>
           )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
