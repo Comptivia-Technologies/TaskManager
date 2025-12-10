@@ -2,7 +2,7 @@ import { useTeams } from '../hooks/useTeams';
 import { useMembers } from '../hooks/useMembers';
 import { useWorkflows } from '../hooks/useWorkflows';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiUsers, FiUser, FiLayers, FiCheckCircle, FiClock, FiTrendingUp, FiActivity, FiArrowRight } from 'react-icons/fi';
+import { FiUsers, FiUser, FiLayers, FiArrowRight, FiTrendingUp, FiCalendar } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
@@ -16,263 +16,239 @@ const Dashboard = () => {
   }
 
   // Calculate statistics
-  const totalTasks = workflows.reduce((sum, w) => sum + (w.tasks?.length || 0), 0);
   const totalStages = workflows.reduce((sum, w) => sum + (w.stages?.length || 0), 0);
-  const completedTasks = workflows.reduce((sum, w) => sum + (w.tasks?.filter(t => t.status === 'Completed').length || 0), 0);
-  const inProgressTasks = workflows.reduce((sum, w) => sum + (w.tasks?.filter(t => t.status === 'In Progress').length || 0), 0);
-  const pendingTasks = workflows.reduce((sum, w) => sum + (w.tasks?.filter(t => t.status === 'Pending').length || 0), 0);
-  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
+  const avgStagesPerWorkflow = workflows.length > 0 ? Math.round(totalStages / workflows.length) : 0;
+  
   // Get recent workflows
   const recentWorkflows = [...workflows]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
-
-  // Get tasks by priority
-  const highPriorityTasks = workflows.reduce((sum, w) => sum + (w.tasks?.filter(t => t.priority === 'High').length || 0), 0);
-  const mediumPriorityTasks = workflows.reduce((sum, w) => sum + (w.tasks?.filter(t => t.priority === 'Medium').length || 0), 0);
-  const lowPriorityTasks = workflows.reduce((sum, w) => sum + (w.tasks?.filter(t => t.priority === 'Low').length || 0), 0);
+    .slice(0, 6);
+  
+  // Get workflows by team
+  const workflowsByTeam = teams.map(team => ({
+    teamName: team.teamName,
+    count: workflows.filter(w => w.teamId === team.teamId).length
+  })).sort((a, b) => b.count - a.count).slice(0, 3);
 
   const stats = [
     {
       label: 'Total Teams',
       value: teams.length,
       icon: FiUsers,
-      gradient: 'from-blue-500 to-blue-600',
-      bgColor: 'bg-blue-50',
+      gradient: 'from-blue-500 via-blue-600 to-blue-700',
+      bgGradient: 'from-blue-50 to-blue-100',
       iconColor: 'text-blue-600',
-      change: '+0',
+      description: 'Active teams',
     },
     {
       label: 'Team Members',
       value: members.length,
       icon: FiUser,
-      gradient: 'from-green-500 to-green-600',
-      bgColor: 'bg-green-50',
-      iconColor: 'text-green-600',
-      change: '+0',
+      gradient: 'from-emerald-500 via-emerald-600 to-emerald-700',
+      bgGradient: 'from-emerald-50 to-emerald-100',
+      iconColor: 'text-emerald-600',
+      description: 'Total members',
     },
     {
       label: 'Active Workflows',
       value: workflows.length,
       icon: FiLayers,
-      gradient: 'from-purple-500 to-purple-600',
-      bgColor: 'bg-purple-50',
+      gradient: 'from-purple-500 via-purple-600 to-purple-700',
+      bgGradient: 'from-purple-50 to-purple-100',
       iconColor: 'text-purple-600',
-      change: '+0',
+      description: 'In progress',
     },
     {
-      label: 'Total Tasks',
-      value: totalTasks,
-      icon: FiActivity,
-      gradient: 'from-orange-500 to-orange-600',
-      bgColor: 'bg-orange-50',
-      iconColor: 'text-orange-600',
-      change: `${completionRate}% completed`,
+      label: 'Total Stages',
+      value: totalStages,
+      icon: FiTrendingUp,
+      gradient: 'from-amber-500 via-amber-600 to-amber-700',
+      bgGradient: 'from-amber-50 to-amber-100',
+      iconColor: 'text-amber-600',
+      description: `${avgStagesPerWorkflow} avg per workflow`,
     },
   ];
 
   return (
-    <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+    <div className="p-6 md:p-8 lg:p-10 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen font-sans">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Dashboard</h1>
-          <p className="text-gray-600">Welcome back! Here's what's happening with your workflows.</p>
+        <div className="mb-10">
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-indigo-900 bg-clip-text text-transparent mb-3 font-sans">
+            Dashboard
+          </h1>
+          <p className="text-gray-600 text-lg font-sans">Welcome back! Here's an overview of your workload management system.</p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+          {stats.map((stat, index) => {
             const Icon = stat.icon;
             return (
               <div
                 key={stat.label}
-                className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100"
+                className="group relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 transform hover:-translate-y-1"
+                style={{ animationDelay: `${index * 100}ms` }}
               >
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className={`${stat.bgColor} p-3 rounded-lg`}>
-                      <Icon className={`${stat.iconColor} text-2xl`} />
+                <div className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`}></div>
+                <div className="p-6 relative z-10">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className={`bg-gradient-to-br ${stat.bgGradient} p-4 rounded-xl shadow-md group-hover:scale-110 transition-transform duration-300`}>
+                      <Icon className={`${stat.iconColor} text-3xl`} />
                     </div>
-                    <div className={`bg-gradient-to-r ${stat.gradient} text-white text-xs font-semibold px-2 py-1 rounded-full`}>
-                      {stat.change}
+                    <div className="text-right">
+                      <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide font-sans">{stat.description}</p>
                     </div>
                   </div>
                   <div>
-                    <p className="text-gray-500 text-sm font-medium mb-1">{stat.label}</p>
-                    <p className="text-3xl font-bold text-gray-900">{stat.value.toLocaleString()}</p>
+                    <p className="text-gray-500 text-sm font-semibold mb-2 tracking-wide font-sans">{stat.label}</p>
+                    <p className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent font-sans">
+                      {stat.value.toLocaleString()}
+                    </p>
                   </div>
                 </div>
-                <div className={`h-1 bg-gradient-to-r ${stat.gradient}`}></div>
+                <div className={`h-1.5 bg-gradient-to-r ${stat.gradient} opacity-80`}></div>
               </div>
             );
           })}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Task Status Overview */}
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+          {/* Recent Workflows */}
+          <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg p-6 md:p-8 border border-gray-100">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Task Status Overview</h2>
-              <FiActivity className="text-gray-400 text-xl" />
+              <h2 className="text-2xl font-bold text-gray-900 font-sans">Recent Workflows</h2>
+              <button
+                onClick={() => navigate('/workflows')}
+                className="text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-2 transition-all hover:gap-3 font-sans"
+              >
+                View All
+                <FiArrowRight className="text-lg" />
+              </button>
             </div>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center">
-                    <FiCheckCircle className="text-green-500 mr-2" />
-                    <span className="text-sm font-medium text-gray-700">Completed</span>
-                  </div>
-                  <span className="text-sm font-bold text-gray-900">{completedTasks}</span>
+            {recentWorkflows.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-4">
+                  <FiLayers className="text-purple-400 text-5xl" />
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
+                <p className="text-gray-500 text-lg font-sans">No workflows yet. Create your first workflow to get started.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {recentWorkflows.map((workflow) => (
                   <div
-                    className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0}%` }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center">
-                    <FiClock className="text-blue-500 mr-2" />
-                    <span className="text-sm font-medium text-gray-700">In Progress</span>
+                    key={workflow.workflowId}
+                    onClick={() => navigate(`/workflows/${workflow.workflowId}`)}
+                    className="group p-5 border-2 border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-xl transition-all duration-300 cursor-pointer bg-gradient-to-br from-white to-gray-50"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors text-lg font-sans">
+                        {workflow.workflowName}
+                      </h3>
+                      <FiArrowRight className="text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all duration-300 text-xl" />
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2 font-sans">
+                      {workflow.description || 'No description provided'}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold font-sans">
+                        {workflow.teamName || 'Unassigned'}
+                      </div>
+                      {workflow.stages && (
+                        <div className="text-xs text-gray-500 font-sans">
+                          {workflow.stages.length} {workflow.stages.length === 1 ? 'stage' : 'stages'}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-sm font-bold text-gray-900">{inProgressTasks}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${totalTasks > 0 ? (inProgressTasks / totalTasks) * 100 : 0}%` }}
-                  ></div>
-                </div>
+                ))}
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center">
-                    <FiClock className="text-gray-400 mr-2" />
-                    <span className="text-sm font-medium text-gray-700">Pending</span>
-                  </div>
-                  <span className="text-sm font-bold text-gray-900">{pendingTasks}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-gradient-to-r from-gray-400 to-gray-500 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${totalTasks > 0 ? (pendingTasks / totalTasks) * 100 : 0}%` }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Completion Rate</span>
-                <span className="text-2xl font-bold text-gray-900">{completionRate}%</span>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Task Priority Breakdown */}
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Task Priority</h2>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border-l-4 border-red-500">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">High Priority</p>
-                  <p className="text-2xl font-bold text-red-600">{highPriorityTasks}</p>
-                </div>
-                <div className="bg-red-100 rounded-full p-3">
-                  <FiTrendingUp className="text-red-600 text-xl" />
-                </div>
-              </div>
-              <div className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Medium Priority</p>
-                  <p className="text-2xl font-bold text-yellow-600">{mediumPriorityTasks}</p>
-                </div>
-                <div className="bg-yellow-100 rounded-full p-3">
-                  <FiActivity className="text-yellow-600 text-xl" />
-                </div>
-              </div>
-              <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Low Priority</p>
-                  <p className="text-2xl font-bold text-green-600">{lowPriorityTasks}</p>
-                </div>
-                <div className="bg-green-100 rounded-full p-3">
-                  <FiCheckCircle className="text-green-600 text-xl" />
-                </div>
-              </div>
+          {/* Top Teams by Workflows */}
+          <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 border border-gray-100">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 font-sans">Top Teams</h2>
+              <FiUsers className="text-gray-400 text-xl" />
             </div>
-          </div>
-        </div>
-
-        {/* Recent Workflows */}
-        <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Recent Workflows</h2>
-            <button
-              onClick={() => navigate('/workflows')}
-              className="text-blue-600 hover:text-blue-700 font-medium flex items-center"
-            >
-              View All
-              <FiArrowRight className="ml-1" />
-            </button>
-          </div>
-          {recentWorkflows.length === 0 ? (
-            <div className="text-center py-12">
-              <FiLayers className="text-gray-300 text-5xl mx-auto mb-4" />
-              <p className="text-gray-500">No workflows yet. Create your first workflow to get started.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {recentWorkflows.map((workflow) => (
-                <div
-                  key={workflow.workflowId}
-                  onClick={() => navigate(`/workflows/${workflow.workflowId}`)}
-                  className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
-                      {workflow.workflowName}
-                    </h3>
-                    <FiArrowRight className="text-gray-400 group-hover:text-blue-600 transition-colors" />
+            {workflowsByTeam.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500 text-sm font-sans">No team data available</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {workflowsByTeam.map((team, index) => (
+                  <div
+                    key={team.teamName}
+                    className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all duration-300"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm font-sans ${
+                        index === 0 ? 'bg-gradient-to-br from-amber-400 to-amber-600' :
+                        index === 1 ? 'bg-gradient-to-br from-gray-400 to-gray-600' :
+                        'bg-gradient-to-br from-amber-600 to-amber-800'
+                      }`}>
+                        {index + 1}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 font-sans">{team.teamName}</p>
+                        <p className="text-xs text-gray-500 font-sans">{team.count} {team.count === 1 ? 'workflow' : 'workflows'}</p>
+                      </div>
+                    </div>
+                    <div className="w-16 bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${(team.count / Math.max(...workflowsByTeam.map(t => t.count), 1)) * 100}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                    {workflow.description || 'No description'}
-                  </p>
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>{workflow.teamName}</span>
-                    <span>{workflow.tasks?.length || 0} tasks</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between mb-4">
-              <FiLayers className="text-3xl opacity-80" />
-              <span className="text-4xl font-bold">{totalStages}</span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="group relative bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 rounded-2xl shadow-xl p-6 md:p-8 text-white overflow-hidden transform hover:scale-105 transition-all duration-300">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16"></div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="bg-white bg-opacity-20 p-3 rounded-xl">
+                  <FiLayers className="text-3xl" />
+                </div>
+                <span className="text-5xl font-bold font-sans">{totalStages}</span>
+              </div>
+              <p className="text-blue-100 font-semibold text-lg font-sans">Total Stages</p>
+              <p className="text-blue-200 text-sm mt-1 font-sans">{avgStagesPerWorkflow} average per workflow</p>
             </div>
-            <p className="text-blue-100 font-medium">Total Stages</p>
           </div>
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between mb-4">
-              <FiUsers className="text-3xl opacity-80" />
-              <span className="text-4xl font-bold">{teams.length}</span>
+          <div className="group relative bg-gradient-to-br from-purple-500 via-purple-600 to-purple-700 rounded-2xl shadow-xl p-6 md:p-8 text-white overflow-hidden transform hover:scale-105 transition-all duration-300">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16"></div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="bg-white bg-opacity-20 p-3 rounded-xl">
+                  <FiUsers className="text-3xl" />
+                </div>
+                <span className="text-5xl font-bold font-sans">{teams.length}</span>
+              </div>
+              <p className="text-purple-100 font-semibold text-lg font-sans">Active Teams</p>
+              <p className="text-purple-200 text-sm mt-1 font-sans">{members.length} total members</p>
             </div>
-            <p className="text-purple-100 font-medium">Active Teams</p>
           </div>
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between mb-4">
-              <FiCheckCircle className="text-3xl opacity-80" />
-              <span className="text-4xl font-bold">{completionRate}%</span>
+          <div className="group relative bg-gradient-to-br from-indigo-500 via-indigo-600 to-indigo-700 rounded-2xl shadow-xl p-6 md:p-8 text-white overflow-hidden transform hover:scale-105 transition-all duration-300">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16"></div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="bg-white bg-opacity-20 p-3 rounded-xl">
+                  <FiCalendar className="text-3xl" />
+                </div>
+                <span className="text-5xl font-bold font-sans">{workflows.length}</span>
+              </div>
+              <p className="text-indigo-100 font-semibold text-lg font-sans">Workflows</p>
+              <p className="text-indigo-200 text-sm mt-1 font-sans">All active workflows</p>
             </div>
-            <p className="text-green-100 font-medium">Completion Rate</p>
           </div>
         </div>
       </div>
