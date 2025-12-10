@@ -133,7 +133,7 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
       case 1:
         return (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Workflow Name</h2>
+            <h2 className="text-2xl font-bold mb-4 font-sans">Workflow Name</h2>
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2">
                 Workflow Name *
@@ -153,7 +153,7 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
       case 2:
         return (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Description</h2>
+            <h2 className="text-2xl font-bold mb-4 font-sans">Description</h2>
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2">
                 Description
@@ -172,8 +172,8 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
       case 3:
         return (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Add Stages and Assign Teams</h2>
-            <p className="text-gray-600 mb-6">Create stages for your workflow and assign a team to each stage.</p>
+            <h2 className="text-2xl font-bold mb-4 font-sans">Add Stages and Assign Teams</h2>
+            <p className="text-gray-600 mb-6 font-sans">Create stages for your workflow and assign a team to each stage.</p>
             <div className="mb-6 p-4 border border-gray-300 rounded-lg">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
@@ -293,10 +293,10 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-8 font-sans">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold">Create Workflow</h1>
+          <h1 className="text-3xl font-bold font-sans">Create Workflow</h1>
           <button
             onClick={onCancel}
             className="text-gray-600 hover:text-gray-800"

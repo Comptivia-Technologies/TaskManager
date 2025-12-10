@@ -11,9 +11,9 @@ import Members from './pages/Members';
 function App() {
   return (
     <Router>
-      <div className="flex min-h-screen bg-gray-100">
+      <div className="flex min-h-screen bg-gray-100 font-sans">
         <Sidebar />
-        <div className="flex-1 ml-64">
+        <div className="flex-1 ml-64 font-sans">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/workflows" element={<Workflows />} />

@@ -45,12 +45,12 @@ const Workflows = () => {
   }
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen">
+    <div className="p-8 bg-gray-50 min-h-screen font-sans">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Workflows</h1>
-            <p className="text-gray-600">Manage and track your workflow processes</p>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2 font-sans">Workflows</h1>
+            <p className="text-gray-600 font-sans">Manage and track your workflow processes</p>
           </div>
           <button
             onClick={() => setIsCreateMode(true)}

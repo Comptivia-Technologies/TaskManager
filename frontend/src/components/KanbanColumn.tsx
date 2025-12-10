@@ -15,7 +15,7 @@ const KanbanColumn = ({ stage, tasks, onTaskUpdate }: KanbanColumnProps) => {
   });
 
   return (
-    <div className="flex-shrink-0 w-80">
+    <div className="flex-shrink-0 w-80 font-sans">
       <div
         ref={setNodeRef}
         className="bg-gradient-to-b from-blue-50 to-blue-100 rounded-xl p-5 min-h-[600px] border-2 border-blue-200 shadow-sm"
@@ -23,21 +23,21 @@ const KanbanColumn = ({ stage, tasks, onTaskUpdate }: KanbanColumnProps) => {
         <div className="mb-4 pb-3 border-b border-blue-200">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <span className="bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded">
+              <span className="bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded font-sans">
                 #{stage.stageOrder}
               </span>
-              <h2 className="font-bold text-lg text-gray-800">
+              <h2 className="font-bold text-lg text-gray-800 font-sans">
                 {stage.stageName}
               </h2>
             </div>
-            <span className="bg-blue-200 text-blue-800 text-xs font-semibold px-2 py-1 rounded-full">
+            <span className="bg-blue-200 text-blue-800 text-xs font-semibold px-2 py-1 rounded-full font-sans">
               {tasks.length}
             </span>
           </div>
           {stage.teamName && (
             <div className="flex items-center gap-2 mt-2">
-              <span className="text-xs text-gray-500 font-medium">Team:</span>
-              <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-1 rounded-md">
+              <span className="text-xs text-gray-500 font-medium font-sans">Team:</span>
+              <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-1 rounded-md font-sans">
                 {stage.teamName}
               </span>
             </div>
@@ -49,7 +49,7 @@ const KanbanColumn = ({ stage, tasks, onTaskUpdate }: KanbanColumnProps) => {
         >
           <div className="space-y-3">
             {tasks.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">
+              <div className="text-center py-8 text-gray-400 text-sm font-sans">
                 No tasks in this stage
               </div>
             ) : (

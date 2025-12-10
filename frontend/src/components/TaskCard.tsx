@@ -50,10 +50,10 @@ const TaskCard = ({ task, onUpdate }: TaskCardProps) => {
       style={style}
       {...attributes}
       {...listeners}
-      className="bg-white p-4 rounded-lg shadow-md border-l-4 border-blue-500 hover:shadow-xl transition-all cursor-move hover:border-blue-600"
+      className="bg-white p-4 rounded-lg shadow-md border-l-4 border-blue-500 hover:shadow-xl transition-all cursor-move hover:border-blue-600 font-sans"
     >
       <div className="flex justify-between items-start mb-2">
-        <h3 className="font-bold text-sm text-gray-900">{task.taskName}</h3>
+        <h3 className="font-bold text-sm text-gray-900 font-sans">{task.taskName}</h3>
         {isEditing ? (
           <button
             onClick={(e) => {

@@ -102,13 +102,13 @@ const WorkflowDetail = () => {
   }
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen">
+    <div className="p-8 bg-gray-50 min-h-screen font-sans">
       <div className="max-w-full">
         {/* Header Section */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
           <button
             onClick={() => navigate('/workflows')}
-            className="mb-4 flex items-center text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            className="mb-4 flex items-center text-blue-600 hover:text-blue-700 font-medium transition-colors font-sans"
           >
             <FiArrowLeft className="mr-2" />
             Back to Workflows
@@ -116,8 +116,8 @@ const WorkflowDetail = () => {
           
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h1 className="text-4xl font-bold text-gray-900 mb-3">{workflow.workflowName}</h1>
-              <p className="text-gray-600 text-lg mb-4">
+              <h1 className="text-4xl font-bold text-gray-900 mb-3 font-sans">{workflow.workflowName}</h1>
+              <p className="text-gray-600 text-lg mb-4 font-sans">
                 {workflow.description || 'No description provided'}
               </p>
               
@@ -191,8 +191,8 @@ const WorkflowDetail = () => {
             <div>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">JSON View</h2>
-                  <p className="text-sm text-gray-600 mt-1">
+                  <h2 className="text-xl font-bold text-gray-900 font-sans">JSON View</h2>
+                  <p className="text-sm text-gray-600 mt-1 font-sans">
                     Complete workflow structure with all relationships
                   </p>
                 </div>

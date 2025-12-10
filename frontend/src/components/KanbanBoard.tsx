@@ -85,7 +85,7 @@ const KanbanBoard = ({ workflow, onTaskMove, onTaskUpdate }: KanbanBoardProps) =
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+      <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 font-sans">
         {/* Unassigned Tasks Column */}
         <div className="flex-shrink-0 w-80">
           <div className="bg-gradient-to-b from-gray-50 to-gray-100 rounded-xl p-5 min-h-[600px] border-2 border-dashed border-gray-300">

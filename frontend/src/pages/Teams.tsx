@@ -107,15 +107,15 @@ const Teams = () => {
             setIsDetailView(false);
             setSelectedTeam(null);
           }}
-          className="mb-4 text-blue-500 hover:text-blue-700"
+          className="mb-4 text-blue-500 hover:text-blue-700 font-sans"
         >
           ← Back to Teams
         </button>
-        <h1 className="text-3xl font-bold mb-4">{selectedTeam.teamName}</h1>
-        <p className="text-gray-600 mb-6">{selectedTeam.description}</p>
+        <h1 className="text-3xl font-bold mb-4 font-sans">{selectedTeam.teamName}</h1>
+        <p className="text-gray-600 mb-6 font-sans">{selectedTeam.description}</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold mb-4">Members</h2>
+            <h2 className="text-xl font-bold mb-4 font-sans">Members</h2>
             {(selectedTeam as any).members?.length > 0 ? (
               <ul className="space-y-2">
                 {(selectedTeam as any).members.map((member: any) => (
@@ -129,7 +129,7 @@ const Teams = () => {
             )}
           </div>
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold mb-4">Workflows</h2>
+            <h2 className="text-xl font-bold mb-4 font-sans">Workflows</h2>
             {(selectedTeam as any).workflows?.length > 0 ? (
               <ul className="space-y-2">
                 {(selectedTeam as any).workflows.map((workflow: any) => (
@@ -148,9 +148,9 @@ const Teams = () => {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-8 font-sans">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Teams</h1>
+        <h1 className="text-3xl font-bold font-sans">Teams</h1>
         <button
           onClick={() => handleOpenModal()}
           className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center"
