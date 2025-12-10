@@ -285,6 +285,13 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
 
   const isStepCompleted = (step: number) => completedSteps.includes(step);
 
+  const handleStepClick = (step: number) => {
+    // Only allow navigation to completed steps or the current step
+    if (isStepCompleted(step) || step === currentStep) {
+      setCurrentStep(step);
+    }
+  };
+
   return (
     <div className="p-8">
       <div className="max-w-6xl mx-auto">
@@ -325,14 +332,26 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
                         )}
 
                         {/* Circle with number or checkmark - centered on line at left-3 (12px) */}
-                        <div className="relative z-10 flex-shrink-0">
+                        <div 
+                          className={`relative z-10 flex-shrink-0 ${
+                            (isCompleted || isActive) ? 'cursor-pointer' : 'cursor-not-allowed'
+                          }`}
+                          onClick={() => handleStepClick(step)}
+                          title={
+                            isCompleted 
+                              ? `Go to ${stepLabels[step - 1]}` 
+                              : isActive 
+                              ? `Current step: ${stepLabels[step - 1]}`
+                              : 'Complete previous steps first'
+                          }
+                        >
                           {isCompleted && (
-                            <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center border-2 border-white">
+                            <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center border-2 border-white hover:bg-green-600 transition-colors">
                               <FiCheck className="text-white text-sm font-bold" />
                             </div>
                           )}
                           {isActive && !isCompleted && (
-                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center border-2 border-white">
+                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center border-2 border-white hover:bg-blue-600 transition-colors">
                               <span className="text-white text-xs font-bold">{step}</span>
                             </div>
                           )}
@@ -344,15 +363,20 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
                         </div>
 
                         {/* Step label */}
-                        <div className="ml-4">
+                        <div 
+                          className={`ml-4 ${
+                            (isCompleted || isActive) ? 'cursor-pointer' : 'cursor-default'
+                          }`}
+                          onClick={() => handleStepClick(step)}
+                        >
                           <span
                             className={`font-bold ${
                               isActive
-                                ? 'text-blue-500'
+                                ? 'text-blue-500 hover:text-blue-600'
                                 : isCompleted
-                                ? 'text-green-500'
+                                ? 'text-green-500 hover:text-green-600'
                                 : 'text-gray-600'
-                            }`}
+                            } transition-colors`}
                           >
                             {stepLabels[step - 1]}
                           </span>
