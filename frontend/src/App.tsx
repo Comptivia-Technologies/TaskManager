@@ -7,6 +7,7 @@ import Workflows from './pages/Workflows';
 import WorkflowDetail from './pages/WorkflowDetail';
 import Teams from './pages/Teams';
 import Members from './pages/Members';
+import SLAConfiguration from './pages/SLAConfiguration';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             <Route path="/workflows/:id" element={<WorkflowDetail />} />
             <Route path="/teams" element={<Teams />} />
             <Route path="/members" element={<Members />} />
+            <Route path="/sla-configuration" element={<SLAConfiguration />} />
           </Routes>
         </div>
         <ToastContainer

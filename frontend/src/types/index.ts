@@ -127,3 +127,32 @@ export interface TaskUpdate {
   assignedToMemberId?: number;
 }
 
+export type PriorityLevel = 'Critical' | 'High' | 'Medium' | 'Low';
+
+export interface SLAConfiguration {
+  workflowId: number;
+  workflowName: string;
+  priorityLevels: {
+    [key in PriorityLevel]: {
+      responseTime: number; // in minutes
+    };
+  };
+}
+
+export interface SLAConfigurationCreate {
+  workflowId: number;
+  priorityLevels: {
+    [key in PriorityLevel]: {
+      responseTime: number;
+    };
+  };
+}
+
+export interface SLAConfigurationUpdate {
+  priorityLevels: {
+    [key in PriorityLevel]: {
+      responseTime: number;
+    };
+  };
+}
+
