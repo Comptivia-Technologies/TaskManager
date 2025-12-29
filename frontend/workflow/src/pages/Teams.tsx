@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useTeams } from '../hooks/useTeams';
 import { teamService } from '../services/teamService';
-import { Team, TeamCreate } from '../types';
+import { memberService } from '../services/memberService';
+import { Team, TeamCreate, Member, MemberCreate } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiPlus, FiEdit, FiTrash2, FiEye } from 'react-icons/fi';
+import { FiPlus, FiEdit, FiTrash2, FiEye, FiX } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 const Teams = () => {
@@ -17,6 +18,18 @@ const Teams = () => {
     description: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Member management state
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [isMemberEditMode, setIsMemberEditMode] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [memberFormData, setMemberFormData] = useState<MemberCreate>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    teamId: 0,
+    role: '',
+  });
 
   const handleOpenModal = (team?: Team) => {
     if (team) {
@@ -89,6 +102,87 @@ const Teams = () => {
     }
   };
 
+  const handleOpenMemberModal = (member?: Member) => {
+    if (member && selectedTeam) {
+      setSelectedMember(member);
+      setIsMemberEditMode(true);
+      setMemberFormData({
+        firstName: member.firstName,
+        lastName: member.lastName,
+        email: member.email,
+        teamId: member.teamId,
+        role: member.role,
+      });
+    } else if (selectedTeam) {
+      setIsMemberEditMode(false);
+      setMemberFormData({
+        firstName: '',
+        lastName: '',
+        email: '',
+        teamId: selectedTeam.teamId,
+        role: '',
+      });
+      setSelectedMember(null);
+    }
+    setIsMemberModalOpen(true);
+  };
+
+  const handleCloseMemberModal = () => {
+    setIsMemberModalOpen(false);
+    setIsMemberEditMode(false);
+    setSelectedMember(null);
+    setMemberFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      teamId: 0,
+      role: '',
+    });
+  };
+
+  const handleMemberSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeam) return;
+
+    try {
+      if (isMemberEditMode && selectedMember) {
+        await memberService.update(selectedMember.memberId, memberFormData);
+        toast.success('Member updated successfully');
+      } else {
+        await memberService.create(memberFormData);
+        toast.success('Member added successfully');
+      }
+      handleCloseMemberModal();
+      // Refresh team details
+      const [members, workflows] = await Promise.all([
+        teamService.getMembers(selectedTeam.teamId),
+        teamService.getWorkflows(selectedTeam.teamId),
+      ]);
+      setSelectedTeam({ ...selectedTeam, members, workflows } as any);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to save member');
+    }
+  };
+
+  const handleDeleteMember = async (memberId: number) => {
+    if (!selectedTeam) return;
+    
+    if (window.confirm('Are you sure you want to delete this member?')) {
+      try {
+        await memberService.delete(memberId);
+        toast.success('Member deleted successfully');
+        // Refresh team details
+        const [members, workflows] = await Promise.all([
+          teamService.getMembers(selectedTeam.teamId),
+          teamService.getWorkflows(selectedTeam.teamId),
+        ]);
+        setSelectedTeam({ ...selectedTeam, members, workflows } as any);
+      } catch (error: any) {
+        toast.error(error.response?.data?.error || 'Failed to delete member');
+      }
+    }
+  };
+
   const filteredTeams = teams.filter(
     (team) =>
       team.teamName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -115,15 +209,50 @@ const Teams = () => {
         <p className="text-black/70 mb-6 font-sans">{selectedTeam.description}</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-white rounded-azure-sm shadow-azure-md p-6 border border-[#434E78]/20">
-            <h2 className="text-lg font-semibold mb-4 text-black font-sans">Members</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-black font-sans">Members</h2>
+              <button
+                onClick={() => handleOpenMemberModal()}
+                className="bg-[#434E78] text-white px-3 py-1.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center text-sm font-medium shadow-azure-sm transition-colors font-sans"
+              >
+                <FiPlus className="mr-1 text-xs" />
+                Add Member
+              </button>
+            </div>
             {(selectedTeam as any).members?.length > 0 ? (
-              <ul className="space-y-2">
+              <div className="space-y-2">
                 {(selectedTeam as any).members.map((member: any) => (
-                  <li key={member.memberId} className="border-b border-[#434E78]/20 pb-2 text-black/80 font-sans">
-                    {member.firstName} {member.lastName} - <span className="text-black/60">{member.role}</span>
-                  </li>
+                  <div
+                    key={member.memberId}
+                    className="flex items-center justify-between border-b border-[#434E78]/20 pb-2"
+                  >
+                    <div className="flex-1">
+                      <div className="text-black/80 font-sans font-medium">
+                        {member.firstName} {member.lastName}
+                      </div>
+                      <div className="text-sm text-black/60 font-sans">
+                        {member.email} - <span className="text-black/60">{member.role}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenMemberModal(member)}
+                        className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-1.5 rounded-azure-sm transition-colors"
+                        title="Edit member"
+                      >
+                        <FiEdit className="text-sm" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMember(member.memberId)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
+                        title="Delete member"
+                      >
+                        <FiTrash2 className="text-sm" />
+                      </button>
+                    </div>
+                  </div>
                 ))}
-              </ul>
+              </div>
             ) : (
               <p className="text-black/60 font-sans">No members assigned</p>
             )}
@@ -297,6 +426,121 @@ const Teams = () => {
                   className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
                 >
                   {isEditMode ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Member Modal */}
+      {isMemberModalOpen && selectedTeam && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-black font-sans">
+                {isMemberEditMode ? 'Edit Member' : 'Add Member'}
+              </h2>
+              <button
+                onClick={handleCloseMemberModal}
+                className="text-black/70 hover:text-black hover:bg-[#434E78]/10 p-1 rounded-azure-sm transition-colors"
+              >
+                <FiX className="text-lg" />
+              </button>
+            </div>
+            <form onSubmit={handleMemberSubmit}>
+              <div className="mb-4">
+                <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                  First Name *
+                </label>
+                <input
+                  type="text"
+                  value={memberFormData.firstName}
+                  onChange={(e) =>
+                    setMemberFormData({ ...memberFormData, firstName: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                  Last Name *
+                </label>
+                <input
+                  type="text"
+                  value={memberFormData.lastName}
+                  onChange={(e) =>
+                    setMemberFormData({ ...memberFormData, lastName: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  value={memberFormData.email}
+                  onChange={(e) =>
+                    setMemberFormData({ ...memberFormData, email: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                  Team *
+                </label>
+                <select
+                  value={memberFormData.teamId}
+                  onChange={(e) =>
+                    setMemberFormData({
+                      ...memberFormData,
+                      teamId: parseInt(e.target.value),
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                  required
+                >
+                  {teams.map((team) => (
+                    <option key={team.teamId} value={team.teamId}>
+                      {team.teamName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mb-4">
+                <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                  Role *
+                </label>
+                <input
+                  type="text"
+                  value={memberFormData.role}
+                  onChange={(e) =>
+                    setMemberFormData({ ...memberFormData, role: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                  placeholder="e.g., Developer, Manager"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={handleCloseMemberModal}
+                  className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
+                >
+                  {isMemberEditMode ? 'Update' : 'Add'}
                 </button>
               </div>
             </form>

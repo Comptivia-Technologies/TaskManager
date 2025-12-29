@@ -3,14 +3,16 @@ import { useWorkflows } from '../hooks/useWorkflows';
 import { workflowService } from '../services/workflowService';
 import { Workflow } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiPlus, FiTrash2, FiLayers } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiLayers, FiEdit } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import WorkflowCreate from '../components/WorkflowCreate';
+import WorkflowEdit from '../components/WorkflowEdit';
 
 const Workflows = () => {
   const { workflows, loading, refetch } = useWorkflows();
   const [isCreateMode, setIsCreateMode] = useState(false);
+  const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
   const navigate = useNavigate();
 
   const handleDelete = async (id: number) => {
@@ -31,6 +33,11 @@ const Workflows = () => {
     navigate(`/workflows/${workflowId}`);
   };
 
+  const handleEditSuccess = () => {
+    setEditingWorkflow(null);
+    refetch();
+  };
+
   if (loading) {
     return <LoadingSpinner />;
   }
@@ -40,6 +47,16 @@ const Workflows = () => {
       <WorkflowCreate
         onSuccess={handleCreateSuccess}
         onCancel={() => setIsCreateMode(false)}
+      />
+    );
+  }
+
+  if (editingWorkflow) {
+    return (
+      <WorkflowEdit
+        workflow={editingWorkflow}
+        onSuccess={handleEditSuccess}
+        onCancel={() => setEditingWorkflow(null)}
       />
     );
   }
@@ -93,16 +110,28 @@ const Workflows = () => {
                     <h2 className="text-lg font-semibold text-black group-hover:text-black/80 transition-colors font-sans">
                       {workflow.workflowName}
                     </h2>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(workflow.workflowId);
-                      }}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
-                      title="Delete workflow"
-                    >
-                      <FiTrash2 className="text-base" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingWorkflow(workflow);
+                        }}
+                        className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-1.5 rounded-azure-sm transition-colors"
+                        title="Edit workflow"
+                      >
+                        <FiEdit className="text-base" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(workflow.workflowId);
+                        }}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
+                        title="Delete workflow"
+                      >
+                        <FiTrash2 className="text-base" />
+                      </button>
+                    </div>
                   </div>
                   
                   <p className="text-black/70 mb-4 text-sm line-clamp-2 font-sans">
