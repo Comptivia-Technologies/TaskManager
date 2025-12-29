@@ -4,6 +4,7 @@ export interface Team {
   description?: string;
   createdAt: string;
   updatedAt: string;
+  workflowNames?: string[];
 }
 
 export interface TeamCreate {
@@ -127,7 +128,8 @@ export interface TaskUpdate {
   assignedToMemberId?: number;
 }
 
-export type PriorityLevel = 'Critical' | 'High' | 'Medium' | 'Low';
+// SLA and task priorities are now fully dynamic, so this is a free-form string
+export type PriorityLevel = string;
 
 export interface ManagedTask {
   taskId: number;
@@ -160,7 +162,8 @@ export interface SLAConfiguration {
   workflowId: number;
   workflowName: string;
   priorityLevels: {
-    [key in PriorityLevel]: {
+    // key is the priority name (e.g. "Very Critical", "High", etc.)
+    [key: string]: {
       responseTime: number; // in minutes
     };
   };
@@ -169,7 +172,7 @@ export interface SLAConfiguration {
 export interface SLAConfigurationCreate {
   workflowId: number;
   priorityLevels: {
-    [key in PriorityLevel]: {
+    [key: string]: {
       responseTime: number;
     };
   };
@@ -177,7 +180,7 @@ export interface SLAConfigurationCreate {
 
 export interface SLAConfigurationUpdate {
   priorityLevels: {
-    [key in PriorityLevel]: {
+    [key: string]: {
       responseTime: number;
     };
   };

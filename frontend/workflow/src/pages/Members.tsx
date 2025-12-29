@@ -4,7 +4,7 @@ import { useTeams } from '../hooks/useTeams';
 import { memberService } from '../services/memberService';
 import { Member, MemberCreate } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiPlus, FiEdit, FiTrash2 } from 'react-icons/fi';
+import { FiPlus, FiEdit, FiTrash2, FiFilter, FiSearch } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 const Members = () => {
@@ -21,6 +21,7 @@ const Members = () => {
     role: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState<number | 'all'>('all');
 
   useEffect(() => {
     if (teams.length > 0 && formData.teamId === 0) {
@@ -95,13 +96,19 @@ const Members = () => {
     }
   };
 
-  const filteredMembers = members.filter(
-    (member) =>
+  const filteredMembers = members.filter((member) => {
+    // Filter by search term
+    const matchesSearch =
       member.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       member.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.teamName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      member.teamName.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Filter by team
+    const matchesTeam = selectedTeamFilter === 'all' || member.teamId === selectedTeamFilter;
+    
+    return matchesSearch && matchesTeam;
+  });
 
   if (loading) {
     return <LoadingSpinner />;
@@ -120,14 +127,59 @@ const Members = () => {
         </button>
       </div>
 
-      <div className="mb-6">
-        <input
-          type="text"
-          placeholder="Search members..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full md:w-1/3 px-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-        />
+      <div className="mb-6 flex flex-col md:flex-row gap-4">
+        <div className="w-full md:w-64">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <FiSearch className="text-[#434E78] text-base" />
+            </div>
+            <input
+              type="text"
+              placeholder="Search members..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+            />
+          </div>
+        </div>
+        <div className="w-full md:w-64">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <FiFilter className="text-[#434E78] text-base" />
+            </div>
+            <select
+              value={selectedTeamFilter}
+              onChange={(e) =>
+                setSelectedTeamFilter(
+                  e.target.value === 'all' ? 'all' : parseInt(e.target.value)
+                )
+              }
+              className="w-full pl-10 pr-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans appearance-none cursor-pointer"
+            >
+              <option value="all">All Teams</option>
+              {teams.map((team) => (
+                <option key={team.teamId} value={team.teamId}>
+                  {team.teamName}
+                </option>
+              ))}
+            </select>
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+              <svg
+                className="w-4 h-4 text-[#434E78]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-azure-sm shadow-azure-sm overflow-hidden border border-[#434E78]/20">

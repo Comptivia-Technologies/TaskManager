@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useWorkflows } from '../hooks/useWorkflows';
 import { slaService } from '../services/slaService';
-import { PriorityLevel } from '../types';
 import { toast } from 'react-toastify';
 import { FiChevronLeft, FiChevronRight, FiX, FiCheck, FiClock } from 'react-icons/fi';
 
@@ -17,21 +16,29 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
   const [completedSteps, setCompletedSteps] = useState<number[]>(initialWorkflowId ? [1] : []);
   const totalSteps = 2;
 
-  const stepLabels = ['Select Workflow', 'Configure Priority Levels'];
+  const stepLabels = ['Select Workflow', 'Configure Priorities'];
 
   // Step 1: Select Workflow
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(initialWorkflowId || null);
 
-  // Step 2: Set Response Times for All Priority Levels
-  const priorityLevels: PriorityLevel[] = ['Critical', 'High', 'Medium', 'Low'];
-  const [priorityConfigs, setPriorityConfigs] = useState<{
-    [key in PriorityLevel]: { responseTime: number; timeUnit: 'minutes' | 'hours' | 'days' };
-  }>({
-    Critical: { responseTime: 0, timeUnit: 'minutes' },
-    High: { responseTime: 0, timeUnit: 'minutes' },
-    Medium: { responseTime: 0, timeUnit: 'minutes' },
-    Low: { responseTime: 0, timeUnit: 'minutes' },
-  });
+  // Step 2: Configure dynamic priorities and their response times
+  type TimeUnit = 'minutes' | 'hours' | 'days';
+
+  interface PriorityConfig {
+    id: string;
+    name: string;
+    responseTime: number;
+    timeUnit: TimeUnit;
+  }
+
+  const [priorities, setPriorities] = useState<PriorityConfig[]>([
+    { id: 'critical', name: 'Critical', responseTime: 0, timeUnit: 'minutes' },
+    { id: 'high', name: 'High', responseTime: 0, timeUnit: 'minutes' },
+    { id: 'medium', name: 'Medium', responseTime: 0, timeUnit: 'minutes' },
+    { id: 'low', name: 'Low', responseTime: 0, timeUnit: 'minutes' },
+  ]);
+
+  const [newPriorityName, setNewPriorityName] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [existingConfig, setExistingConfig] = useState<any>(null);
@@ -46,29 +53,38 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
           
           // Populate priority configs with existing values
           if (config && config.priorityLevels) {
-            const newConfigs: typeof priorityConfigs = {
-              Critical: { responseTime: 0, timeUnit: 'minutes' },
-              High: { responseTime: 0, timeUnit: 'minutes' },
-              Medium: { responseTime: 0, timeUnit: 'minutes' },
-              Low: { responseTime: 0, timeUnit: 'minutes' },
-            };
-            
-            const levels: PriorityLevel[] = ['Critical', 'High', 'Medium', 'Low'];
-            levels.forEach((priority) => {
-              const existingTime = config.priorityLevels[priority]?.responseTime || 0;
-              if (existingTime > 0) {
-                // Convert minutes to appropriate unit for display
-                if (existingTime < 60) {
-                  newConfigs[priority] = { responseTime: existingTime, timeUnit: 'minutes' };
-                } else if (existingTime < 1440) {
-                  newConfigs[priority] = { responseTime: Math.floor(existingTime / 60), timeUnit: 'hours' };
-                } else {
-                  newConfigs[priority] = { responseTime: Math.floor(existingTime / 1440), timeUnit: 'days' };
+            const loadedPriorities: PriorityConfig[] = Object.entries(config.priorityLevels).map(
+              ([name, value]: [string, { responseTime: number }], index) => {
+                const existingTime = value?.responseTime || 0;
+                let displayTime = 0;
+                let unit: TimeUnit = 'minutes';
+
+                if (existingTime > 0) {
+                  if (existingTime < 60) {
+                    displayTime = existingTime;
+                    unit = 'minutes';
+                  } else if (existingTime < 1440) {
+                    displayTime = Math.floor(existingTime / 60);
+                    unit = 'hours';
+                  } else {
+                    displayTime = Math.floor(existingTime / 1440);
+                    unit = 'days';
+                  }
                 }
+
+                return {
+                  id: `${name.toLowerCase().replace(/\s+/g, '-')}-${index}`,
+                  name,
+                  responseTime: displayTime,
+                  timeUnit: unit,
+                };
               }
-            });
-            
-            setPriorityConfigs(newConfigs);
+            );
+
+            // If nothing is configured yet, keep defaults; otherwise replace
+            if (loadedPriorities.length > 0) {
+              setPriorities(loadedPriorities);
+            }
           }
         } catch (error) {
           // No existing config
@@ -79,12 +95,14 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
     fetchExistingConfig();
   }, [selectedWorkflowId]);
 
-  const priorityColors: { [key in PriorityLevel]: string } = {
-    Critical: 'bg-red-100 text-red-800 border-red-300',
-    High: 'bg-orange-100 text-orange-800 border-orange-300',
-    Medium: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    Low: 'bg-blue-100 text-blue-800 border-blue-300',
-  };
+  const priorityColorClasses = [
+    'bg-red-100 text-red-800 border-red-300',
+    'bg-orange-100 text-orange-800 border-orange-300',
+    'bg-yellow-100 text-yellow-800 border-yellow-300',
+    'bg-blue-100 text-blue-800 border-blue-300',
+    'bg-purple-100 text-purple-800 border-purple-300',
+    'bg-emerald-100 text-emerald-800 border-emerald-300',
+  ];
 
   const convertToMinutes = (value: number, unit: 'minutes' | 'hours' | 'days'): number => {
     switch (unit) {
@@ -106,9 +124,7 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
     }
 
     // Validate that at least one priority has a response time
-    const hasAnyTime = priorityLevels.some(
-      (priority) => priorityConfigs[priority].responseTime > 0
-    );
+    const hasAnyTime = priorities.some((p) => p.responseTime > 0);
 
     if (!hasAnyTime) {
       toast.error('Please set response time for at least one priority level');
@@ -119,19 +135,13 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
     try {
       // Convert all priority configs to minutes
       const currentConfig: {
-        [key in PriorityLevel]: { responseTime: number };
-      } = {
-        Critical: { responseTime: 0 },
-        High: { responseTime: 0 },
-        Medium: { responseTime: 0 },
-        Low: { responseTime: 0 },
-      };
+        [key: string]: { responseTime: number };
+      } = {};
 
-      priorityLevels.forEach((priority) => {
-        const config = priorityConfigs[priority];
-        if (config.responseTime > 0) {
-          currentConfig[priority] = {
-            responseTime: convertToMinutes(config.responseTime, config.timeUnit),
+      priorities.forEach((priority) => {
+        if (priority.name.trim() && priority.responseTime > 0) {
+          currentConfig[priority.name.trim()] = {
+            responseTime: convertToMinutes(priority.responseTime, priority.timeUnit),
           };
         }
       });
@@ -225,9 +235,9 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
       case 2:
         return (
           <div>
-            <h2 className="text-xl font-semibold mb-4 text-black font-sans">Configure Priority Levels</h2>
+            <h2 className="text-xl font-semibold mb-4 text-black font-sans">Configure Priorities</h2>
             <p className="text-black/70 mb-6 text-sm font-sans">
-              Set response times for all priority levels. You must configure at least one priority level.
+              Add and configure any number of priority levels, and set response times for each. You must configure at least one priority.
             </p>
             {selectedWorkflowId && (
               <div className="mb-6 p-4 bg-[#434E78]/5 border border-[#434E78]/20 rounded-azure-sm">
@@ -244,22 +254,89 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
               </div>
             )}
             <div className="space-y-4">
-              {priorityLevels.map((priority) => {
-                const config = priorityConfigs[priority];
-                const existingTime = existingConfig?.priorityLevels?.[priority]?.responseTime || 0;
-                const totalMinutes = convertToMinutes(config.responseTime, config.timeUnit);
-                
+              {/* Add Priority */}
+              <div className="p-4 border border-dashed border-[#434E78]/40 rounded-azure-sm bg-[#f9fafb]">
+                <div className="flex flex-col md:flex-row md:items-end gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs font-semibold mb-1 opacity-75">
+                      New Priority Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newPriorityName}
+                      onChange={(e) => setNewPriorityName(e.target.value)}
+                      placeholder="e.g. Very Critical, Urgent, Low Impact"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-transparent bg-white text-gray-900 text-sm font-sans"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = newPriorityName.trim();
+                      if (!trimmed) return;
+                      if (priorities.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
+                        toast.error('A priority with this name already exists');
+                        return;
+                      }
+                      setPriorities([
+                        ...priorities,
+                        {
+                          id: `${trimmed.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
+                          name: trimmed,
+                          responseTime: 0,
+                          timeUnit: 'minutes',
+                        },
+                      ]);
+                      setNewPriorityName('');
+                    }}
+                    className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 text-sm font-medium shadow-azure-sm"
+                  >
+                    Add Priority
+                  </button>
+                </div>
+              </div>
+
+              {/* Existing priorities */}
+              {priorities.map((priority, index) => {
+                const totalMinutes = convertToMinutes(priority.responseTime, priority.timeUnit);
+                const colorClass = priorityColorClasses[index % priorityColorClasses.length];
+
                 return (
                   <div
-                    key={priority}
-                    className={`p-4 border-2 rounded-azure-sm ${priorityColors[priority]}`}
+                    key={priority.id}
+                    className={`p-4 border-2 rounded-azure-sm ${colorClass}`}
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-sm">{priority} Priority</h3>
-                      {existingTime > 0 && (
-                        <span className="text-xs opacity-75">
-                          Current: {formatTime(existingTime)}
-                        </span>
+                    <div className="flex items-center justify-between mb-3 gap-3">
+                      <div className="flex-1">
+                        <label className="block text-xs font-semibold mb-1 opacity-75">
+                          Priority Name
+                        </label>
+                        <input
+                          type="text"
+                          value={priority.name}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setPriorities((prev) =>
+                              prev.map((p) =>
+                                p.id === priority.id ? { ...p, name: value } : p
+                              )
+                            );
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-transparent bg-white text-gray-900 text-sm font-sans"
+                        />
+                      </div>
+                      {priorities.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPriorities((prev) =>
+                              prev.filter((p) => p.id !== priority.id)
+                            );
+                          }}
+                          className="text-xs text-black/70 hover:text-black underline"
+                        >
+                          Remove
+                        </button>
                       )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -271,15 +348,14 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
                           type="number"
                           min="0"
                           step="1"
-                          value={config.responseTime || ''}
+                          value={priority.responseTime || ''}
                           onChange={(e) => {
-                            setPriorityConfigs({
-                              ...priorityConfigs,
-                              [priority]: {
-                                ...config,
-                                responseTime: parseInt(e.target.value) || 0,
-                              },
-                            });
+                            const value = parseInt(e.target.value) || 0;
+                            setPriorities((prev) =>
+                              prev.map((p) =>
+                                p.id === priority.id ? { ...p, responseTime: value } : p
+                              )
+                            );
                           }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-transparent bg-white text-gray-900 text-sm font-sans"
                           placeholder="Enter time"
@@ -290,15 +366,14 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
                           Unit
                         </label>
                         <select
-                          value={config.timeUnit}
+                          value={priority.timeUnit}
                           onChange={(e) => {
-                            setPriorityConfigs({
-                              ...priorityConfigs,
-                              [priority]: {
-                                ...config,
-                                timeUnit: e.target.value as 'minutes' | 'hours' | 'days',
-                              },
-                            });
+                            const unit = e.target.value as TimeUnit;
+                            setPriorities((prev) =>
+                              prev.map((p) =>
+                                p.id === priority.id ? { ...p, timeUnit: unit } : p
+                              )
+                            );
                           }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-transparent bg-white text-gray-900 text-sm font-sans"
                         >
@@ -473,7 +548,10 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
               ) : (
                 <button
                   onClick={handleSubmit}
-                  disabled={loading || !priorityLevels.some(p => priorityConfigs[p].responseTime > 0)}
+                  disabled={
+                    loading ||
+                    !priorities.some((p) => p.name.trim() && p.responseTime > 0)
+                  }
                   className="flex items-center px-5 py-2 bg-emerald-600 text-white rounded-azure-sm hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
                 >
                   {loading ? 'Saving...' : 'Save Configuration'}

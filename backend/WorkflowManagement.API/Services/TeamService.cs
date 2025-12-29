@@ -25,7 +25,45 @@ public class TeamService : ITeamService
     public async Task<IEnumerable<TeamReadDto>> GetAllTeamsAsync()
     {
         var teams = await _teamRepository.GetAllAsync();
-        return _mapper.Map<IEnumerable<TeamReadDto>>(teams);
+        var teamDtos = _mapper.Map<IEnumerable<TeamReadDto>>(teams).ToList();
+        
+        // Get all team IDs
+        var teamIds = teamDtos.Select(t => t.TeamId).ToList();
+        
+        if (teamIds.Any())
+        {
+            // Load all stages with their workflows for the teams
+            var stages = await _context.Stages
+                .Where(s => teamIds.Contains(s.TeamId))
+                .Include(s => s.Workflow)
+                .ToListAsync();
+            
+            // Group by team and get distinct workflow names
+            var workflowsByTeam = stages
+                .Where(s => s.Workflow != null)
+                .GroupBy(s => s.TeamId)
+                .Select(g => new
+                {
+                    TeamId = g.Key,
+                    WorkflowNames = g.Select(s => s.Workflow!.WorkflowName).Distinct().ToList()
+                })
+                .ToDictionary(w => w.TeamId, w => w.WorkflowNames);
+            
+            // Map workflow names to teams
+            foreach (var teamDto in teamDtos)
+            {
+                if (workflowsByTeam.TryGetValue(teamDto.TeamId, out var workflowNames))
+                {
+                    teamDto.WorkflowNames = workflowNames;
+                }
+                else
+                {
+                    teamDto.WorkflowNames = new List<string>();
+                }
+            }
+        }
+        
+        return teamDtos;
     }
 
     public async Task<TeamReadDto?> GetTeamByIdAsync(int id)
@@ -101,11 +139,27 @@ public class TeamService : ITeamService
 
     public async Task<IEnumerable<WorkflowReadDto>> GetTeamWorkflowsAsync(int teamId)
     {
+        // Get workflows directly assigned to the team (via TeamId on Workflow)
         var team = await _teamRepository.GetTeamWithWorkflowsAsync(teamId);
-        if (team == null)
-            return Enumerable.Empty<WorkflowReadDto>();
-
-        return _mapper.Map<IEnumerable<WorkflowReadDto>>(team.Workflows);
+        var directWorkflows = team?.Workflows ?? Enumerable.Empty<Workflow>();
+        
+        // Get workflows that have stages assigned to this team
+        var workflowsFromStages = await _context.Stages
+            .Where(s => s.TeamId == teamId)
+            .Include(s => s.Workflow)
+            .Where(s => s.Workflow != null)
+            .Select(s => s.Workflow!)
+            .Distinct()
+            .ToListAsync();
+        
+        // Combine both sets of workflows and remove duplicates
+        var allWorkflows = directWorkflows
+            .Concat(workflowsFromStages)
+            .GroupBy(w => w.WorkflowId)
+            .Select(g => g.First())
+            .ToList();
+        
+        return _mapper.Map<IEnumerable<WorkflowReadDto>>(allWorkflows);
     }
 }
 

@@ -180,6 +180,9 @@ const Teams = () => {
               <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
                 Description
               </th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
+                Workflow
+              </th>
               <th className="px-6 py-3 text-right text-xs font-semibold text-black uppercase tracking-wider font-sans">
                 Actions
               </th>
@@ -188,7 +191,7 @@ const Teams = () => {
           <tbody className="bg-white divide-y divide-[#434E78]/20">
             {filteredTeams.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-6 py-8 text-center text-black/60 font-sans">
+                <td colSpan={4} className="px-6 py-8 text-center text-black/60 font-sans">
                   No teams found
                 </td>
               </tr>
@@ -200,6 +203,22 @@ const Teams = () => {
                   </td>
                   <td className="px-6 py-4 text-black/70 font-sans">
                     {team.description || 'No description'}
+                  </td>
+                  <td className="px-6 py-4 text-black/70 font-sans">
+                    {team.workflowNames && team.workflowNames.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {team.workflowNames.map((workflowName, index) => (
+                          <span
+                            key={index}
+                            className="inline-block px-2 py-1 text-xs bg-[#434E78]/10 text-[#434E78] rounded-azure-sm font-medium"
+                          >
+                            {workflowName}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-black/40 italic">No workflows</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button

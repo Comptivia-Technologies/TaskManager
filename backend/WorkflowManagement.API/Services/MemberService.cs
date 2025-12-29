@@ -23,7 +23,19 @@ public class MemberService : IMemberService
     public async Task<IEnumerable<MemberReadDto>> GetAllMembersAsync()
     {
         var members = await _memberRepository.GetMembersWithTeamAsync();
-        return _mapper.Map<IEnumerable<MemberReadDto>>(members);
+        var memberDtos = _mapper.Map<IEnumerable<MemberReadDto>>(members).ToList();
+        
+        // Populate team names from the included Team navigation property
+        foreach (var memberDto in memberDtos)
+        {
+            var member = members.FirstOrDefault(m => m.MemberId == memberDto.MemberId);
+            if (member?.Team != null)
+            {
+                memberDto.TeamName = member.Team.TeamName;
+            }
+        }
+        
+        return memberDtos;
     }
 
     public async Task<MemberReadDto?> GetMemberByIdAsync(int id)

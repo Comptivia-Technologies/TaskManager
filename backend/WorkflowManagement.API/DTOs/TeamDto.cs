@@ -9,6 +9,7 @@ public class TeamReadDto
     public string? Description { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public List<string> WorkflowNames { get; set; } = new List<string>();
 }
 
 public class TeamCreateDto

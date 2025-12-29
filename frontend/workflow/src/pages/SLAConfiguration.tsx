@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useWorkflows } from '../hooks/useWorkflows';
 import { slaService } from '../services/slaService';
-import { SLAConfiguration, PriorityLevel } from '../types';
+import { SLAConfiguration } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { FiClock, FiSettings, FiAlertCircle } from 'react-icons/fi';
 import SLAConfigure from '../components/SLAConfigure';
@@ -13,13 +13,14 @@ const SLAConfigurationPage = () => {
   const [isConfigureMode, setIsConfigureMode] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | undefined>(undefined);
 
-  const priorityLevels: PriorityLevel[] = ['Critical', 'High', 'Medium', 'Low'];
-  const priorityColors: { [key in PriorityLevel]: string } = {
-    Critical: 'bg-red-100 text-red-800 border-red-300',
-    High: 'bg-orange-100 text-orange-800 border-orange-300',
-    Medium: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    Low: 'bg-blue-100 text-blue-800 border-blue-300',
-  };
+  const priorityColorClasses = [
+    'bg-red-100 text-red-800 border-red-300',
+    'bg-orange-100 text-orange-800 border-orange-300',
+    'bg-yellow-100 text-yellow-800 border-yellow-300',
+    'bg-blue-100 text-blue-800 border-blue-300',
+    'bg-purple-100 text-purple-800 border-purple-300',
+    'bg-emerald-100 text-emerald-800 border-emerald-300',
+  ];
 
   useEffect(() => {
     const fetchSLAConfigs = async () => {
@@ -83,8 +84,8 @@ const SLAConfigurationPage = () => {
     const config = slaConfigs.get(workflowId);
     if (!config) return { configured: false, count: 0 };
     
-    const count = priorityLevels.filter(
-      (priority) => config.priorityLevels[priority].responseTime > 0
+    const count = Object.values(config.priorityLevels || {}).filter(
+      (priority) => priority.responseTime > 0
     ).length;
     
     return { configured: count > 0, count };
@@ -113,10 +114,10 @@ const SLAConfigurationPage = () => {
         <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#434E78]/20">
           <div>
             <h1 className="text-3xl font-semibold text-black mb-1 font-sans tracking-tight">
-              SLA Configuration
+              SLA Configuration - Priorities
             </h1>
             <p className="text-black/70 text-sm font-sans">
-              Configure response times for priority levels across workflows
+              Configure priority-based response times across workflows
             </p>
           </div>
           <button
@@ -180,30 +181,36 @@ const SLAConfigurationPage = () => {
                       
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-black/60 font-sans">SLA Status</span>
-                        <span className={`font-medium text-sm font-sans ${
-                          slaStatus.configured ? 'text-emerald-600' : 'text-gray-500'
-                        }`}>
-                          {slaStatus.configured ? `${slaStatus.count}/4 configured` : 'Not configured'}
+                        <span
+                          className={`font-medium text-sm font-sans ${
+                            slaStatus.configured ? 'text-emerald-600' : 'text-gray-500'
+                          }`}
+                        >
+                          {slaStatus.configured
+                            ? `${slaStatus.count} priorit${slaStatus.count === 1 ? 'y' : 'ies'} configured`
+                            : 'Not configured'}
                         </span>
                       </div>
 
                       {config && slaStatus.configured && (
                         <div className="mt-3 pt-3 border-t border-[#434E78]/10">
-                          <p className="text-xs text-black/60 mb-2 font-sans font-semibold">Response Times:</p>
+                          <p className="text-xs text-black/60 mb-2 font-sans font-semibold">Priorities:</p>
                           <div className="grid grid-cols-2 gap-2">
-                            {priorityLevels.map((priority) => {
-                              const time = config.priorityLevels[priority].responseTime;
-                              if (time === 0) return null;
-                              return (
+                            {Object.entries(config.priorityLevels)
+                              .filter(([, value]) => value.responseTime > 0)
+                              .map(([name, value], index) => (
                                 <div
-                                  key={priority}
-                                  className={`text-xs px-2 py-1 rounded-azure-sm border ${priorityColors[priority]} font-sans`}
+                                  key={name}
+                                  className={`text-xs px-2 py-1 rounded-azure-sm border ${
+                                    priorityColorClasses[index % priorityColorClasses.length]
+                                  } font-sans`}
                                 >
-                                  <div className="font-semibold">{priority}</div>
-                                  <div className="text-xs opacity-75">{formatTime(time)}</div>
+                                  <div className="font-semibold">{name}</div>
+                                  <div className="text-xs opacity-75">
+                                    {formatTime(value.responseTime)}
+                                  </div>
                                 </div>
-                              );
-                            })}
+                              ))}
                           </div>
                         </div>
                       )}
