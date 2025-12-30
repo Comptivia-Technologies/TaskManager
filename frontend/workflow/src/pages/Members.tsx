@@ -19,6 +19,7 @@ const Members = () => {
     email: '',
     teamId: 0,
     role: '',
+    skillLevel: 1,
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<number | 'all'>('all');
@@ -39,6 +40,7 @@ const Members = () => {
         email: member.email,
         teamId: member.teamId,
         role: member.role,
+        skillLevel: member.skillLevel,
       });
     } else {
       setIsEditMode(false);
@@ -48,6 +50,7 @@ const Members = () => {
         email: '',
         teamId: teams.length > 0 ? teams[0].teamId : 0,
         role: '',
+        skillLevel: 1,
       });
       setSelectedMember(null);
     }
@@ -64,6 +67,7 @@ const Members = () => {
       email: '',
       teamId: teams.length > 0 ? teams[0].teamId : 0,
       role: '',
+      skillLevel: 1,
     });
   };
 
@@ -329,6 +333,28 @@ const Members = () => {
                   className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
                   required
                 />
+              </div>
+              <div className="mb-4">
+                <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                  Skill Level
+                </label>
+                <select
+                  value={formData.skillLevel}
+                  onChange={(e) =>
+                    setFormData({ ...formData, skillLevel: parseInt(e.target.value) })
+                  }
+                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                  required
+                >
+                  <option value={1}>1 - Beginner</option>
+                  <option value={2}>2 - Junior</option>
+                  <option value={3}>3 - Intermediate</option>
+                  <option value={4}>4 - Advanced</option>
+                  <option value={5}>5 - Expert</option>
+                </select>
+                <p className="text-xs text-black/60 mt-1 font-sans">
+                  Skill level (1-5) used for workload calculations
+                </p>
               </div>
               <div className="flex justify-end space-x-3">
                 <button

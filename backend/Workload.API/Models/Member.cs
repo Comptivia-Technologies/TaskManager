@@ -1,5 +1,8 @@
-namespace WorkflowManagement.API.Models;
+namespace Workload.API.Models;
 
+/// <summary>
+/// Reference model for Member from WorkflowManagement database
+/// </summary>
 public class Member
 {
     public int MemberId { get; set; }
@@ -11,10 +14,5 @@ public class Member
     public int SkillLevel { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
-
-    // Navigation properties
-    public Team Team { get; set; } = null!;
-    public ICollection<Task> AssignedTasks { get; set; } = new List<Task>();
 }
-
 

@@ -25,6 +25,7 @@ export interface Member {
   teamId: number;
   teamName: string;
   role: string;
+  skillLevel: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,6 +36,7 @@ export interface MemberCreate {
   email: string;
   teamId: number;
   role: string;
+  skillLevel: number;
 }
 
 export interface MemberUpdate {
@@ -43,6 +45,7 @@ export interface MemberUpdate {
   email: string;
   teamId: number;
   role: string;
+  skillLevel: number;
 }
 
 export interface Workflow {
@@ -184,5 +187,34 @@ export interface SLAConfigurationUpdate {
       responseTime: number;
     };
   };
+}
+
+export interface WorkloadMetrics {
+  efficiency: number;
+  skillLevel: number;
+  taskCompletionRate: number;
+  activeTaskCount: number;
+  pendingTaskCount: number;
+  totalTaskCount: number;
+  isAvailable: boolean;
+}
+
+export interface WorkloadBreakdown {
+  efficiencyScore: number;
+  skillLevelScore: number;
+  taskCompletionScore: number;
+  activeTaskLoadScore: number;
+  availabilityScore: number;
+}
+
+export interface WorkloadResponse {
+  memberId: number;
+  memberName: string;
+  memberEmail: string;
+  workloadScore: number;
+  workloadStatus: 'Available' | 'PartiallyLoaded' | 'FullyLoaded' | 'Overloaded';
+  metrics: WorkloadMetrics;
+  breakdown: WorkloadBreakdown;
+  calculatedAt: string;
 }
 
