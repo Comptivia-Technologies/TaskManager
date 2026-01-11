@@ -128,6 +128,67 @@ public class SLAService : ISLAService
                 RabbitMQConstants.SLAConfigured,
                 workflowSelectedEvent.CorrelationId);
 
+            // Publish delayed TaskOverdueEvent that will be delivered at the SLA deadline
+            var delay = slaDeadline - DateTime.UtcNow;
+            if (delay > TimeSpan.Zero)
+            {
+                try
+                {
+                    var overdueEvent = new TaskOverdueEvent
+                    {
+                        TaskId = workflowSelectedEvent.TaskId,
+                        MemberId = 0, // Will be set by TaskService if task is assigned
+                        SLADeadline = slaDeadline,
+                        BreachedAt = slaDeadline, // Will be set to actual breach time when delivered
+                        MinutesOverdue = 0, // Will be calculated when delivered
+                        CorrelationId = Guid.NewGuid()
+                    };
+
+                    await _publisher.PublishDelayedAsync(
+                        overdueEvent,
+                        RabbitMQConstants.SLAExchange,
+                        RabbitMQConstants.TaskOverdue,
+                        overdueEvent.CorrelationId,
+                        delay);
+
+                    _logger.LogInformation(
+                        "Scheduled delayed TaskOverdueEvent for TaskId: {TaskId}, Deadline: {Deadline}, Delay: {Delay}ms, CorrelationId: {CorrelationId}",
+                        workflowSelectedEvent.TaskId, slaDeadline, (int)delay.TotalMilliseconds, overdueEvent.CorrelationId);
+                }
+                catch (Exception ex)
+                {
+                    // Don't fail SLA configuration if delayed message fails
+                    // Fallback worker will catch overdue tasks
+                    _logger.LogWarning(ex,
+                        "Failed to publish delayed TaskOverdueEvent for TaskId: {TaskId}. Fallback worker will handle overdue detection. CorrelationId: {CorrelationId}",
+                        workflowSelectedEvent.TaskId, workflowSelectedEvent.CorrelationId);
+                }
+            }
+            else
+            {
+                // Deadline already passed (shouldn't happen, but handle it)
+                _logger.LogWarning(
+                    "Task {TaskId} SLA deadline has already passed. Marking as overdue immediately.",
+                    workflowSelectedEvent.TaskId);
+                
+                // Publish overdue event immediately
+                var overdueEvent = new TaskOverdueEvent
+                {
+                    TaskId = workflowSelectedEvent.TaskId,
+                    MemberId = 0,
+                    SLADeadline = slaDeadline,
+                    BreachedAt = DateTime.UtcNow,
+                    MinutesOverdue = (int)(DateTime.UtcNow - slaDeadline).TotalMinutes,
+                    CorrelationId = Guid.NewGuid()
+                };
+
+                await _publisher.PublishAsync(
+                    overdueEvent,
+                    RabbitMQConstants.SLAExchange,
+                    RabbitMQConstants.TaskOverdue,
+                    overdueEvent.CorrelationId);
+            }
+
             _logger.LogInformation(
                 "SLA configured for task. TaskId: {TaskId}, Priority: {Priority}, ResponseTime: {ResponseTime}min, Deadline: {Deadline}, CorrelationId: {CorrelationId}",
                 workflowSelectedEvent.TaskId, matchingPriority, responseTimeMinutes, slaDeadline, workflowSelectedEvent.CorrelationId);

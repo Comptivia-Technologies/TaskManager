@@ -46,6 +46,14 @@ public class TaskOverdueEventHandler
                 return;
             }
 
+            // Update BreachedAt to actual time when message was delivered (may be slightly after deadline)
+            var now = DateTime.UtcNow;
+            if (@event.BreachedAt < now.AddMinutes(-1)) // If BreachedAt is more than 1 minute old, use current time
+            {
+                @event.BreachedAt = now;
+                @event.MinutesOverdue = (int)(now - @event.SLADeadline).TotalMinutes;
+            }
+
             // Mark task as overdue
             task.IsOverdue = true;
             task.Status = DomainTaskStatus.Overdue;

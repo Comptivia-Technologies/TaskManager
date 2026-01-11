@@ -10,13 +10,14 @@ namespace SLAManagerService.Infrastructure.BackgroundJobs;
 
 /// <summary>
 /// Background service that monitors SLA deadlines and publishes overdue events
+/// This is a fallback mechanism - delayed messages handle most overdue detection
 /// </summary>
 public class SLAMonitorService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IRabbitMQPublisher _publisher;
     private readonly ILogger<SLAMonitorService> _logger;
-    private readonly TimeSpan _pollingInterval = TimeSpan.FromMinutes(1); // Check every minute
+    private readonly TimeSpan _pollingInterval = TimeSpan.FromMinutes(1); // Check every 1 minute (fallback only - delayed messages handle most cases)
 
     public SLAMonitorService(
         IServiceProvider serviceProvider,
@@ -66,24 +67,42 @@ public class SLAMonitorService : BackgroundService
         }
 
         var now = DateTime.UtcNow;
+        var activeAssignmentsList = activeAssignments.ToList();
+        
+        _logger.LogInformation(
+            "Checking overdue SLAs. Found {Count} active assignments. Current time: {Now} (UTC)",
+            activeAssignmentsList.Count, now);
 
-        foreach (var assignment in activeAssignments)
+        foreach (var assignment in activeAssignmentsList)
         {
-            if (assignment.SLADeadline < now && !assignment.IsOverdue)
+            // Ensure deadline is in UTC for comparison
+            // If loaded from database as Unspecified, assume it's UTC (since we store UTC)
+            var deadlineUtc = assignment.SLADeadline.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(assignment.SLADeadline, DateTimeKind.Utc)
+                : assignment.SLADeadline.ToUniversalTime();
+            
+            var isOverdue = deadlineUtc < now;
+            var timeUntilDeadline = deadlineUtc - now;
+            
+            _logger.LogInformation(
+                "Checking assignment. TaskId: {TaskId}, Deadline: {Deadline} (Kind: {Kind}), DeadlineUTC: {DeadlineUTC}, CurrentTime: {Now} (UTC), IsOverdue: {IsOverdue}, DeadlinePassed: {DeadlinePassed}, TimeUntilDeadline: {TimeUntilDeadline}",
+                assignment.TaskId, assignment.SLADeadline, assignment.SLADeadline.Kind, deadlineUtc, now, assignment.IsOverdue, isOverdue, timeUntilDeadline);
+            
+            if (isOverdue && !assignment.IsOverdue)
             {
                 // Mark as overdue
                 assignment.IsOverdue = true;
                 await repository.UpdateAsync(assignment);
 
-                // Calculate minutes overdue
-                var minutesOverdue = (int)(now - assignment.SLADeadline).TotalMinutes;
+                // Calculate minutes overdue (use UTC deadline)
+                var minutesOverdue = (int)(now - deadlineUtc).TotalMinutes;
 
                 // Publish TaskOverdueEvent
                 var overdueEvent = new TaskOverdueEvent
                 {
                     TaskId = assignment.TaskId,
                     MemberId = 0, // Will be set by Task Service if task is assigned
-                    SLADeadline = assignment.SLADeadline,
+                    SLADeadline = deadlineUtc, // Use UTC deadline
                     BreachedAt = now,
                     MinutesOverdue = minutesOverdue,
                     CorrelationId = Guid.NewGuid()

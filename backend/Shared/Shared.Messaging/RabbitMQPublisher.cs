@@ -178,6 +178,90 @@ public class RabbitMQPublisher : IRabbitMQPublisher, IDisposable
         }
     }
 
+    public async Task PublishDelayedAsync<T>(T eventData, string exchange, string routingKey, Guid correlationId, TimeSpan delay) where T : class
+    {
+        try
+        {
+            // Ensure channel is open and ready (handles recovery)
+            var channel = EnsureChannel();
+
+            // Declare delayed message exchange (x-delayed-message type)
+            // The delayed exchange acts as a proxy - after delay, it routes to target exchange
+            var delayedExchangeName = $"{exchange}.delayed";
+            
+            var exchangeArgs = new Dictionary<string, object>
+            {
+                { "x-delayed-type", ExchangeType.Direct }
+            };
+
+            channel.ExchangeDeclare(
+                exchange: delayedExchangeName,
+                type: "x-delayed-message", // RabbitMQ delayed message exchange type
+                durable: true,
+                autoDelete: false,
+                arguments: exchangeArgs);
+
+            // Declare the target exchange (where message will be routed after delay)
+            channel.ExchangeDeclare(
+                exchange: exchange,
+                type: ExchangeType.Direct,
+                durable: true,
+                autoDelete: false);
+
+            // Bind delayed exchange to target exchange
+            // After delay, delayed exchange routes messages to target exchange using routing key
+            // Target exchange then routes to queues (queues are already bound to target exchange)
+            try
+            {
+                channel.ExchangeBind(
+                    destination: exchange,        // Target exchange (sla.exchange)
+                    source: delayedExchangeName,  // Delayed exchange (sla.exchange.delayed)
+                    routingKey: routingKey);       // Routing key (task.overdue)
+            }
+            catch (Exception ex)
+            {
+                // Binding might already exist, log and continue
+                _logger.LogDebug(ex, "Exchange binding may already exist. Continuing...");
+            }
+
+            var json = JsonSerializer.Serialize(eventData, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            var body = Encoding.UTF8.GetBytes(json);
+
+            var properties = channel.CreateBasicProperties();
+            properties.Persistent = true; // Message durability
+            properties.MessageId = Guid.NewGuid().ToString();
+            properties.CorrelationId = correlationId.ToString();
+            properties.Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            properties.Headers = new Dictionary<string, object>
+            {
+                { "EventType", typeof(T).Name },
+                { "x-delay", (int)delay.TotalMilliseconds } // Delay in milliseconds
+            };
+
+            // Publish to delayed exchange
+            channel.BasicPublish(
+                exchange: delayedExchangeName,
+                routingKey: routingKey,
+                basicProperties: properties,
+                body: body);
+
+            _logger.LogInformation(
+                "Published delayed event {EventType} to exchange {Exchange} with routing key {RoutingKey}, Delay: {Delay}ms, CorrelationId: {CorrelationId}",
+                typeof(T).Name, exchange, routingKey, (int)delay.TotalMilliseconds, correlationId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to publish delayed event {EventType} to exchange {Exchange}, CorrelationId: {CorrelationId}",
+                typeof(T).Name, exchange, correlationId);
+            throw;
+        }
+    }
+
     public void Dispose()
     {
         _channel?.Close();

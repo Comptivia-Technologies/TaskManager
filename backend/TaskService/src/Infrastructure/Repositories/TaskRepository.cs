@@ -51,7 +51,7 @@ public class TaskRepository : ITaskRepository
     {
         task.UpdatedAt = DateTime.UtcNow;
         
-        // Load existing task to preserve event IDs that might already be set
+        // Load existing task to preserve values that shouldn't be overwritten with NULL
         var existingTask = await _context.Tasks.FindAsync(task.TaskId);
         if (existingTask != null)
         {
@@ -71,6 +71,26 @@ public class TaskRepository : ITaskRepository
             if (existingTask.TaskOverdueEventId.HasValue && !task.TaskOverdueEventId.HasValue)
             {
                 task.TaskOverdueEventId = existingTask.TaskOverdueEventId;
+            }
+            
+            // Preserve WorkflowId and MemberId if they're already set (don't overwrite with NULL)
+            if (existingTask.WorkflowId.HasValue && !task.WorkflowId.HasValue)
+            {
+                task.WorkflowId = existingTask.WorkflowId;
+            }
+            if (existingTask.MemberId.HasValue && !task.MemberId.HasValue)
+            {
+                task.MemberId = existingTask.MemberId;
+            }
+            
+            // Preserve SLA fields if they're already set (don't overwrite with NULL)
+            if (existingTask.SLAStartTime.HasValue && !task.SLAStartTime.HasValue)
+            {
+                task.SLAStartTime = existingTask.SLAStartTime;
+            }
+            if (existingTask.SLADeadline.HasValue && !task.SLADeadline.HasValue)
+            {
+                task.SLADeadline = existingTask.SLADeadline;
             }
             
             // Update all properties

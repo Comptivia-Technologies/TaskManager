@@ -56,7 +56,8 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
                 _logger.LogError(
                     "Workflow not found. WorkflowId: {WorkflowId}, TaskId: {TaskId}, CorrelationId: {CorrelationId}",
                     slaConfiguredEvent.WorkflowId, slaConfiguredEvent.TaskId, slaConfiguredEvent.CorrelationId);
-                return;
+                // Throw exception so RabbitMQ can retry - workflow might be created later
+                throw new InvalidOperationException($"Workflow not found: {slaConfiguredEvent.WorkflowId}");
             }
             
             _logger.LogInformation(
@@ -114,7 +115,8 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
                 _logger.LogError(
                     "No members available for task assignment. WorkflowId: {WorkflowId}, TeamId: {TeamId}, TaskId: {TaskId}, CorrelationId: {CorrelationId}",
                     slaConfiguredEvent.WorkflowId, workflow.TeamId, slaConfiguredEvent.TaskId, slaConfiguredEvent.CorrelationId);
-                return;
+                // Throw exception so RabbitMQ can retry - members might be added later
+                throw new InvalidOperationException($"No members available for workflow: {slaConfiguredEvent.WorkflowId}");
             }
             
             _logger.LogInformation(
@@ -152,7 +154,8 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
                 _logger.LogError(
                     "No member scores calculated. All members failed evaluation. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
                     slaConfiguredEvent.TaskId, slaConfiguredEvent.CorrelationId);
-                return;
+                // Throw exception so RabbitMQ can retry - might be a temporary issue
+                throw new InvalidOperationException($"All members failed evaluation for task: {slaConfiguredEvent.TaskId}");
             }
 
             // Select member with lowest workload score (most available)
