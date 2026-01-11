@@ -1,0 +1,147 @@
+using Microsoft.EntityFrameworkCore;
+using SLAManagerService.Infrastructure.Persistence;
+using SLAManagerService.Application.Interfaces;
+using SLAManagerService.Infrastructure.Repositories;
+using SLAManagerService.Application.Services;
+using SLAManagerService.Application.EventHandlers;
+using SLAManagerService.Infrastructure.BackgroundJobs;
+using Shared.Messaging;
+using Shared.Contracts.Constants;
+using Shared.Contracts.EventContracts;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// Database
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? "Host=localhost;Port=5432;Database=SLAConfiguration;Username=postgres;Password=postgres";
+
+builder.Services.AddDbContext<SLADbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// RabbitMQ
+builder.Services.Configure<RabbitMQOptions>(builder.Configuration.GetSection("RabbitMQ"));
+builder.Services.AddSingleton<IRabbitMQPublisher, RabbitMQPublisher>();
+builder.Services.AddSingleton<IRabbitMQConsumer, RabbitMQConsumer>();
+
+// Repositories
+builder.Services.AddScoped<ISLARepository, SLARepository>();
+
+// Services
+builder.Services.AddScoped<ISLAService, SLAService>();
+
+// Event Handlers
+builder.Services.AddScoped<WorkflowSelectedEventHandler>();
+
+// Background Services
+builder.Services.AddHostedService<SLAMonitorService>();
+
+var app = builder.Build();
+
+// Configure pipeline
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+app.UseAuthorization();
+app.MapControllers();
+
+// Start RabbitMQ consumer
+var consumer = app.Services.GetRequiredService<IRabbitMQConsumer>();
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+
+try
+{
+    logger.LogInformation("Starting WorkflowSelectedEvent consumer...");
+    consumer.StartConsuming<WorkflowSelectedEvent>(
+        RabbitMQConstants.WorkflowExchange,
+        RabbitMQConstants.WorkflowSelectedQueue,
+        RabbitMQConstants.WorkflowSelected,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<WorkflowSelectedEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ WorkflowSelectedEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start WorkflowSelectedEvent consumer");
+}
+
+// Ensure database is created before starting
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<SLADbContext>();
+    
+    try
+    {
+        logger.LogInformation("Ensuring database and tables are created...");
+        
+        // Check if table exists by trying to query it
+        bool tableExists = true;
+        try
+        {
+            await dbContext.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"SLAAssignments\" LIMIT 1");
+            logger.LogInformation("SLAAssignments table exists.");
+        }
+        catch
+        {
+            tableExists = false;
+            logger.LogInformation("SLAAssignments table does not exist. Creating...");
+        }
+        
+        if (!tableExists)
+        {
+            
+            // Create table manually using raw SQL
+            var createTableSql = @"
+                CREATE TABLE IF NOT EXISTS ""SLAAssignments"" (
+                    ""SLAAssignmentId"" UUID PRIMARY KEY,
+                    ""TaskId"" UUID NOT NULL,
+                    ""WorkflowId"" INTEGER NOT NULL,
+                    ""Priority"" VARCHAR(50) NOT NULL,
+                    ""ResponseTimeMinutes"" INTEGER NOT NULL,
+                    ""SLAStartTime"" TIMESTAMP NOT NULL,
+                    ""SLADeadline"" TIMESTAMP NOT NULL,
+                    ""IsOverdue"" BOOLEAN NOT NULL DEFAULT FALSE,
+                    ""CreatedAt"" TIMESTAMP NOT NULL,
+                    ""WorkflowSelectedEventId"" UUID
+                )";
+            
+            await dbContext.Database.ExecuteSqlRawAsync(createTableSql);
+            
+            // Create indexes
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_SLAAssignments_TaskId"" ON ""SLAAssignments"" (""TaskId"")");
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE INDEX IF NOT EXISTS ""IX_SLAAssignments_WorkflowId"" ON ""SLAAssignments"" (""WorkflowId"")");
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE INDEX IF NOT EXISTS ""IX_SLAAssignments_SLADeadline"" ON ""SLAAssignments"" (""SLADeadline"")");
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE INDEX IF NOT EXISTS ""IX_SLAAssignments_IsOverdue"" ON ""SLAAssignments"" (""IsOverdue"")");
+            
+            logger.LogInformation("SLAAssignments table created manually.");
+        }
+        else
+        {
+            logger.LogInformation("SLAAssignments table exists.");
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error creating database: {Message}", ex.Message);
+        // Don't throw - let the service start and handle errors gracefully
+    }
+}
+
+app.Run();
+

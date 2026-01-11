@@ -95,12 +95,14 @@ public class WorkloadService : IWorkloadService
     /// </summary>
     private WorkloadMetricsDto CalculateMetrics(Member member, List<Models.Task> tasks)
     {
+        // Active tasks = tasks currently being worked on
         var activeTasks = tasks.Where(t => 
             t.Status == "In Progress" || 
-            t.Status == "Active" || 
-            t.Status == "Assigned").ToList();
+            t.Status == "Active").ToList();
         
+        // Pending tasks = tasks assigned but not yet started
         var pendingTasks = tasks.Where(t => 
+            t.Status == "Assigned" ||
             t.Status == "Pending" || 
             t.Status == "To Do").ToList();
 
@@ -123,6 +125,7 @@ public class WorkloadService : IWorkloadService
                 TaskCompletionRate = 100.0, // 100% completion when no tasks (not penalized)
                 ActiveTaskCount = 0,
                 PendingTaskCount = 0,
+                CompletedTaskCount = 0,
                 TotalTaskCount = 0,
                 IsAvailable = true
             };
@@ -156,6 +159,7 @@ public class WorkloadService : IWorkloadService
             TaskCompletionRate = Math.Round(taskCompletionRate, 2),
             ActiveTaskCount = activeTasks.Count,
             PendingTaskCount = pendingTasks.Count,
+            CompletedTaskCount = completedCount,
             TotalTaskCount = totalTasks,
             IsAvailable = isAvailable
         };

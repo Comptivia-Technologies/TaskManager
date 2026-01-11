@@ -259,6 +259,10 @@ const WorkloadConfiguration = () => {
                               <span className="font-medium">{workload.metrics.pendingTaskCount}</span>
                               <span className="text-black/40 ml-1">pending</span>
                             </div>
+                            <div>
+                              <span className="font-medium">{workload.metrics.completedTaskCount}</span>
+                              <span className="text-black/40 ml-1">completed</span>
+                            </div>
                             <div className="text-black/40 text-xs mt-0.5">
                               {workload.metrics.totalTaskCount} total
                             </div>

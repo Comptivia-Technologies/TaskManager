@@ -25,6 +25,7 @@ public class WorkloadMetricsDto
     public double TaskCompletionRate { get; set; }
     public int ActiveTaskCount { get; set; }
     public int PendingTaskCount { get; set; }
+    public int CompletedTaskCount { get; set; }
     public int TotalTaskCount { get; set; }
     public bool IsAvailable { get; set; }
 }

@@ -195,6 +195,7 @@ export interface WorkloadMetrics {
   taskCompletionRate: number;
   activeTaskCount: number;
   pendingTaskCount: number;
+  completedTaskCount: number;
   totalTaskCount: number;
   isAvailable: boolean;
 }
