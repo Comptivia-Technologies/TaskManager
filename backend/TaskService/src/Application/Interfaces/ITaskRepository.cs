@@ -12,7 +12,10 @@ public interface ITaskRepository
     System.Threading.Tasks.Task<DomainTask?> GetByEventIdAsync(string eventType, Guid eventId);
     System.Threading.Tasks.Task<DomainTask> CreateAsync(DomainTask task);
     System.Threading.Tasks.Task<DomainTask> UpdateAsync(DomainTask task);
+    System.Threading.Tasks.Task<bool> DeleteAsync(Guid taskId);
     System.Threading.Tasks.Task<IEnumerable<DomainTask>> GetOverdueTasksAsync();
+    System.Threading.Tasks.Task<IEnumerable<DomainTask>> GetAlreadyOverdueTasksAsync();
+    System.Threading.Tasks.Task<IEnumerable<string>> GetAllTaskNamesAsync();
     System.Threading.Tasks.Task<bool> ExistsAsync(Guid taskId);
 }
 

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { FiHome, FiLayers, FiUsers, FiUser, FiClock, FiActivity } from 'react-icons/fi';
+import { FiHome, FiLayers, FiUsers, FiUser, FiClock, FiActivity, FiCheckSquare } from 'react-icons/fi';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -11,6 +11,7 @@ const Sidebar = () => {
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: FiHome },
     { path: '/workflows', label: 'Workflows', icon: FiLayers },
+    { path: '/tasks', label: 'Tasks', icon: FiCheckSquare },
     { path: '/teams', label: 'Teams', icon: FiUsers },
     { path: '/members', label: 'Members', icon: FiUser },
     { path: '/sla-configuration', label: 'SLA Configuration', icon: FiClock },

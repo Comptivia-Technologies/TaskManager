@@ -153,9 +153,9 @@ const SLAConfigurationPage = () => {
               return (
                 <div
                   key={workflow.workflowId}
-                  className="bg-white rounded-azure-sm shadow-azure-sm hover:shadow-azure-md transition-all duration-200 border border-[#434E78]/20 overflow-hidden group"
+                  className="bg-white rounded-azure-sm shadow-azure-sm hover:shadow-azure-md transition-all duration-200 border border-[#434E78]/20 overflow-hidden group flex flex-col"
                 >
-                  <div className="p-5">
+                  <div className="p-5 flex-1">
                     <div className="flex justify-between items-start mb-3">
                       <h2 className="text-lg font-semibold text-black group-hover:text-black/80 transition-colors font-sans">
                         {workflow.workflowName}

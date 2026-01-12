@@ -116,6 +116,34 @@ public class TaskRepository : ITaskRepository
             .ToListAsync();
     }
 
+    public async System.Threading.Tasks.Task<IEnumerable<DomainTask>> GetAlreadyOverdueTasksAsync()
+    {
+        return await _context.Tasks
+            .Where(t => t.IsOverdue 
+                && t.Status == TaskService.Domain.Enums.TaskStatus.Overdue
+                && t.WorkflowId.HasValue 
+                && t.MemberId.HasValue)
+            .ToListAsync();
+    }
+
+    public async System.Threading.Tasks.Task<bool> DeleteAsync(Guid taskId)
+    {
+        var task = await _context.Tasks.FindAsync(taskId);
+        if (task == null)
+            return false;
+
+        _context.Tasks.Remove(task);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async System.Threading.Tasks.Task<IEnumerable<string>> GetAllTaskNamesAsync()
+    {
+        return await _context.Tasks
+            .Select(t => t.TaskName)
+            .ToListAsync();
+    }
+
     public async System.Threading.Tasks.Task<bool> ExistsAsync(Guid taskId)
     {
         return await _context.Tasks.AnyAsync(t => t.TaskId == taskId);

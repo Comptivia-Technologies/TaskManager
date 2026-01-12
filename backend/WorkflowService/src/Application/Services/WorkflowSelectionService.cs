@@ -53,8 +53,7 @@ public class WorkflowSelectionService : IWorkflowSelectionService
             }
 
             // Select workflow based on business logic
-            // Simple strategy: Select first workflow (can be enhanced with priority matching, etc.)
-            var selectedWorkflow = SelectBestWorkflow(workflowsList, taskCreatedEvent);
+            var (selectedWorkflow, selectionReason) = SelectBestWorkflow(workflowsList, taskCreatedEvent);
             
             if (selectedWorkflow == null)
             {
@@ -70,7 +69,7 @@ public class WorkflowSelectionService : IWorkflowSelectionService
                 TaskId = taskCreatedEvent.TaskId,
                 WorkflowId = selectedWorkflow.WorkflowId,
                 WorkflowName = selectedWorkflow.WorkflowName,
-                SelectionReason = $"Selected based on task type: {taskCreatedEvent.TaskType}",
+                SelectionReason = selectionReason, // Use actual reason from selection logic
                 SelectedAt = DateTime.UtcNow,
                 TaskCreatedEventId = taskCreatedEvent.TaskId // For idempotency
             };
@@ -113,8 +112,11 @@ public class WorkflowSelectionService : IWorkflowSelectionService
     /// <summary>
     /// Selects the best workflow based on task parameters
     /// Matches workflows by task type (e.g., "ERP" task → "ERP Workflow")
+    /// Returns the selected workflow and the reason for selection
     /// </summary>
-    private Application.Interfaces.Workflow? SelectBestWorkflow(IEnumerable<Application.Interfaces.Workflow> workflows, TaskCreatedEvent taskEvent)
+    private (Application.Interfaces.Workflow? Workflow, string Reason) SelectBestWorkflow(
+        IEnumerable<Application.Interfaces.Workflow> workflows, 
+        TaskCreatedEvent taskEvent)
     {
         // Strategy 1: Match by workflow name containing task type
         // Example: TaskType="ERP" → Match "ERP Workflow" or "ERP Development Workflow"
@@ -122,10 +124,11 @@ public class WorkflowSelectionService : IWorkflowSelectionService
             w.WorkflowName.Contains(taskEvent.TaskType, StringComparison.OrdinalIgnoreCase));
         if (nameMatch != null)
         {
+            var reason = $"Matched by workflow name: '{nameMatch.WorkflowName}' contains task type '{taskEvent.TaskType}'";
             _logger.LogInformation(
                 "Matched workflow by name. TaskType: {TaskType}, WorkflowName: {WorkflowName}, WorkflowId: {WorkflowId}",
                 taskEvent.TaskType, nameMatch.WorkflowName, nameMatch.WorkflowId);
-            return nameMatch;
+            return (nameMatch, reason);
         }
 
         // Strategy 2: Match by workflow description containing task type
@@ -134,21 +137,25 @@ public class WorkflowSelectionService : IWorkflowSelectionService
             w.Description.Contains(taskEvent.TaskType, StringComparison.OrdinalIgnoreCase));
         if (descriptionMatch != null)
         {
+            var reason = $"Matched by workflow description: description contains task type '{taskEvent.TaskType}'";
             _logger.LogInformation(
                 "Matched workflow by description. TaskType: {TaskType}, WorkflowName: {WorkflowName}, WorkflowId: {WorkflowId}",
                 taskEvent.TaskType, descriptionMatch.WorkflowName, descriptionMatch.WorkflowId);
-            return descriptionMatch;
+            return (descriptionMatch, reason);
         }
 
         // Strategy 3: Fallback to first available workflow
         var fallback = workflows.FirstOrDefault();
         if (fallback != null)
         {
+            var reason = $"Fallback: No matching workflow found for task type '{taskEvent.TaskType}'. Selected first available workflow '{fallback.WorkflowName}'";
             _logger.LogWarning(
                 "No specific workflow match found, using fallback. TaskType: {TaskType}, WorkflowName: {WorkflowName}, WorkflowId: {WorkflowId}",
                 taskEvent.TaskType, fallback.WorkflowName, fallback.WorkflowId);
+            return (fallback, reason);
         }
-        return fallback;
+        
+        return (null, "No workflows available");
     }
 }
 

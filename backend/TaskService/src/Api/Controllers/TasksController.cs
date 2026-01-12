@@ -39,6 +39,44 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
+    /// Sync all overdue tasks to WorkflowManagement.API
+    /// This endpoint syncs existing overdue tasks that were marked overdue before the sync functionality was added
+    /// </summary>
+    [HttpPost("sync-overdue")]
+    public async Task<ActionResult> SyncOverdueTasks()
+    {
+        try
+        {
+            await _taskService.SyncAllOverdueTasksAsync();
+            return Ok(new { message = "Overdue tasks sync completed. Check logs for details." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing overdue tasks");
+            return StatusCode(500, new { error = "An error occurred while syncing overdue tasks" });
+        }
+    }
+
+    /// <summary>
+    /// Cleanup orphaned tasks from WorkflowManagement.API
+    /// This removes tasks that exist in WorkflowManagement but not in TaskService database
+    /// </summary>
+    [HttpPost("cleanup-orphaned")]
+    public async Task<ActionResult> CleanupOrphanedTasks()
+    {
+        try
+        {
+            await _taskService.CleanupOrphanedTasksAsync();
+            return Ok(new { message = "Orphaned tasks cleanup completed. Check logs for details." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cleaning up orphaned tasks");
+            return StatusCode(500, new { error = "An error occurred while cleaning up orphaned tasks" });
+        }
+    }
+
+    /// <summary>
     /// Get task by ID
     /// </summary>
     [HttpGet("{id}")]
@@ -81,5 +119,28 @@ public class TasksController : ControllerBase
             return StatusCode(500, new { error = "An error occurred while updating task status" });
         }
     }
+
+    /// <summary>
+    /// Delete a task
+    /// This will delete the task from both TaskService database and WorkflowManagement database
+    /// </summary>
+    [HttpDelete("{id}")]
+    public async Task<ActionResult> DeleteTask(Guid id)
+    {
+        try
+        {
+            var deleted = await _taskService.DeleteTaskAsync(id);
+            if (!deleted)
+                return NotFound(new { error = $"Task with ID {id} not found" });
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting task {TaskId}", id);
+            return StatusCode(500, new { error = "An error occurred while deleting the task" });
+        }
+    }
+
 }
 

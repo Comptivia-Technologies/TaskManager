@@ -110,8 +110,13 @@ public class WorkloadService : IWorkloadService
             t.Status == "Completed" || 
             t.Status == "Done").ToList();
 
+        // Overdue tasks = tasks with "Overdue" status
+        var overdueTasks = tasks.Where(t => 
+            t.Status == "Overdue").ToList();
+
         var totalTasks = tasks.Count;
         var completedCount = completedTasks.Count;
+        var overdueCount = overdueTasks.Count;
 
         // If member has no tasks, they should be considered available (low workload)
         if (totalTasks == 0)
@@ -126,6 +131,7 @@ public class WorkloadService : IWorkloadService
                 ActiveTaskCount = 0,
                 PendingTaskCount = 0,
                 CompletedTaskCount = 0,
+                OverdueTaskCount = 0,
                 TotalTaskCount = 0,
                 IsAvailable = true
             };
@@ -160,6 +166,7 @@ public class WorkloadService : IWorkloadService
             ActiveTaskCount = activeTasks.Count,
             PendingTaskCount = pendingTasks.Count,
             CompletedTaskCount = completedCount,
+            OverdueTaskCount = overdueCount,
             TotalTaskCount = totalTasks,
             IsAvailable = isAvailable
         };
