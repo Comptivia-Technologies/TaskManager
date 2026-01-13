@@ -110,10 +110,10 @@ using (var scope = app.Services.CreateScope())
                     ""WorkflowId"" INTEGER NOT NULL,
                     ""Priority"" VARCHAR(50) NOT NULL,
                     ""ResponseTimeMinutes"" INTEGER NOT NULL,
-                    ""SLAStartTime"" TIMESTAMP NOT NULL,
-                    ""SLADeadline"" TIMESTAMP NOT NULL,
+                    ""SLAStartTime"" TIMESTAMP WITH TIME ZONE NOT NULL,
+                    ""SLADeadline"" TIMESTAMP WITH TIME ZONE NOT NULL,
                     ""IsOverdue"" BOOLEAN NOT NULL DEFAULT FALSE,
-                    ""CreatedAt"" TIMESTAMP NOT NULL,
+                    ""CreatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
                     ""WorkflowSelectedEventId"" UUID
                 )";
             
@@ -134,6 +134,44 @@ using (var scope = app.Services.CreateScope())
         else
         {
             logger.LogInformation("SLAAssignments table exists.");
+        }
+        
+        // Migrate existing TIMESTAMP columns to TIMESTAMP WITH TIME ZONE if needed
+        // This runs regardless of whether table was just created or already existed
+        // Uses PostgreSQL's DO block to check and migrate only if needed
+        try
+        {
+            logger.LogInformation("Checking and migrating timezone columns if needed...");
+            var migrationSql = @"
+                DO $$
+                BEGIN
+                    -- Check if SLADeadline is timestamp without time zone and migrate
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'SLAAssignments' 
+                        AND column_name = 'SLADeadline'
+                        AND data_type = 'timestamp without time zone'
+                    ) THEN
+                        ALTER TABLE ""SLAAssignments"" 
+                            ALTER COLUMN ""SLAStartTime"" TYPE TIMESTAMP WITH TIME ZONE 
+                            USING ""SLAStartTime"" AT TIME ZONE 'UTC';
+                        
+                        ALTER TABLE ""SLAAssignments"" 
+                            ALTER COLUMN ""SLADeadline"" TYPE TIMESTAMP WITH TIME ZONE 
+                            USING ""SLADeadline"" AT TIME ZONE 'UTC';
+                        
+                        ALTER TABLE ""SLAAssignments"" 
+                            ALTER COLUMN ""CreatedAt"" TYPE TIMESTAMP WITH TIME ZONE 
+                            USING ""CreatedAt"" AT TIME ZONE 'UTC';
+                    END IF;
+                END $$";
+            
+            await dbContext.Database.ExecuteSqlRawAsync(migrationSql);
+            logger.LogInformation("✓ Timezone columns verified/migrated successfully");
+        }
+        catch (Exception migrationEx)
+        {
+            logger.LogWarning(migrationEx, "Could not migrate timezone columns. This is OK if columns are already correct.");
         }
     }
     catch (Exception ex)
