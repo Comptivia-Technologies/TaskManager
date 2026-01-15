@@ -6,7 +6,7 @@ import { memberService } from '../services/memberService';
 import { workflowService } from '../services/workflowService';
 import { stageService } from '../services/stageService';
 import { toast } from 'react-toastify';
-import { FiChevronLeft, FiChevronRight, FiX, FiCheck, FiPlus, FiEdit2 } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiX, FiCheck, FiPlus, FiEdit2, FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings } from 'react-icons/fi';
 import Select from 'react-select';
 import SLAConfigure from './SLAConfigure';
 import { Member } from '../types';
@@ -45,6 +45,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
   const totalSteps = 5;
 
   const stepLabels = ['Get Started', 'Add Members', 'Create Team', 'Create Workflow', 'Configure SLA'];
+  const stepIcons = [FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings];
 
   // Step 1: Get Started (intro)
   // Step 2: Add Members (new members to be created)
@@ -849,6 +850,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                   {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => {
                     const isCompleted = isStepCompleted(step);
                     const isActive = step === currentStep;
+                    const StepIcon = stepIcons[step - 1];
 
                     return (
                       <div key={step} className="relative flex items-center">
@@ -869,21 +871,21 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                           onClick={() => handleStepClick(step)}
                         >
                           {isCompleted && (
-                            <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center border-2 border-white hover:bg-emerald-700 transition-colors shadow-azure-sm">
-                              <FiCheck className="text-white text-xs font-semibold" />
+                            <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center border-2 border-emerald-600 hover:bg-emerald-50 transition-colors shadow-azure-sm">
+                              <StepIcon className="text-emerald-600 text-xs font-semibold" />
                             </div>
                           )}
                           {isActive && !isCompleted && (
                             <div className="relative">
                               <div className="absolute inset-0 rounded-full bg-[#434E78] animate-ping opacity-75" style={{ animationDuration: '2s' }}></div>
                               <div className="relative w-6 h-6 rounded-full bg-[#434E78] flex items-center justify-center border-2 border-white hover:bg-[#434E78]/90 transition-colors shadow-azure-md">
-                                <span className="text-white text-xs font-semibold z-10 relative">{step}</span>
+                                <StepIcon className="text-white text-xs font-semibold z-10 relative" />
                               </div>
                             </div>
                           )}
                           {!isActive && !isCompleted && (
                             <div className="w-6 h-6 rounded-full bg-[#434E78]/20 flex items-center justify-center border-2 border-white">
-                              <span className="text-black text-xs font-semibold">{step}</span>
+                              <StepIcon className="text-black text-xs font-semibold" />
                             </div>
                           )}
                         </div>

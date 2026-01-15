@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTeams } from '../hooks/useTeams';
+import { useMembers } from '../hooks/useMembers';
 import { teamService } from '../services/teamService';
 import { memberService } from '../services/memberService';
 import { Team, TeamCreate, Member, MemberCreate } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { FiPlus, FiEdit, FiTrash2, FiEye, FiX } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import Select from 'react-select';
 
 const Teams = () => {
   const { teams, loading, refetch } = useTeams();
+  const { members: allMembers, refetch: refetchMembers } = useMembers();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
@@ -18,6 +21,7 @@ const Teams = () => {
     description: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([]);
   
   // Member management state
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
@@ -32,7 +36,7 @@ const Teams = () => {
     skillLevel: 1,
   });
 
-  const handleOpenModal = (team?: Team) => {
+  const handleOpenModal = async (team?: Team) => {
     if (team) {
       setSelectedTeam(team);
       setIsEditMode(true);
@@ -40,10 +44,19 @@ const Teams = () => {
         teamName: team.teamName,
         description: team.description || '',
       });
+      // Load current team members
+      try {
+        const teamMembers = await teamService.getMembers(team.teamId);
+        setSelectedMemberIds(teamMembers.map((m: Member) => m.memberId));
+      } catch (error) {
+        console.error('Error loading team members:', error);
+        setSelectedMemberIds([]);
+      }
     } else {
       setIsEditMode(false);
       setFormData({ teamName: '', description: '' });
       setSelectedTeam(null);
+      setSelectedMemberIds([]);
     }
     setIsModalOpen(true);
   };
@@ -53,14 +66,42 @@ const Teams = () => {
     setIsEditMode(false);
     setSelectedTeam(null);
     setFormData({ teamName: '', description: '' });
+    setSelectedMemberIds([]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       if (isEditMode && selectedTeam) {
+        // Update team details
         await teamService.update(selectedTeam.teamId, formData);
-        toast.success('Team updated successfully');
+        
+        // Assign selected members to the team
+        if (selectedMemberIds.length > 0) {
+          try {
+            const freshMembers = await memberService.getAll();
+            for (const memberId of selectedMemberIds) {
+              const member = freshMembers.find(m => m.memberId === memberId);
+              if (member) {
+                await memberService.update(memberId, {
+                  firstName: member.firstName,
+                  lastName: member.lastName,
+                  email: member.email,
+                  role: member.role,
+                  skillLevel: member.skillLevel,
+                  teamId: selectedTeam.teamId,
+                });
+              }
+            }
+            await refetchMembers();
+            toast.success(`Team updated and ${selectedMemberIds.length} member(s) assigned successfully!`);
+          } catch (assignError: any) {
+            console.error('Error assigning members:', assignError);
+            toast.warning('Team updated but failed to assign some members');
+          }
+        } else {
+          toast.success('Team updated successfully');
+        }
       } else {
         await teamService.create(formData);
         toast.success('Team created successfully');
@@ -410,6 +451,64 @@ const Teams = () => {
                   rows={4}
                 />
               </div>
+              {isEditMode && (
+                <div className="mb-4">
+                  <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                    Members
+                  </label>
+                  <Select
+                    isMulti
+                    options={allMembers.map((member) => ({
+                      value: member.memberId,
+                      label: `${member.firstName} ${member.lastName} (${member.email})`,
+                    }))}
+                    value={allMembers
+                      .filter((member) => selectedMemberIds.includes(member.memberId))
+                      .map((member) => ({
+                        value: member.memberId,
+                        label: `${member.firstName} ${member.lastName} (${member.email})`,
+                      }))}
+                    onChange={(selectedOptions: any) => {
+                      const ids = selectedOptions
+                        ? selectedOptions.map((option: any) => option.value)
+                        : [];
+                      setSelectedMemberIds(ids);
+                    }}
+                    className="text-sm font-sans"
+                    placeholder="Select members to assign to this team..."
+                    styles={{
+                      control: (base) => ({
+                        ...base,
+                        borderColor: '#434E78',
+                        borderWidth: '1px',
+                        borderRadius: '0.375rem',
+                        '&:hover': {
+                          borderColor: '#434E78',
+                        },
+                      }),
+                      multiValue: (base) => ({
+                        ...base,
+                        backgroundColor: '#434E78',
+                      }),
+                      multiValueLabel: (base) => ({
+                        ...base,
+                        color: 'white',
+                      }),
+                      multiValueRemove: (base) => ({
+                        ...base,
+                        color: 'white',
+                        '&:hover': {
+                          backgroundColor: '#434E78',
+                          color: 'white',
+                        },
+                      }),
+                    }}
+                  />
+                  <p className="text-xs text-black/60 mt-1 font-sans">
+                    Select members to assign to this team
+                  </p>
+                </div>
+              )}
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"

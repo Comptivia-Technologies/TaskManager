@@ -294,25 +294,27 @@ const Members = () => {
                   required
                 />
               </div>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Team
-                </label>
-                <select
-                  value={formData.teamId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, teamId: parseInt(e.target.value) })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                >
-                  {teams.map((team) => (
-                    <option key={team.teamId} value={team.teamId}>
-                      {team.teamName}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {!isEditMode && (
+                <div className="mb-4">
+                  <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                    Team
+                  </label>
+                  <select
+                    value={formData.teamId}
+                    onChange={(e) =>
+                      setFormData({ ...formData, teamId: parseInt(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                    required
+                  >
+                    {teams.map((team) => (
+                      <option key={team.teamId} value={team.teamId}>
+                        {team.teamName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="mb-4">
                 <label className="block text-black text-sm font-semibold mb-2 font-sans">
                   Role
