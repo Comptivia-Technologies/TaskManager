@@ -4,7 +4,7 @@ import { useTeams } from '../hooks/useTeams';
 import { memberService } from '../services/memberService';
 import { Member, MemberCreate } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiPlus, FiEdit, FiTrash2, FiFilter, FiSearch } from 'react-icons/fi';
+import { FiEdit, FiTrash2, FiFilter, FiSearch } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 const Members = () => {
@@ -122,13 +122,6 @@ const Members = () => {
     <div className="p-8 bg-white font-sans">
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#434E78]/20">
         <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">Members</h1>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
-        >
-          <FiPlus className="mr-2 text-base" />
-          Create Member
-        </button>
       </div>
 
       <div className="mb-6 flex flex-col md:flex-row gap-4">

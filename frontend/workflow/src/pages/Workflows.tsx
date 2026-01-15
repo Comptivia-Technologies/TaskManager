@@ -6,12 +6,12 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { FiPlus, FiTrash2, FiLayers, FiEdit } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
-import WorkflowCreate from '../components/WorkflowCreate';
+import WorkflowWizard from '../components/WorkflowWizard';
 import WorkflowEdit from '../components/WorkflowEdit';
 
 const Workflows = () => {
   const { workflows, loading, refetch } = useWorkflows();
-  const [isCreateMode, setIsCreateMode] = useState(false);
+  const [isWizardMode, setIsWizardMode] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
   const navigate = useNavigate();
 
@@ -27,8 +27,8 @@ const Workflows = () => {
     }
   };
 
-  const handleCreateSuccess = (workflowId: number) => {
-    setIsCreateMode(false);
+  const handleWizardSuccess = (workflowId: number) => {
+    setIsWizardMode(false);
     refetch();
     navigate(`/workflows/${workflowId}`);
   };
@@ -42,11 +42,11 @@ const Workflows = () => {
     return <LoadingSpinner />;
   }
 
-  if (isCreateMode) {
+  if (isWizardMode) {
     return (
-      <WorkflowCreate
-        onSuccess={handleCreateSuccess}
-        onCancel={() => setIsCreateMode(false)}
+      <WorkflowWizard
+        onSuccess={handleWizardSuccess}
+        onCancel={() => setIsWizardMode(false)}
       />
     );
   }
@@ -70,11 +70,11 @@ const Workflows = () => {
             <p className="text-black/70 text-sm font-sans">Manage and track your workflow processes</p>
           </div>
           <button
-            onClick={() => setIsCreateMode(true)}
+            onClick={() => setIsWizardMode(true)}
             className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
           >
             <FiPlus className="mr-2 text-base" />
-            Create Workflow
+            Get Started
           </button>
         </div>
 
@@ -89,11 +89,11 @@ const Workflows = () => {
                 Create your first workflow to start organizing your tasks and processes.
               </p>
               <button
-                onClick={() => setIsCreateMode(true)}
+                onClick={() => setIsWizardMode(true)}
                 className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 inline-flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
               >
                 <FiPlus className="mr-2" />
-                Create Your First Workflow
+                Get Started
               </button>
             </div>
           </div>

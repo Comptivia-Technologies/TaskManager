@@ -284,13 +284,6 @@ const Teams = () => {
     <div className="p-8 bg-white font-sans">
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#434E78]/20">
         <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">Teams</h1>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
-        >
-          <FiPlus className="mr-2 text-base" />
-          Create Team
-        </button>
       </div>
 
       <div className="mb-6">
