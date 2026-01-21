@@ -108,6 +108,54 @@ const Tasks = () => {
           </div>
         )}
 
+        {/* Summary Stats */}
+        {tasks.length > 0 && (
+          <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-azure-sm shadow-azure-sm p-4 border border-[#434E78]/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-black/60 font-sans uppercase tracking-wide">Total Tasks</p>
+                  <p className="text-2xl font-semibold text-black font-sans mt-1">{tasks.length}</p>
+                </div>
+                <FiCheckCircle className="text-[#434E78] text-2xl" />
+              </div>
+            </div>
+            <div className="bg-white rounded-azure-sm shadow-azure-sm p-4 border border-[#434E78]/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-black/60 font-sans uppercase tracking-wide">Completed</p>
+                  <p className="text-2xl font-semibold text-black font-sans mt-1">
+                    {tasks.filter(t => t.status.toLowerCase().includes('completed') || t.status.toLowerCase().includes('done')).length}
+                  </p>
+                </div>
+                <FiCheckCircle className="text-[#434E78] text-2xl" />
+              </div>
+            </div>
+            <div className="bg-white rounded-azure-sm shadow-azure-sm p-4 border border-[#434E78]/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-black/60 font-sans uppercase tracking-wide">In Progress</p>
+                  <p className="text-2xl font-semibold text-black font-sans mt-1">
+                    {tasks.filter(t => t.status.toLowerCase().includes('progress') || t.status.toLowerCase().includes('active')).length}
+                  </p>
+                </div>
+                <FiClock className="text-[#434E78] text-2xl" />
+              </div>
+            </div>
+            <div className="bg-white rounded-azure-sm shadow-azure-sm p-4 border border-[#434E78]/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-black/60 font-sans uppercase tracking-wide">Overdue</p>
+                  <p className="text-2xl font-semibold text-black font-sans mt-1">
+                    {tasks.filter(t => t.status.toLowerCase().includes('overdue')).length}
+                  </p>
+                </div>
+                <FiAlertCircle className="text-red-500 text-2xl" />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tasks Table */}
         <div className="bg-white rounded-azure-sm shadow-azure-md border border-[#434E78]/20 overflow-hidden">
           {tasks.length === 0 ? (
@@ -228,54 +276,6 @@ const Tasks = () => {
             </div>
           )}
         </div>
-
-        {/* Summary Stats */}
-        {tasks.length > 0 && (
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-azure-sm shadow-azure-sm p-4 border border-[#434E78]/20">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-black/60 font-sans uppercase tracking-wide">Total Tasks</p>
-                  <p className="text-2xl font-semibold text-black font-sans mt-1">{tasks.length}</p>
-                </div>
-                <FiCheckCircle className="text-[#434E78] text-2xl" />
-              </div>
-            </div>
-            <div className="bg-white rounded-azure-sm shadow-azure-sm p-4 border border-[#434E78]/20">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-black/60 font-sans uppercase tracking-wide">Completed</p>
-                  <p className="text-2xl font-semibold text-black font-sans mt-1">
-                    {tasks.filter(t => t.status.toLowerCase().includes('completed') || t.status.toLowerCase().includes('done')).length}
-                  </p>
-                </div>
-                <FiCheckCircle className="text-[#434E78] text-2xl" />
-              </div>
-            </div>
-            <div className="bg-white rounded-azure-sm shadow-azure-sm p-4 border border-[#434E78]/20">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-black/60 font-sans uppercase tracking-wide">In Progress</p>
-                  <p className="text-2xl font-semibold text-black font-sans mt-1">
-                    {tasks.filter(t => t.status.toLowerCase().includes('progress') || t.status.toLowerCase().includes('active')).length}
-                  </p>
-                </div>
-                <FiClock className="text-[#434E78] text-2xl" />
-              </div>
-            </div>
-            <div className="bg-white rounded-azure-sm shadow-azure-sm p-4 border border-[#434E78]/20">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-black/60 font-sans uppercase tracking-wide">Overdue</p>
-                  <p className="text-2xl font-semibold text-black font-sans mt-1">
-                    {tasks.filter(t => t.status.toLowerCase().includes('overdue')).length}
-                  </p>
-                </div>
-                <FiAlertCircle className="text-red-500 text-2xl" />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

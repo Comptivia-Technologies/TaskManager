@@ -114,6 +114,43 @@ const WorkloadConfiguration = () => {
         </button>
       </div>
 
+      {/* Workload Status Legend */}
+      {filteredMembers.length > 0 && (
+        <div className="mb-6 p-4 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/20">
+          <h3 className="text-sm font-semibold text-black mb-3 font-sans">Workload Status Legend</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm font-sans">
+            <div className="flex items-center">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200 mr-2">
+                <FiCheckCircle className="mr-1.5 text-green-600" />
+                Available
+              </span>
+              <span className="text-black/60">Score &lt; 30</span>
+            </div>
+            <div className="flex items-center">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200 mr-2">
+                <FiAlertCircle className="mr-1.5 text-yellow-600" />
+                Partially Loaded
+              </span>
+              <span className="text-black/60">Score 30-60</span>
+            </div>
+            <div className="flex items-center">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200 mr-2">
+                <FiAlertCircle className="mr-1.5 text-orange-600" />
+                Fully Loaded
+              </span>
+              <span className="text-black/60">Score 60-85</span>
+            </div>
+            <div className="flex items-center">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-200 mr-2">
+                <FiXCircle className="mr-1.5 text-red-600" />
+                Overloaded
+              </span>
+              <span className="text-black/60">Score ≥ 85</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6">
         <div className="relative w-full md:w-64">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -283,42 +320,6 @@ const WorkloadConfiguration = () => {
           </table>
         </div>
       </div>
-
-      {filteredMembers.length > 0 && (
-        <div className="mt-6 p-4 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/20">
-          <h3 className="text-sm font-semibold text-black mb-3 font-sans">Workload Status Legend</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm font-sans">
-            <div className="flex items-center">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200 mr-2">
-                <FiCheckCircle className="mr-1.5 text-green-600" />
-                Available
-              </span>
-              <span className="text-black/60">Score &lt; 30</span>
-            </div>
-            <div className="flex items-center">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200 mr-2">
-                <FiAlertCircle className="mr-1.5 text-yellow-600" />
-                Partially Loaded
-              </span>
-              <span className="text-black/60">Score 30-60</span>
-            </div>
-            <div className="flex items-center">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200 mr-2">
-                <FiAlertCircle className="mr-1.5 text-orange-600" />
-                Fully Loaded
-              </span>
-              <span className="text-black/60">Score 60-85</span>
-            </div>
-            <div className="flex items-center">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-200 mr-2">
-                <FiXCircle className="mr-1.5 text-red-600" />
-                Overloaded
-              </span>
-              <span className="text-black/60">Score ≥ 85</span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
