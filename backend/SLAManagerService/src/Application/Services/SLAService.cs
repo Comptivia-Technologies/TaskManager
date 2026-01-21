@@ -27,54 +27,82 @@ public class SLAService : ISLAService
         _logger = logger;
     }
 
-    public async Task ConfigureSLAForTaskAsync(WorkflowSelectedEvent workflowSelectedEvent)
+    public async Task ConfigureSLAForTaskAsync(PriorityAssignedEvent priorityAssignedEvent)
     {
         try
         {
+            _logger.LogInformation(
+                "=== SLA Configuration Started === TaskId: {TaskId}, WorkflowId: {WorkflowId}, Priority: {Priority}, CorrelationId: {CorrelationId}",
+                priorityAssignedEvent.TaskId, priorityAssignedEvent.WorkflowId, priorityAssignedEvent.Priority, priorityAssignedEvent.CorrelationId);
+
+            // Validate WorkflowId
+            if (priorityAssignedEvent.WorkflowId <= 0)
+            {
+                _logger.LogError(
+                    "❌ INVALID WorkflowId: {WorkflowId}, TaskId: {TaskId}, CorrelationId: {CorrelationId}",
+                    priorityAssignedEvent.WorkflowId, priorityAssignedEvent.TaskId, priorityAssignedEvent.CorrelationId);
+                throw new ArgumentException($"Invalid WorkflowId: {priorityAssignedEvent.WorkflowId}");
+            }
+
             // Idempotency check
-            var existingAssignment = await _repository.GetByTaskIdAsync(workflowSelectedEvent.TaskId);
+            _logger.LogInformation("Checking for existing SLA assignment...");
+            var existingAssignment = await _repository.GetByTaskIdAsync(priorityAssignedEvent.TaskId);
             if (existingAssignment != null)
             {
                 _logger.LogWarning(
                     "SLA already configured for task. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
-                    workflowSelectedEvent.TaskId, workflowSelectedEvent.CorrelationId);
+                    priorityAssignedEvent.TaskId, priorityAssignedEvent.CorrelationId);
                 return;
             }
 
             // Get SLA configuration for the workflow
-            var slaConfig = await _repository.GetSLAConfigurationByWorkflowIdAsync(workflowSelectedEvent.WorkflowId);
+            _logger.LogInformation(
+                "Looking up SLA configuration for WorkflowId: {WorkflowId}...",
+                priorityAssignedEvent.WorkflowId);
+            var slaConfig = await _repository.GetSLAConfigurationByWorkflowIdAsync(priorityAssignedEvent.WorkflowId);
             
             if (slaConfig == null)
             {
-                _logger.LogWarning(
-                    "No SLA configuration found for workflow. WorkflowId: {WorkflowId}, TaskId: {TaskId}, CorrelationId: {CorrelationId}",
-                    workflowSelectedEvent.WorkflowId, workflowSelectedEvent.TaskId, workflowSelectedEvent.CorrelationId);
+                _logger.LogError(
+                    "❌ NO SLA CONFIGURATION FOUND for WorkflowId: {WorkflowId}, TaskId: {TaskId}, CorrelationId: {CorrelationId}. SLA assignment will NOT be created, member assignment will NOT occur.",
+                    priorityAssignedEvent.WorkflowId, priorityAssignedEvent.TaskId, priorityAssignedEvent.CorrelationId);
                 return;
             }
 
+            _logger.LogInformation(
+                "✓ Found SLA configuration. WorkflowId: {WorkflowId}, SLAConfigurationId: {SLAConfigurationId}",
+                priorityAssignedEvent.WorkflowId, slaConfig.SLAConfigurationId);
+
             // Parse priority levels from JSONB
+            _logger.LogInformation("Parsing PriorityLevelsJson...");
             var priorityLevels = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, int>>>(
                 slaConfig.PriorityLevelsJson,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             if (priorityLevels == null || !priorityLevels.Any())
             {
-                _logger.LogWarning(
-                    "Invalid SLA configuration JSON. WorkflowId: {WorkflowId}, TaskId: {TaskId}, CorrelationId: {CorrelationId}",
-                    workflowSelectedEvent.WorkflowId, workflowSelectedEvent.TaskId, workflowSelectedEvent.CorrelationId);
+                _logger.LogError(
+                    "❌ Invalid SLA configuration JSON. WorkflowId: {WorkflowId}, TaskId: {TaskId}, CorrelationId: {CorrelationId}, JSON: {Json}",
+                    priorityAssignedEvent.WorkflowId, priorityAssignedEvent.TaskId, priorityAssignedEvent.CorrelationId, slaConfig.PriorityLevelsJson);
                 return;
             }
 
-            // Get task priority from WorkflowSelectedEvent (passed from TaskCreatedEvent)
-            var taskPriority = workflowSelectedEvent.TaskPriority;
+            _logger.LogInformation(
+                "✓ Parsed priority levels. Available priorities: {Priorities}",
+                string.Join(", ", priorityLevels.Keys));
+
+            // Get task priority from PriorityAssignedEvent (assigned by rule engine)
+            var taskPriority = priorityAssignedEvent.Priority;
             
             if (string.IsNullOrEmpty(taskPriority))
             {
                 _logger.LogWarning(
                     "Task priority is empty, using default 'Medium'. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
-                    workflowSelectedEvent.TaskId, workflowSelectedEvent.CorrelationId);
+                    priorityAssignedEvent.TaskId, priorityAssignedEvent.CorrelationId);
                 taskPriority = "Medium";
             }
+
+            _logger.LogInformation("Task priority: {TaskPriority}", taskPriority);
 
             // Find matching priority level (case-insensitive)
             var matchingPriority = priorityLevels.Keys.FirstOrDefault(
@@ -86,47 +114,60 @@ public class SLAService : ISLAService
                 matchingPriority = priorityLevels.Keys.First();
                 _logger.LogWarning(
                     "Priority {Priority} not found in SLA config, using {FallbackPriority}. TaskId: {TaskId}",
-                    taskPriority, matchingPriority, workflowSelectedEvent.TaskId);
+                    taskPriority, matchingPriority, priorityAssignedEvent.TaskId);
             }
 
             var responseTimeMinutes = priorityLevels[matchingPriority]["responseTime"];
             var slaStartTime = DateTime.UtcNow;
             var slaDeadline = slaStartTime.AddMinutes(responseTimeMinutes);
 
+            _logger.LogInformation(
+                "Creating SLA assignment. Priority: {Priority}, ResponseTime: {ResponseTime}min, Deadline: {Deadline}",
+                matchingPriority, responseTimeMinutes, slaDeadline);
+
             // Create SLA assignment
             var assignment = new SLAAssignment
             {
-                TaskId = workflowSelectedEvent.TaskId,
-                WorkflowId = workflowSelectedEvent.WorkflowId,
+                TaskId = priorityAssignedEvent.TaskId,
+                WorkflowId = priorityAssignedEvent.WorkflowId,
                 Priority = matchingPriority,
                 ResponseTimeMinutes = responseTimeMinutes,
                 SLAStartTime = slaStartTime,
                 SLADeadline = slaDeadline,
                 IsOverdue = false,
                 CreatedAt = DateTime.UtcNow,
-                WorkflowSelectedEventId = workflowSelectedEvent.SelectionId // Use SelectionId for idempotency
+                WorkflowSelectedEventId = null // Not using WorkflowSelectedEventId anymore
             };
 
+            _logger.LogInformation("Saving SLA assignment to database...");
             await _repository.CreateAsync(assignment);
+            _logger.LogInformation(
+                "✓ SLA assignment created. SLAAssignmentId: {SLAAssignmentId}, TaskId: {TaskId}",
+                assignment.SLAAssignmentId, assignment.TaskId);
 
             // Publish SLAConfiguredEvent
             var slaConfiguredEvent = new SLAConfiguredEvent
             {
                 SLAAssignmentId = assignment.SLAAssignmentId, // Include SLAAssignmentId for idempotency
-                TaskId = workflowSelectedEvent.TaskId,
-                WorkflowId = workflowSelectedEvent.WorkflowId,
+                TaskId = priorityAssignedEvent.TaskId,
+                WorkflowId = priorityAssignedEvent.WorkflowId,
                 Priority = matchingPriority,
                 ResponseTimeMinutes = responseTimeMinutes,
                 SLAStartTime = slaStartTime,
                 SLADeadline = slaDeadline,
-                CorrelationId = workflowSelectedEvent.CorrelationId
+                CorrelationId = priorityAssignedEvent.CorrelationId
             };
 
+            _logger.LogInformation("Publishing SLAConfiguredEvent...");
             await _publisher.PublishAsync(
                 slaConfiguredEvent,
                 RabbitMQConstants.SLAExchange,
                 RabbitMQConstants.SLAConfigured,
-                workflowSelectedEvent.CorrelationId);
+                priorityAssignedEvent.CorrelationId);
+
+            _logger.LogInformation(
+                "✓ SLAConfiguredEvent published. TaskId: {TaskId}, WorkflowId: {WorkflowId}, Priority: {Priority}, CorrelationId: {CorrelationId}",
+                priorityAssignedEvent.TaskId, priorityAssignedEvent.WorkflowId, matchingPriority, priorityAssignedEvent.CorrelationId);
 
             // Publish delayed TaskOverdueEvent that will be delivered at the SLA deadline
             var delay = slaDeadline - DateTime.UtcNow;
@@ -136,7 +177,7 @@ public class SLAService : ISLAService
                 {
                     var overdueEvent = new TaskOverdueEvent
                     {
-                        TaskId = workflowSelectedEvent.TaskId,
+                        TaskId = priorityAssignedEvent.TaskId,
                         MemberId = 0, // Will be set by TaskService if task is assigned
                         SLADeadline = slaDeadline,
                         BreachedAt = slaDeadline, // Will be set to actual breach time when delivered
@@ -153,7 +194,7 @@ public class SLAService : ISLAService
 
                     _logger.LogInformation(
                         "Scheduled delayed TaskOverdueEvent for TaskId: {TaskId}, Deadline: {Deadline}, Delay: {Delay}ms, CorrelationId: {CorrelationId}",
-                        workflowSelectedEvent.TaskId, slaDeadline, (int)delay.TotalMilliseconds, overdueEvent.CorrelationId);
+                        priorityAssignedEvent.TaskId, slaDeadline, (int)delay.TotalMilliseconds, overdueEvent.CorrelationId);
                 }
                 catch (Exception ex)
                 {
@@ -161,7 +202,7 @@ public class SLAService : ISLAService
                     // Fallback worker will catch overdue tasks
                     _logger.LogWarning(ex,
                         "Failed to publish delayed TaskOverdueEvent for TaskId: {TaskId}. Fallback worker will handle overdue detection. CorrelationId: {CorrelationId}",
-                        workflowSelectedEvent.TaskId, workflowSelectedEvent.CorrelationId);
+                        priorityAssignedEvent.TaskId, priorityAssignedEvent.CorrelationId);
                 }
             }
             else
@@ -169,12 +210,12 @@ public class SLAService : ISLAService
                 // Deadline already passed (shouldn't happen, but handle it)
                 _logger.LogWarning(
                     "Task {TaskId} SLA deadline has already passed. Marking as overdue immediately.",
-                    workflowSelectedEvent.TaskId);
+                    priorityAssignedEvent.TaskId);
                 
                 // Publish overdue event immediately
                 var overdueEvent = new TaskOverdueEvent
                 {
-                    TaskId = workflowSelectedEvent.TaskId,
+                        TaskId = priorityAssignedEvent.TaskId,
                     MemberId = 0,
                     SLADeadline = slaDeadline,
                     BreachedAt = DateTime.UtcNow,
@@ -191,13 +232,13 @@ public class SLAService : ISLAService
 
             _logger.LogInformation(
                 "SLA configured for task. TaskId: {TaskId}, Priority: {Priority}, ResponseTime: {ResponseTime}min, Deadline: {Deadline}, CorrelationId: {CorrelationId}",
-                workflowSelectedEvent.TaskId, matchingPriority, responseTimeMinutes, slaDeadline, workflowSelectedEvent.CorrelationId);
+                priorityAssignedEvent.TaskId, matchingPriority, responseTimeMinutes, slaDeadline, priorityAssignedEvent.CorrelationId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 "Error configuring SLA for task. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
-                workflowSelectedEvent.TaskId, workflowSelectedEvent.CorrelationId);
+                    priorityAssignedEvent.TaskId, priorityAssignedEvent.CorrelationId);
             throw;
         }
     }

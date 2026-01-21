@@ -220,3 +220,50 @@ export interface WorkloadResponse {
   calculatedAt: string;
 }
 
+export interface PriorityRule {
+  ruleId: number;
+  ruleName: string;
+  priority: string;  // "Critical", "High", "Medium", "Low"
+  salience: number;
+  isActive: boolean;
+  conditionsJson: string;
+  maxWorkloadScore?: number;
+  teamName?: string;
+  workflowId?: number;  // NULL = global rule, specific ID = workflow-specific rule
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PriorityRuleCreate {
+  ruleName: string;
+  priority: string;
+  salience: number;
+  isActive: boolean;
+  conditionsJson: string;
+  maxWorkloadScore?: number;
+  teamName?: string;
+  workflowId?: number;  // NULL = global rule, specific ID = workflow-specific rule
+}
+
+export interface PriorityRuleUpdate {
+  ruleName: string;
+  priority: string;
+  salience: number;
+  isActive: boolean;
+  conditionsJson: string;
+  maxWorkloadScore?: number;
+  teamName?: string;
+  workflowId?: number;  // NULL = global rule, specific ID = workflow-specific rule
+}
+
+export interface RuleCondition {
+  path: string;
+  op: string;
+  value: any;
+}
+
+export interface RuleConditions {
+  all?: RuleCondition[];
+  any?: RuleCondition[];
+}
+

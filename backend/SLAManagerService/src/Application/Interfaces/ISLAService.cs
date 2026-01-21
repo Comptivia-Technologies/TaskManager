@@ -7,6 +7,6 @@ namespace SLAManagerService.Application.Interfaces;
 /// </summary>
 public interface ISLAService
 {
-    Task ConfigureSLAForTaskAsync(WorkflowSelectedEvent workflowSelectedEvent);
+    Task ConfigureSLAForTaskAsync(PriorityAssignedEvent priorityAssignedEvent);
 }
 

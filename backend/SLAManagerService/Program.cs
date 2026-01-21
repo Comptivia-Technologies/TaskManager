@@ -35,7 +35,7 @@ builder.Services.AddScoped<ISLARepository, SLARepository>();
 builder.Services.AddScoped<ISLAService, SLAService>();
 
 // Event Handlers
-builder.Services.AddScoped<WorkflowSelectedEventHandler>();
+builder.Services.AddScoped<PriorityAssignedEventHandler>();
 
 // Background Services
 builder.Services.AddHostedService<SLAMonitorService>();
@@ -59,22 +59,22 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
-    logger.LogInformation("Starting WorkflowSelectedEvent consumer...");
-    consumer.StartConsuming<WorkflowSelectedEvent>(
-        RabbitMQConstants.WorkflowExchange,
-        RabbitMQConstants.WorkflowSelectedQueue,
-        RabbitMQConstants.WorkflowSelected,
+    logger.LogInformation("Starting PriorityAssignedEvent consumer...");
+    consumer.StartConsuming<PriorityAssignedEvent>(
+        RabbitMQConstants.TaskExchange,
+        RabbitMQConstants.PriorityAssignedSLAQueue,
+        RabbitMQConstants.PriorityAssigned,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
-            var handler = scope.ServiceProvider.GetRequiredService<WorkflowSelectedEventHandler>();
+            var handler = scope.ServiceProvider.GetRequiredService<PriorityAssignedEventHandler>();
             await handler.HandleAsync(evt, correlationId);
         });
-    logger.LogInformation("✓ WorkflowSelectedEvent consumer started successfully");
+    logger.LogInformation("✓ PriorityAssignedEvent consumer started successfully");
 }
 catch (Exception ex)
 {
-    logger.LogError(ex, "✗ Failed to start WorkflowSelectedEvent consumer");
+    logger.LogError(ex, "✗ Failed to start PriorityAssignedEvent consumer");
 }
 
 // Ensure database is created before starting

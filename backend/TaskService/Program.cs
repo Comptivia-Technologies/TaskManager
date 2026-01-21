@@ -39,6 +39,7 @@ builder.Services.AddScoped<ITaskService, TaskService.Application.Services.TaskSe
 // Event Handlers
 builder.Services.AddScoped<TaskCreatedEventHandler>();
 builder.Services.AddScoped<WorkflowSelectedEventHandler>();
+builder.Services.AddScoped<PriorityAssignedEventHandler>();
 builder.Services.AddScoped<SLAConfiguredEventHandler>();
 builder.Services.AddScoped<TaskAssignedEventHandler>();
 builder.Services.AddScoped<TaskOverdueEventHandler>();
@@ -112,6 +113,26 @@ try
 catch (Exception ex)
 {
     logger.LogError(ex, "✗ Failed to start WorkflowSelectedEvent consumer");
+}
+
+try
+{
+    logger.LogInformation("Starting PriorityAssignedEvent consumer...");
+    consumer.StartConsuming<PriorityAssignedEvent>(
+        RabbitMQConstants.TaskExchange,
+        RabbitMQConstants.PriorityAssignedTaskQueue,
+        RabbitMQConstants.PriorityAssigned,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<PriorityAssignedEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ PriorityAssignedEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start PriorityAssignedEvent consumer");
 }
 
 try

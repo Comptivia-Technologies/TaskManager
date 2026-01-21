@@ -27,7 +27,7 @@ public class TasksController : ControllerBase
 
     /// <summary>
     /// Create a new task - Entry point for orchestration flow
-    /// Publishes TaskCreatedEvent to start the workflow
+    /// Publishes TaskCreatedEvent to priority rule engine first, then to workflow services
     /// </summary>
     [HttpPost]
     public async Task<ActionResult> CreateTask([FromBody] CreateTaskRequestDto request)
@@ -37,19 +37,21 @@ public class TasksController : ControllerBase
             var correlationId = Guid.NewGuid();
             var taskId = Guid.NewGuid();
 
-            // Create TaskCreatedEvent
+            // Create TaskCreatedEvent - priority will be assigned by rule engine AFTER workflow selection
             var taskCreatedEvent = new TaskCreatedEvent
             {
                 TaskId = taskId,
                 TaskName = request.TaskName,
                 Description = request.Description,
-                Priority = request.Priority,
+                Priority = string.Empty,  // Will be set by rule engine after workflow selection
                 TaskType = request.TaskType,
+                TaskData = request.TaskData,  // Generic task data for rule evaluation
+                PriorityAssigned = false,
                 CreatedAt = DateTime.UtcNow,
                 CorrelationId = correlationId
             };
 
-            // Publish event to start orchestration flow
+            // Publish event to main task queue (WorkflowService and TaskService will consume)
             await _publisher.PublishAsync(
                 taskCreatedEvent,
                 RabbitMQConstants.TaskExchange,

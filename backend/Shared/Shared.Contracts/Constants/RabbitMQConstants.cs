@@ -13,6 +13,8 @@ public static class RabbitMQConstants
 
     // Routing Keys
     public const string TaskCreated = "task.created";
+    public const string TaskCreatedForPriority = "task.created.forpriority";  // For priority rule engine
+    public const string PriorityAssigned = "priority.assigned";
     public const string WorkflowSelected = "workflow.selected";
     public const string SLAConfigured = "sla.configured";
     public const string TaskAssigned = "task.assigned";
@@ -21,8 +23,13 @@ public static class RabbitMQConstants
 
     // Queues
     public const string TaskCreatedQueue = "task.created.queue";
+    public const string TaskCreatedForPriorityQueue = "task.created.forpriority.queue";  // Priority rule engine queue
+    public const string PriorityAssignedQueue = "priority.assigned.queue";
+    public const string PriorityAssignedTaskQueue = "priority.assigned.task.queue"; // Separate queue for TaskService
+    public const string PriorityAssignedSLAQueue = "priority.assigned.sla.queue"; // Separate queue for SLAManagerService
     public const string TaskCreatedWorkflowQueue = "task.created.workflow.queue"; // Separate queue for WorkflowService
     public const string WorkflowSelectedQueue = "workflow.selected.queue";
+    public const string WorkflowSelectedPriorityQueue = "workflow.selected.priority.queue"; // Separate queue for PriorityRuleEngine
     public const string SLAConfiguredQueue = "sla.configured.queue";
     public const string SLAConfiguredWorkloadQueue = "sla.configured.workload.queue"; // Separate queue for WorkloadService
     public const string TaskAssignedQueue = "task.assigned.queue";

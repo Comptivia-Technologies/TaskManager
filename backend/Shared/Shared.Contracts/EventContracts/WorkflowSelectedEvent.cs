@@ -11,6 +11,9 @@ public class WorkflowSelectedEvent
     public string WorkflowName { get; set; } = string.Empty;
     public string TaskPriority { get; set; } = string.Empty;
     public string TaskType { get; set; } = string.Empty;
+    public string? TaskName { get; set; }
+    public string? Description { get; set; }
+    public Dictionary<string, object>? TaskData { get; set; }  // Generic task-specific data for rule evaluation
     public int? TeamId { get; set; }
     public DateTime SelectedAt { get; set; }
     public Guid CorrelationId { get; set; }

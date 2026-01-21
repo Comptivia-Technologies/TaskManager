@@ -76,15 +76,18 @@ public class WorkflowSelectionService : IWorkflowSelectionService
 
             await _repository.CreateAsync(selection);
 
-            // Publish WorkflowSelectedEvent
+            // Publish WorkflowSelectedEvent (includes task data for priority rule evaluation)
             var workflowSelectedEvent = new WorkflowSelectedEvent
             {
                 SelectionId = selection.SelectionId, // Include SelectionId for idempotency
                 TaskId = taskCreatedEvent.TaskId,
                 WorkflowId = selectedWorkflow.WorkflowId,
                 WorkflowName = selectedWorkflow.WorkflowName,
-                TaskPriority = taskCreatedEvent.Priority,
+                TaskPriority = taskCreatedEvent.Priority,  // Will be empty, priority engine will assign
                 TaskType = taskCreatedEvent.TaskType,
+                TaskName = taskCreatedEvent.TaskName,
+                Description = taskCreatedEvent.Description,
+                TaskData = taskCreatedEvent.TaskData,  // Include task data for priority rule evaluation
                 TeamId = selectedWorkflow.TeamId,
                 SelectedAt = DateTime.UtcNow,
                 CorrelationId = taskCreatedEvent.CorrelationId

@@ -40,12 +40,15 @@ public class TaskCreatedEventHandler
             }
 
             // Create task from event
+            // Use default priority "Medium" if not assigned by rule engine
+            var priority = string.IsNullOrEmpty(@event.Priority) ? "Medium" : @event.Priority;
+            
             var task = new DomainTask
             {
                 TaskId = @event.TaskId,
                 TaskName = @event.TaskName,
                 Description = @event.Description,
-                Priority = @event.Priority,
+                Priority = priority,
                 TaskType = @event.TaskType,
                 Status = DomainTaskStatus.Created,
                 CreatedAt = @event.CreatedAt,

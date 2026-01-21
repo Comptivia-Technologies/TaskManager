@@ -61,6 +61,10 @@ public class TaskAssignedEventHandler
                 return;
             }
 
+            _logger.LogInformation(
+                "Task found for assignment. TaskId: {TaskId}, Current Priority: {Priority}, WorkflowId: {WorkflowId}",
+                task.TaskId, task.Priority, task.WorkflowId);
+
             // Update task with member assignment
             task.MemberId = @event.MemberId;
             task.Status = DomainTaskStatus.Assigned;
@@ -70,10 +74,27 @@ public class TaskAssignedEventHandler
             task.UpdatedAt = DateTime.UtcNow;
 
             await _repository.UpdateAsync(task);
+            
+            _logger.LogInformation(
+                "Task updated with member assignment. TaskId: {TaskId}, Priority: {Priority}, MemberId: {MemberId}",
+                task.TaskId, task.Priority, task.MemberId);
 
             _logger.LogInformation(
                 "Task assigned to member. TaskId: {TaskId}, MemberId: {MemberId}, MemberName: {MemberName}, WorkloadScore: {WorkloadScore}, AssignmentId: {AssignmentId}, CorrelationId: {CorrelationId}. Task updated in database.",
                 @event.TaskId, @event.MemberId, @event.MemberName, @event.WorkloadScore, @event.AssignmentId, correlationId);
+
+            // Refresh task from database to get latest priority (in case PriorityAssignedEvent updated it)
+            // This ensures we sync the most up-to-date priority to WorkflowManagement.API
+            task = await _repository.GetByIdAsync(@event.TaskId);
+            if (task == null)
+            {
+                _logger.LogWarning("Task not found after update. TaskId: {TaskId}", @event.TaskId);
+                return;
+            }
+
+            _logger.LogInformation(
+                "Refreshed task before sync. TaskId: {TaskId}, Priority: {Priority}, WorkflowId: {WorkflowId}",
+                task.TaskId, task.Priority, task.WorkflowId);
 
             // Sync task to WorkflowManagement.API so frontend can see it
             await SyncTaskToWorkflowManagementAPIAsync(task);
@@ -119,12 +140,16 @@ public class TaskAssignedEventHandler
                 TaskName = task.TaskName,
                 Description = task.Description,
                 Status = statusString,
-                Priority = task.Priority,
+                Priority = task.Priority, // This should already have the priority from PriorityAssignedEvent
                 DueDate = task.SLADeadline, // Use SLA deadline as due date
                 WorkflowId = task.WorkflowId.Value,
                 StageId = (int?)null, // Can be set later if needed
                 AssignedToMemberId = task.MemberId.Value
             };
+            
+            _logger.LogInformation(
+                "Syncing task to WorkflowManagement.API with Priority: {Priority}, TaskId: {TaskId}",
+                task.Priority, task.TaskId);
 
             var response = await _httpClient.PostAsJsonAsync(
                 $"{workflowManagementApiUrl}/tasks",
