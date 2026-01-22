@@ -72,40 +72,48 @@ const Teams = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      let createdTeamId: number;
+      
       if (isEditMode && selectedTeam) {
         // Update team details
         await teamService.update(selectedTeam.teamId, formData);
-        
-        // Assign selected members to the team
-        if (selectedMemberIds.length > 0) {
-          try {
-            const freshMembers = await memberService.getAll();
-            for (const memberId of selectedMemberIds) {
-              const member = freshMembers.find(m => m.memberId === memberId);
-              if (member) {
-                await memberService.update(memberId, {
-                  firstName: member.firstName,
-                  lastName: member.lastName,
-                  email: member.email,
-                  role: member.role,
-                  skillLevel: member.skillLevel,
-                  teamId: selectedTeam.teamId,
-                });
-              }
+        createdTeamId = selectedTeam.teamId;
+      } else {
+        // Create team first
+        const newTeam = await teamService.create(formData);
+        createdTeamId = newTeam.teamId;
+      }
+      
+      // Assign selected existing members to the team
+      if (selectedMemberIds.length > 0) {
+        try {
+          const freshMembers = await memberService.getAll();
+          for (const memberId of selectedMemberIds) {
+            const member = freshMembers.find(m => m.memberId === memberId);
+            if (member) {
+              await memberService.update(memberId, {
+                firstName: member.firstName,
+                lastName: member.lastName,
+                email: member.email,
+                role: member.role,
+                skillLevel: member.skillLevel,
+                teamId: createdTeamId,
+              });
             }
-            await refetchMembers();
-            toast.success(`Team updated and ${selectedMemberIds.length} member(s) assigned successfully!`);
-          } catch (assignError: any) {
-            console.error('Error assigning members:', assignError);
-            toast.warning('Team updated but failed to assign some members');
           }
-        } else {
-          toast.success('Team updated successfully');
+          await refetchMembers();
+          const action = isEditMode ? 'updated' : 'created';
+          toast.success(`Team ${action} and ${selectedMemberIds.length} member(s) assigned successfully!`);
+        } catch (assignError: any) {
+          console.error('Error assigning members:', assignError);
+          const action = isEditMode ? 'updated' : 'created';
+          toast.warning(`Team ${action} but failed to assign some members`);
         }
       } else {
-        await teamService.create(formData);
-        toast.success('Team created successfully');
+        const action = isEditMode ? 'updated' : 'created';
+        toast.success(`Team ${action} successfully!`);
       }
+      
       handleCloseModal();
       refetch();
     } catch (error: any) {
@@ -325,6 +333,13 @@ const Teams = () => {
     <div className="p-8 bg-white font-sans">
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#434E78]/20">
         <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">Teams</h1>
+        <button
+          onClick={() => handleOpenModal()}
+          className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans flex items-center"
+        >
+          <FiPlus className="mr-2" />
+          Create Team
+        </button>
       </div>
 
       <div className="mb-6">
@@ -451,22 +466,24 @@ const Teams = () => {
                   rows={4}
                 />
               </div>
-              {isEditMode && (
+              
+              {/* Add Members Section */}
+              {allMembers.length > 0 && (
                 <div className="mb-4">
                   <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                    Members
+                    Add Members
                   </label>
                   <Select
                     isMulti
                     options={allMembers.map((member) => ({
                       value: member.memberId,
-                      label: `${member.firstName} ${member.lastName} (${member.email})`,
+                      label: `${member.firstName} ${member.lastName} (${member.email})${member.teamName ? ` - Current Team: ${member.teamName}` : ''}`,
                     }))}
                     value={allMembers
                       .filter((member) => selectedMemberIds.includes(member.memberId))
                       .map((member) => ({
                         value: member.memberId,
-                        label: `${member.firstName} ${member.lastName} (${member.email})`,
+                        label: `${member.firstName} ${member.lastName} (${member.email})${member.teamName ? ` - Current Team: ${member.teamName}` : ''}`,
                       }))}
                     onChange={(selectedOptions: any) => {
                       const ids = selectedOptions
@@ -475,37 +492,61 @@ const Teams = () => {
                       setSelectedMemberIds(ids);
                     }}
                     className="text-sm font-sans"
-                    placeholder="Select members to assign to this team..."
+                    placeholder="Select members to add to this team..."
                     styles={{
                       control: (base) => ({
                         ...base,
-                        borderColor: '#434E78',
+                        borderColor: 'rgba(67, 78, 120, 0.3)',
                         borderWidth: '1px',
                         borderRadius: '0.375rem',
                         '&:hover': {
-                          borderColor: '#434E78',
+                          borderColor: 'rgba(67, 78, 120, 0.5)',
                         },
                       }),
                       multiValue: (base) => ({
                         ...base,
-                        backgroundColor: '#434E78',
+                        backgroundColor: '#d1fae5',
+                        color: '#065f46',
                       }),
                       multiValueLabel: (base) => ({
                         ...base,
-                        color: 'white',
+                        color: '#065f46',
+                        fontWeight: 500,
                       }),
                       multiValueRemove: (base) => ({
                         ...base,
-                        color: 'white',
+                        color: '#065f46',
                         '&:hover': {
-                          backgroundColor: '#434E78',
-                          color: 'white',
+                          backgroundColor: '#a7f3d0',
+                          color: '#064e3b',
+                        },
+                      }),
+                      option: (base, state) => ({
+                        ...base,
+                        backgroundColor: state.isSelected
+                          ? '#434E78'
+                          : state.isFocused
+                          ? 'rgba(67, 78, 120, 0.1)'
+                          : 'white',
+                        color: state.isSelected ? 'white' : 'black',
+                        '&:active': {
+                          backgroundColor: state.isSelected ? '#434E78' : 'rgba(67, 78, 120, 0.2)',
                         },
                       }),
                     }}
+                    theme={(theme) => ({
+                      ...theme,
+                      colors: {
+                        ...theme.colors,
+                        primary: '#434E78',
+                        primary25: 'rgba(67, 78, 120, 0.1)',
+                        primary50: 'rgba(67, 78, 120, 0.2)',
+                        primary75: '#434E78',
+                      },
+                    })}
                   />
                   <p className="text-xs text-black/60 mt-1 font-sans">
-                    Select members to assign to this team
+                    Select members to add to this team (optional)
                   </p>
                 </div>
               )}

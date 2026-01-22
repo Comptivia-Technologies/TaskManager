@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTeams } from '../hooks/useTeams';
 import { useMembers } from '../hooks/useMembers';
 import { teamService } from '../services/teamService';
@@ -6,10 +6,12 @@ import { memberService } from '../services/memberService';
 import { workflowService } from '../services/workflowService';
 import { stageService } from '../services/stageService';
 import { toast } from 'react-toastify';
-import { FiChevronLeft, FiChevronRight, FiX, FiCheck, FiPlus, FiEdit2, FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiX, FiCheck, FiPlus, FiEdit2, FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings, FiShield } from 'react-icons/fi';
 import Select from 'react-select';
 import SLAConfigure from './SLAConfigure';
-import { Member } from '../types';
+import ConditionBuilder from './ConditionBuilder';
+import { Member, PriorityRuleCreate } from '../types';
+import { priorityRulesService } from '../services/priorityRulesService';
 
 interface WorkflowWizardProps {
   onSuccess: (workflowId: number) => void;
@@ -27,7 +29,7 @@ interface MemberForm {
   email: string;
   role: string;
   skillLevel: number;
-  // No teamId - will be assigned when team is created
+  // Members will be assigned to first available team when created
 }
 
 interface StageForm {
@@ -42,10 +44,10 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
   const { members: existingMembers, refetch: refetchMembers } = useMembers();
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
-  const totalSteps = 5;
+  const totalSteps = 6;
 
-  const stepLabels = ['Get Started', 'Add Members', 'Create Team', 'Create Workflow', 'Configure SLA'];
-  const stepIcons = [FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings];
+  const stepLabels = ['Get Started', 'Add Members', 'Create Team', 'Create Workflow', 'Configure SLA', 'Create Rules'];
+  const stepIcons = [FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings, FiShield];
 
   // Step 1: Get Started (intro)
   // Step 2: Add Members (new members to be created)
@@ -82,7 +84,29 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
   const [editingStageIndex, setEditingStageIndex] = useState<number | null>(null);
   const [createdWorkflowId, setCreatedWorkflowId] = useState<number | null>(null);
 
+  // Step 6: Create Rules
+  const [rules, setRules] = useState<PriorityRuleCreate[]>([]);
+  const [ruleForm, setRuleForm] = useState<PriorityRuleCreate>({
+    ruleName: '',
+    priority: 'Medium',
+    salience: 0,
+    isActive: true,
+    conditionsJson: '{"all":[]}',
+    maxWorkloadScore: undefined,
+    teamName: undefined,
+    workflowId: undefined,
+  });
+  const [skipRuleCreation, setSkipRuleCreation] = useState(false);
+  const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
+
   const [loading, setLoading] = useState(false);
+
+  // Update rule form workflowId when workflow is created
+  useEffect(() => {
+    if (createdWorkflowId) {
+      setRuleForm(prev => ({ ...prev, workflowId: createdWorkflowId }));
+    }
+  }, [createdWorkflowId]);
 
   // Step 3: Create Team
   const handleCreateTeam = async () => {
@@ -93,37 +117,12 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
 
     setLoading(true);
     try {
-      // Check if teams existed before creating this one
-      const teamsExistedBefore = teams.length > 0;
-      
-      // Create the team
+      // Create the team - that's it, no automatic member creation
       const team = await teamService.create(teamForm);
       setCreatedTeamId(team.teamId);
       await refetchTeams();
       
-      // If no teams existed before, create the new members that were stored in Step 2
-      if (!teamsExistedBefore && newMembers.length > 0) {
-        try {
-          for (const member of newMembers) {
-            await memberService.create({
-              firstName: member.firstName,
-              lastName: member.lastName,
-              email: member.email,
-              role: member.role,
-              skillLevel: member.skillLevel,
-              teamId: team.teamId, // Assign to the newly created team
-            });
-          }
-          await refetchMembers(); // Refresh to include newly created members
-          toast.success(`${newMembers.length} new member(s) created and assigned to the team!`);
-          setNewMembers([]); // Clear the list
-        } catch (memberError: any) {
-          console.error('Error creating members:', memberError);
-          toast.warning('Team created but failed to create some members. You can add them manually.');
-        }
-      }
-      
-      // Assign selected members (both new and existing) to the team
+      // Assign selected existing members to the team (if any were selected)
       if (selectedMemberIds.length > 0) {
         try {
           // Get fresh member data
@@ -151,8 +150,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                               'Failed to assign members';
           toast.error(`Team created but failed to assign members: ${errorMessage}`);
         }
-      } else if (teamsExistedBefore || newMembers.length === 0) {
-        // Only show this if teams existed before or no new members were created
+      } else {
         toast.success('Team created successfully!');
       }
       
@@ -219,7 +217,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
     setNewMembers(newMembers.filter((_, i) => i !== index));
   };
 
-  // Create new members immediately if teams exist, otherwise store locally for team creation step
+  // Step 2: Add Members - ALWAYS create immediately if teams exist
   const handleSaveMembers = async () => {
     if (newMembers.length === 0 && !skipMemberCreation) {
       toast.error('Please add at least one member or skip this step');
@@ -234,16 +232,13 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
       return;
     }
 
-    // If no teams exist, just store members locally - they'll be created when team is created
+    // Check if teams exist - members require a team
     if (teams.length === 0) {
-      toast.info(`${newMembers.length} member(s) added to list. They will be created when you create a team in the next step.`);
-      if (!completedSteps.includes(2)) {
-        setCompletedSteps([...completedSteps, 2]);
-      }
+      toast.error('You need to create at least one team before adding members. Please create a team in the next step first, then come back to add members.');
       return;
     }
 
-    // Teams exist - create members immediately
+    // Teams exist - create members immediately and assign to first team
     setLoading(true);
     try {
       const defaultTeamId = teams[0].teamId;
@@ -255,7 +250,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
           email: member.email,
           role: member.role,
           skillLevel: member.skillLevel,
-          teamId: defaultTeamId, // Assign to first available team temporarily
+          teamId: defaultTeamId, // Assign to first available team
         });
       }
       
@@ -263,7 +258,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
       setNewMembers([]);
       await refetchMembers();
       
-      toast.success(`${membersCount} member(s) created successfully! You can select them to assign to your new team in the next step.`);
+      toast.success(`${membersCount} member(s) created successfully! They have been assigned to "${teams[0].teamName}". You can reassign them to a different team later if needed.`);
       if (!completedSteps.includes(2)) {
         setCompletedSteps([...completedSteps, 2]);
       }
@@ -347,8 +342,89 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
     if (!completedSteps.includes(5)) {
       setCompletedSteps([...completedSteps, 5]);
     }
-    if (createdWorkflowId) {
-      onSuccess(createdWorkflowId);
+    // Don't call onSuccess here - wait for rule creation step
+  };
+
+  // Step 6: Create Rules
+  const handleAddRule = () => {
+    if (!ruleForm.ruleName.trim()) {
+      toast.error('Please enter a rule name');
+      return;
+    }
+    
+    if (editingRuleIndex !== null) {
+      const updated = [...rules];
+      updated[editingRuleIndex] = { ...ruleForm };
+      setRules(updated);
+      setEditingRuleIndex(null);
+    } else {
+      setRules([...rules, { ...ruleForm }]);
+    }
+    
+    // Reset form
+    setRuleForm({
+      ruleName: '',
+      priority: 'Medium',
+      salience: 0,
+      isActive: true,
+      conditionsJson: '{"all":[]}',
+      maxWorkloadScore: undefined,
+      teamName: undefined,
+      workflowId: createdWorkflowId || undefined,
+    });
+    toast.success(editingRuleIndex !== null ? 'Rule updated' : 'Rule added to list');
+  };
+
+  const handleRemoveRule = (index: number) => {
+    setRules(rules.filter((_, i) => i !== index));
+  };
+
+  const handleSaveRules = async () => {
+    if (rules.length === 0 && !skipRuleCreation) {
+      toast.error('Please add at least one rule or skip this step');
+      return;
+    }
+
+    if (rules.length === 0) {
+      if (!completedSteps.includes(6)) {
+        setCompletedSteps([...completedSteps, 6]);
+      }
+      if (createdWorkflowId) {
+        onSuccess(createdWorkflowId);
+      }
+      return;
+    }
+
+    if (!createdWorkflowId) {
+      toast.error('Please complete workflow creation first');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      for (const rule of rules) {
+        await priorityRulesService.create({
+          ...rule,
+          workflowId: createdWorkflowId, // Always use the created workflow ID
+        });
+      }
+      toast.success(`${rules.length} rule(s) created successfully!`);
+      setRules([]);
+      if (!completedSteps.includes(6)) {
+        setCompletedSteps([...completedSteps, 6]);
+      }
+      if (createdWorkflowId) {
+        onSuccess(createdWorkflowId);
+      }
+    } catch (error: any) {
+      console.error('Error creating rules:', error);
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message || 
+                          error.message || 
+                          'Failed to create rules';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -359,7 +435,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
           <div className="text-center py-8">
             <h2 className="text-2xl font-semibold mb-4 text-black font-sans">Welcome to Workflow Creation</h2>
             <p className="text-black/70 mb-6 text-sm font-sans max-w-md mx-auto">
-              Let's guide you through creating a complete workflow setup. We'll help you add members, create a team, set up your workflow, and configure SLA settings.
+              Let's guide you through creating a complete workflow setup. We'll help you add members, create a team, set up your workflow, configure SLA settings, and create priority rules.
             </p>
             <div className="space-y-3 text-left max-w-md mx-auto">
               <div className="flex items-start">
@@ -390,6 +466,13 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                   <p className="text-sm text-black/60 font-sans">Set up priority levels and response times</p>
                 </div>
               </div>
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#434E78] text-white flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">5</div>
+                <div>
+                  <p className="font-semibold text-black font-sans">Create Rules</p>
+                  <p className="text-sm text-black/60 font-sans">Define priority rules for task assignment (optional)</p>
+                </div>
+              </div>
             </div>
           </div>
         );
@@ -398,26 +481,20 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
         return (
           <div>
             <h2 className="text-xl font-semibold mb-4 text-black font-sans">Add Members</h2>
-            <p className="text-sm text-black/60 mb-4 font-sans">
-              Add members and assign them to existing teams. Members will be saved immediately.
-            </p>
-            {teams.length > 0 && (
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-azure-sm">
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={skipMemberCreation}
-                    onChange={(e) => {
-                      setSkipMemberCreation(e.target.checked);
-                      if (e.target.checked && !completedSteps.includes(2)) {
-                        setCompletedSteps([...completedSteps, 2]);
-                      }
-                    }}
-                    className="mr-2"
-                  />
-                  <span className="text-sm font-sans">Skip member creation for now</span>
-                </label>
+            {teams.length === 0 && (
+              <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-azure-sm">
+                <p className="text-sm font-semibold text-amber-800 mb-1 font-sans">
+                  ⚠️ No teams exist yet. You need to create a team first before adding members.
+                </p>
+                <p className="text-sm text-amber-700 mt-1 font-sans">
+                  Please proceed to the next step to create a team, then come back here to add members.
+                </p>
               </div>
+            )}
+            {teams.length > 0 && (
+              <p className="text-sm text-black/60 mb-4 font-sans">
+                Add members and they will be assigned to "{teams[0].teamName}". You can reassign them to a different team later if needed.
+              </p>
             )}
             {!skipMemberCreation && (
               <>
@@ -490,7 +567,9 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                   <div className="mb-4">
                     <h3 className="text-lg font-semibold mb-3 text-black font-sans">New Members to Create ({newMembers.length})</h3>
                     <p className="text-sm text-black/60 mb-3 font-sans">
-                      These members will be created and can be assigned to the team in the next step.
+                      {teams.length > 0 
+                        ? `These members will be created and assigned to "${teams[0].teamName}".`
+                        : 'These members cannot be created until at least one team exists.'}
                     </p>
                     <div className="space-y-2">
                       {newMembers.map((member, index) => (
@@ -510,12 +589,15 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                         </div>
                       ))}
                     </div>
-                    <button
-                      onClick={handleSaveMembers}
-                      className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-azure-sm hover:bg-emerald-700 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                    >
-                      Continue to Team Creation
-                    </button>
+                    {teams.length > 0 && (
+                      <button
+                        onClick={handleSaveMembers}
+                        disabled={loading}
+                        className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-azure-sm hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
+                      >
+                        {loading ? 'Creating...' : 'Create Members'}
+                      </button>
+                    )}
                   </div>
                 )}
               </>
@@ -532,35 +614,10 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                 <p className="text-sm font-semibold text-amber-800 mb-1 font-sans">
                   ⚠️ No teams exist yet. You need to create a team to proceed.
                 </p>
-                {newMembers.length > 0 && (
-                  <p className="text-sm text-amber-700 mt-1 font-sans">
-                    {newMembers.length} member(s) from the previous step will be created and can be assigned to this team.
-                  </p>
-                )}
               </div>
             )}
             {teams.length > 0 && (
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-azure-sm">
-                <p className="text-sm text-black/70 mb-2 font-sans">You have existing teams. You can:</p>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={skipTeamCreation}
-                    onChange={(e) => {
-                      setSkipTeamCreation(e.target.checked);
-                      if (e.target.checked) {
-                        if (!completedSteps.includes(3)) {
-                          setCompletedSteps([...completedSteps, 3]);
-                        }
-                      } else {
-                        setCreatedTeamId(null);
-                      }
-                    }}
-                    className="mr-2"
-                  />
-                  <span className="text-sm font-sans">Skip team creation</span>
-                </label>
-              </div>
+              <p className="text-sm text-black/60 mb-4 font-sans">You have existing teams. You can skip team creation if you want to use an existing team.</p>
             )}
             {!skipTeamCreation && (
               <>
@@ -591,7 +648,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                   <div className="mb-4 p-4 border border-[#434E78]/30 rounded-azure-sm bg-[#434E78]/5">
                     <h3 className="text-lg font-semibold mb-3 text-black font-sans">Select Members to Assign</h3>
                     <p className="text-sm text-black/60 mb-3 font-sans">
-                      Choose which members should be assigned to this team. You can search and select multiple members.
+                      Choose which existing members should be assigned to this team. This is optional - you can create the team without assigning members.
                     </p>
                     <Select
                       isMulti
@@ -673,7 +730,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
               <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-azure-sm">
                 <p className="text-sm text-emerald-800 font-sans">✓ Team created successfully!</p>
                 {selectedMemberIds.length === 0 && (
-                  <p className="text-sm text-emerald-700 mt-1 font-sans">No members were assigned</p>
+                  <p className="text-sm text-emerald-700 mt-1 font-sans">No members were assigned. You can assign members later or go back to Step 2 to add new members.</p>
                 )}
               </div>
             )}
@@ -815,6 +872,130 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
           </div>
         );
 
+      case 6:
+        if (!createdWorkflowId) {
+          return (
+            <div className="text-center py-8">
+              <p className="text-black/70 font-sans">Please complete the workflow creation step first.</p>
+            </div>
+          );
+        }
+        return (
+          <div>
+            <h2 className="text-xl font-semibold mb-4 text-black font-sans">Create Priority Rules</h2>
+            <p className="text-sm text-black/60 mb-4 font-sans">
+              Create priority rules for this workflow. Rules determine how tasks are prioritized based on conditions.
+            </p>
+
+            {!skipRuleCreation && (
+              <>
+                <div className="mb-6 p-4 border border-[#434E78]/30 rounded-azure-sm bg-[#434E78]/5">
+                  <h3 className="text-lg font-semibold mb-4 text-black font-sans">Add Rule</h3>
+                  
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Rule Name *</label>
+                    <input
+                      type="text"
+                      value={ruleForm.ruleName}
+                      onChange={(e) => setRuleForm({ ...ruleForm, ruleName: e.target.value })}
+                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
+                      placeholder="e.g., High Priority for Critical Tasks"
+                    />
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Priority *</label>
+                    <select
+                      value={ruleForm.priority}
+                      onChange={(e) => setRuleForm({ ...ruleForm, priority: e.target.value })}
+                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
+                    >
+                      <option value="Critical">Critical</option>
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
+                    </select>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Conditions *</label>
+                    <ConditionBuilder
+                      value={ruleForm.conditionsJson}
+                      onChange={(json) => setRuleForm({ ...ruleForm, conditionsJson: json })}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-4">
+                    <input
+                      type="checkbox"
+                      checked={ruleForm.isActive}
+                      onChange={(e) => setRuleForm({ ...ruleForm, isActive: e.target.checked })}
+                      className="rounded"
+                    />
+                    <label className="text-sm font-medium text-black font-sans">Active</label>
+                  </div>
+
+                  <button
+                    onClick={handleAddRule}
+                    className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
+                  >
+                    {editingRuleIndex !== null ? 'Update Rule' : 'Add Rule to List'}
+                  </button>
+                </div>
+
+                {rules.length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold mb-3 text-black font-sans">Rules to Create ({rules.length})</h3>
+                    <div className="space-y-2">
+                      {rules.map((rule, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-3 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/20"
+                        >
+                          <div className="flex-1">
+                            <span className="font-medium text-black font-sans">
+                              {rule.ruleName} - {rule.priority}
+                            </span>
+                            <p className="text-xs text-black/60 mt-1 font-sans">
+                              {rule.isActive ? 'Active' : 'Inactive'}
+                            </p>
+                          </div>
+                          <div>
+                            <button
+                              onClick={() => {
+                                setEditingRuleIndex(index);
+                                setRuleForm(rules[index]);
+                              }}
+                              className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-1.5 rounded-azure-sm mr-2 transition-colors"
+                              title="Edit"
+                            >
+                              <FiEdit2 className="text-sm" />
+                            </button>
+                            <button
+                              onClick={() => handleRemoveRule(index)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
+                              title="Remove"
+                            >
+                              <FiX className="text-sm" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={handleSaveRules}
+                      disabled={loading}
+                      className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-azure-sm hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
+                    >
+                      {loading ? 'Creating...' : 'Create Rules'}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        );
+
       default:
         return null;
     }
@@ -916,35 +1097,89 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                 <FiChevronLeft className="mr-2" />
                 Back
               </button>
-              {currentStep < totalSteps ? (
-                <button
-                  onClick={() => {
-                    // Validation logic for each step
-                    if (currentStep === 2 && !skipMemberCreation && newMembers.length === 0) {
-                      toast.error('Please add at least one member or skip this step');
-                      return;
-                    }
-                    if (currentStep === 3 && !skipTeamCreation && !createdTeamId) {
-                      toast.error('Please create a team or skip this step');
-                      return;
-                    }
-                    if (currentStep === 4 && (!workflowName.trim() || stages.length === 0)) {
-                      toast.error('Please complete workflow creation');
-                      return;
-                    }
-                    if (!completedSteps.includes(currentStep)) {
-                      setCompletedSteps([...completedSteps, currentStep]);
-                    }
-                    setCurrentStep(Math.min(totalSteps, currentStep + 1));
-                  }}
-                  className="flex items-center px-5 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                >
-                  Next
-                  <FiChevronRight className="ml-2" />
-                </button>
-              ) : (
-                <div></div>
-              )}
+              <div className="flex gap-3">
+                {currentStep === 2 && (
+                  <button
+                    onClick={() => {
+                      setSkipMemberCreation(true);
+                      if (!completedSteps.includes(2)) {
+                        setCompletedSteps([...completedSteps, 2]);
+                      }
+                      setCurrentStep(Math.min(totalSteps, currentStep + 1));
+                    }}
+                    className="flex items-center px-5 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
+                  >
+                    Skip
+                  </button>
+                )}
+                {currentStep === 3 && (
+                  <button
+                    onClick={() => {
+                      setSkipTeamCreation(true);
+                      if (!completedSteps.includes(3)) {
+                        setCompletedSteps([...completedSteps, 3]);
+                      }
+                      setCurrentStep(Math.min(totalSteps, currentStep + 1));
+                    }}
+                    className="flex items-center px-5 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
+                  >
+                    Skip
+                  </button>
+                )}
+                {currentStep === 6 && (
+                  <button
+                    onClick={() => {
+                      setSkipRuleCreation(true);
+                      if (!completedSteps.includes(6)) {
+                        setCompletedSteps([...completedSteps, 6]);
+                      }
+                      if (createdWorkflowId) {
+                        onSuccess(createdWorkflowId);
+                      }
+                    }}
+                    className="flex items-center px-5 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
+                  >
+                    Skip
+                  </button>
+                )}
+                {currentStep < totalSteps ? (
+                  <button
+                    onClick={() => {
+                      // Validation logic for each step
+                      if (currentStep === 2 && !skipMemberCreation && newMembers.length === 0) {
+                        toast.error('Please add at least one member or skip this step');
+                        return;
+                      }
+                      if (currentStep === 3 && !skipTeamCreation && !createdTeamId) {
+                        toast.error('Please create a team or skip this step');
+                        return;
+                      }
+                      if (currentStep === 4 && (!workflowName.trim() || stages.length === 0)) {
+                        toast.error('Please complete workflow creation');
+                        return;
+                      }
+                      if (currentStep === 5 && !createdWorkflowId) {
+                        toast.error('Please complete workflow creation first');
+                        return;
+                      }
+                      if (currentStep === 6 && !createdWorkflowId) {
+                        toast.error('Please complete workflow creation first');
+                        return;
+                      }
+                      if (!completedSteps.includes(currentStep)) {
+                        setCompletedSteps([...completedSteps, currentStep]);
+                      }
+                      setCurrentStep(Math.min(totalSteps, currentStep + 1));
+                    }}
+                    className="flex items-center px-5 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
+                  >
+                    Next
+                    <FiChevronRight className="ml-2" />
+                  </button>
+                ) : (
+                  <div></div>
+                )}
+              </div>
             </div>
           </div>
         </div>

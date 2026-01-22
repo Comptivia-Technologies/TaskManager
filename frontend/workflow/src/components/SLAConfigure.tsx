@@ -51,7 +51,7 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
           const config = await slaService.getByWorkflowId(selectedWorkflowId);
           setExistingConfig(config);
           
-          // Populate priority configs with existing values
+          // Populate priority configs with existing values - load ALL priorities, even with 0 response time
           if (config && config.priorityLevels) {
             const loadedPriorities: PriorityConfig[] = Object.entries(config.priorityLevels).map(
               ([name, value]: [string, { responseTime: number }], index) => {
@@ -59,6 +59,7 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
                 let displayTime = 0;
                 let unit: TimeUnit = 'minutes';
 
+                // Always convert time, even if 0
                 if (existingTime > 0) {
                   if (existingTime < 60) {
                     displayTime = existingTime;
@@ -70,10 +71,14 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
                     displayTime = Math.floor(existingTime / 1440);
                     unit = 'days';
                   }
+                } else {
+                  // Even if 0, keep it as 0 with minutes unit
+                  displayTime = 0;
+                  unit = 'minutes';
                 }
 
                 return {
-                  id: `${name.toLowerCase().replace(/\s+/g, '-')}-${index}`,
+                  id: `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}-${index}`,
                   name,
                   responseTime: displayTime,
                   timeUnit: unit,
@@ -81,15 +86,36 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
               }
             );
 
-            // If nothing is configured yet, keep defaults; otherwise replace
-            if (loadedPriorities.length > 0) {
-              setPriorities(loadedPriorities);
-            }
+            // Always replace with loaded priorities - this ensures ALL priorities from config are shown
+            setPriorities(loadedPriorities);
+          } else {
+            // If no existing config, reset to defaults
+            setPriorities([
+              { id: 'critical', name: 'Critical', responseTime: 0, timeUnit: 'minutes' },
+              { id: 'high', name: 'High', responseTime: 0, timeUnit: 'minutes' },
+              { id: 'medium', name: 'Medium', responseTime: 0, timeUnit: 'minutes' },
+              { id: 'low', name: 'Low', responseTime: 0, timeUnit: 'minutes' },
+            ]);
           }
         } catch (error) {
           // No existing config
           setExistingConfig(null);
+          // Reset to defaults
+          setPriorities([
+            { id: 'critical', name: 'Critical', responseTime: 0, timeUnit: 'minutes' },
+            { id: 'high', name: 'High', responseTime: 0, timeUnit: 'minutes' },
+            { id: 'medium', name: 'Medium', responseTime: 0, timeUnit: 'minutes' },
+            { id: 'low', name: 'Low', responseTime: 0, timeUnit: 'minutes' },
+          ]);
         }
+      } else {
+        // No workflow selected, reset to defaults
+        setPriorities([
+          { id: 'critical', name: 'Critical', responseTime: 0, timeUnit: 'minutes' },
+          { id: 'high', name: 'High', responseTime: 0, timeUnit: 'minutes' },
+          { id: 'medium', name: 'Medium', responseTime: 0, timeUnit: 'minutes' },
+          { id: 'low', name: 'Low', responseTime: 0, timeUnit: 'minutes' },
+        ]);
       }
     };
     fetchExistingConfig();
@@ -133,13 +159,14 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
 
     setLoading(true);
     try {
-      // Convert all priority configs to minutes
+      // Convert all priority configs to minutes - save ALL priorities, even with 0 response time
       const currentConfig: {
         [key: string]: { responseTime: number };
       } = {};
 
+      // Save ALL priorities, not just ones with responseTime > 0
       priorities.forEach((priority) => {
-        if (priority.name.trim() && priority.responseTime > 0) {
+        if (priority.name.trim()) {
           currentConfig[priority.name.trim()] = {
             responseTime: convertToMinutes(priority.responseTime, priority.timeUnit),
           };

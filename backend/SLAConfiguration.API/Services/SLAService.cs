@@ -107,17 +107,9 @@ public class SLAService : ISLAService
         if (slaConfig == null)
             return null;
 
-        // Deserialize existing priority levels
-        var existingPriorityLevels = DeserializePriorityLevels(slaConfig.PriorityLevelsJson);
-
-        // Merge with new priority levels (update only provided ones)
-        foreach (var kvp in slaUpdateDto.PriorityLevels)
-        {
-            existingPriorityLevels[kvp.Key] = kvp.Value;
-        }
-
-        // Serialize back to JSON
-        slaConfig.PriorityLevelsJson = SerializePriorityLevels(existingPriorityLevels);
+        // Replace entire priority levels dictionary with the new one (not merge)
+        // This ensures all priorities sent from frontend are saved, including those with 0 response time
+        slaConfig.PriorityLevelsJson = SerializePriorityLevels(slaUpdateDto.PriorityLevels);
         
         // Update UpdatedAt to current UTC time (PostgreSQL will handle timezone conversion)
         slaConfig.UpdatedAt = DateTime.UtcNow;

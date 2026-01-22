@@ -4,7 +4,7 @@ import { useTeams } from '../hooks/useTeams';
 import { memberService } from '../services/memberService';
 import { Member, MemberCreate } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiEdit, FiTrash2, FiFilter, FiSearch } from 'react-icons/fi';
+import { FiEdit, FiTrash2, FiFilter, FiSearch, FiPlus } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 const Members = () => {
@@ -73,16 +73,20 @@ const Members = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // For new members, require team assignment through team creation
+    if (!isEditMode) {
+      toast.error('Members must be created and assigned through team creation. Please create members in the Teams page.');
+      return;
+    }
+    
     try {
       if (isEditMode && selectedMember) {
         await memberService.update(selectedMember.memberId, formData);
         toast.success('Member updated successfully');
-      } else {
-        await memberService.create(formData);
-        toast.success('Member created successfully');
+        handleCloseModal();
+        refetch();
       }
-      handleCloseModal();
-      refetch();
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to save member');
     }
@@ -122,6 +126,13 @@ const Members = () => {
     <div className="p-8 bg-white font-sans">
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#434E78]/20">
         <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">Members</h1>
+        <button
+          onClick={() => handleOpenModal()}
+          className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans flex items-center"
+        >
+          <FiPlus className="mr-2" />
+          Create Member
+        </button>
       </div>
 
       <div className="mb-6 flex flex-col md:flex-row gap-4">
@@ -294,7 +305,7 @@ const Members = () => {
                   required
                 />
               </div>
-              {!isEditMode && (
+              {isEditMode && (
                 <div className="mb-4">
                   <label className="block text-black text-sm font-semibold mb-2 font-sans">
                     Team
