@@ -3,16 +3,19 @@ import { useWorkflows } from '../hooks/useWorkflows';
 import { workflowService } from '../services/workflowService';
 import { Workflow } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiPlus, FiTrash2, FiLayers, FiEdit } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiLayers, FiEdit, FiClock, FiSettings } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import WorkflowWizard from '../components/WorkflowWizard';
 import WorkflowEdit from '../components/WorkflowEdit';
+import SLAConfigure from '../components/SLAConfigure';
 
 const Workflows = () => {
   const { workflows, loading, refetch } = useWorkflows();
   const [isWizardMode, setIsWizardMode] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
+  const [isSLAConfigureMode, setIsSLAConfigureMode] = useState(false);
+  const [selectedWorkflowForSLA, setSelectedWorkflowForSLA] = useState<number | undefined>(undefined);
   const navigate = useNavigate();
 
   const handleDelete = async (id: number) => {
@@ -38,6 +41,12 @@ const Workflows = () => {
     refetch();
   };
 
+  const handleSLASuccess = () => {
+    setIsSLAConfigureMode(false);
+    setSelectedWorkflowForSLA(undefined);
+    refetch();
+  };
+
   if (loading) {
     return <LoadingSpinner />;
   }
@@ -47,6 +56,19 @@ const Workflows = () => {
       <WorkflowWizard
         onSuccess={handleWizardSuccess}
         onCancel={() => setIsWizardMode(false)}
+      />
+    );
+  }
+
+  if (isSLAConfigureMode) {
+    return (
+      <SLAConfigure
+        onSuccess={handleSLASuccess}
+        onCancel={() => {
+          setIsSLAConfigureMode(false);
+          setSelectedWorkflowForSLA(undefined);
+        }}
+        initialWorkflowId={selectedWorkflowForSLA}
       />
     );
   }
@@ -69,13 +91,43 @@ const Workflows = () => {
             <h1 className="text-3xl font-semibold text-black mb-1 font-sans tracking-tight">Workflows</h1>
             <p className="text-black/70 text-sm font-sans">Manage and track your workflow processes</p>
           </div>
-          <button
-            onClick={() => setIsWizardMode(true)}
-            className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
-          >
-            <FiPlus className="mr-2 text-base" />
-            Get Started
-          </button>
+          <div className="flex gap-3">
+            {workflows.length > 0 && (
+              <>
+                <button
+                  onClick={() => {
+                    // If only one workflow, select it; otherwise let user choose in modal
+                    if (workflows.length === 1) {
+                      setSelectedWorkflowForSLA(workflows[0].workflowId);
+                    } else {
+                      setSelectedWorkflowForSLA(undefined);
+                    }
+                    setIsSLAConfigureMode(true);
+                  }}
+                  className="bg-emerald-600 text-white px-5 py-2.5 rounded-azure-sm hover:bg-emerald-700 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
+                >
+                  <FiClock className="mr-2 text-base" />
+                  Configure SLA
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/priority-rules');
+                  }}
+                  className="bg-purple-600 text-white px-5 py-2.5 rounded-azure-sm hover:bg-purple-700 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
+                >
+                  <FiSettings className="mr-2 text-base" />
+                  Add Rule
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setIsWizardMode(true)}
+              className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
+            >
+              <FiPlus className="mr-2 text-base" />
+              {workflows.length === 0 ? 'Get Started' : 'Create Workflow'}
+            </button>
+          </div>
         </div>
 
         {workflows.length === 0 ? (
