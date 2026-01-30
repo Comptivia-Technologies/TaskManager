@@ -150,7 +150,7 @@ public class TaskAssignedEventHandler
             var searchResponse = await _httpClient.GetAsync(
                 $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}");
 
-            int? existingTaskId = null;
+            WorkflowTaskInfo? existingWorkflowTask = null;
             if (searchResponse.IsSuccessStatusCode)
             {
                 var tasksJson = await searchResponse.Content.ReadAsStringAsync();
@@ -160,22 +160,42 @@ public class TaskAssignedEventHandler
                 });
 
                 // Find existing task by name (or description containing TaskId)
-                var existingTask = tasks?.FirstOrDefault(t => 
+                existingWorkflowTask = tasks?.FirstOrDefault(t => 
                     t.TaskName == task.TaskName || 
                     (t.Description != null && t.Description.Contains(task.TaskId.ToString())));
 
-                if (existingTask != null)
+                if (existingWorkflowTask != null)
                 {
-                    existingTaskId = existingTask.TaskId;
                     _logger.LogInformation(
-                        "Found existing task in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}",
-                        task.TaskId, existingTaskId);
+                        "Found existing task in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, CurrentAssignedMemberId: {CurrentMemberId}",
+                        task.TaskId, existingWorkflowTask.TaskId, existingWorkflowTask.AssignedToMemberId);
                 }
             }
 
-            if (existingTaskId.HasValue)
+            if (existingWorkflowTask != null)
             {
                 // UPDATE existing task
+                // Build CompletedByMemberIds - append previous member if this is a reassignment
+                var completedByMemberIds = existingWorkflowTask.CompletedByMemberIds ?? "";
+                if (existingWorkflowTask.AssignedToMemberId.HasValue && 
+                    existingWorkflowTask.AssignedToMemberId.Value != task.MemberId.Value)
+                {
+                    // This is a reassignment - credit the previous member for completing their stage
+                    var previousMemberId = existingWorkflowTask.AssignedToMemberId.Value.ToString();
+                    if (string.IsNullOrEmpty(completedByMemberIds))
+                    {
+                        completedByMemberIds = previousMemberId;
+                    }
+                    else if (!completedByMemberIds.Split(',').Contains(previousMemberId))
+                    {
+                        completedByMemberIds += "," + previousMemberId;
+                    }
+                    
+                    _logger.LogInformation(
+                        "Stage reassignment: crediting previous member for stage completion. TaskId: {TaskId}, PreviousMemberId: {PreviousMemberId}, NewMemberId: {NewMemberId}, CompletedByMemberIds: {CompletedByMemberIds}",
+                        task.TaskId, previousMemberId, task.MemberId.Value, completedByMemberIds);
+                }
+
                 var taskUpdateDto = new
                 {
                     TaskName = task.TaskName,
@@ -185,15 +205,16 @@ public class TaskAssignedEventHandler
                     DueDate = task.SLADeadline,
                     WorkflowId = task.WorkflowId.Value,
                     StageId = task.CurrentStageId,
-                    AssignedToMemberId = task.MemberId.Value
+                    AssignedToMemberId = task.MemberId.Value,
+                    CompletedByMemberIds = string.IsNullOrEmpty(completedByMemberIds) ? null : completedByMemberIds
                 };
 
                 _logger.LogInformation(
                     "Updating existing task in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, NewMemberId: {MemberId}",
-                    task.TaskId, existingTaskId.Value, task.MemberId.Value);
+                    task.TaskId, existingWorkflowTask.TaskId, task.MemberId.Value);
 
                 var updateResponse = await _httpClient.PutAsJsonAsync(
-                    $"{workflowManagementApiUrl}/tasks/{existingTaskId.Value}",
+                    $"{workflowManagementApiUrl}/tasks/{existingWorkflowTask.TaskId}",
                     taskUpdateDto);
 
                 if (updateResponse.IsSuccessStatusCode)
@@ -201,14 +222,14 @@ public class TaskAssignedEventHandler
                     var responseContent = await updateResponse.Content.ReadAsStringAsync();
                     _logger.LogInformation(
                         "Task updated in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, Response: {Response}",
-                        task.TaskId, existingTaskId.Value, responseContent);
+                        task.TaskId, existingWorkflowTask.TaskId, responseContent);
                 }
                 else
                 {
                     var errorContent = await updateResponse.Content.ReadAsStringAsync();
                     _logger.LogWarning(
                         "Failed to update task in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, Status: {Status}, Error: {Error}",
-                        task.TaskId, existingTaskId.Value, updateResponse.StatusCode, errorContent);
+                        task.TaskId, existingWorkflowTask.TaskId, updateResponse.StatusCode, errorContent);
                 }
             }
             else
@@ -264,6 +285,8 @@ public class TaskAssignedEventHandler
         public int TaskId { get; set; }
         public string TaskName { get; set; } = string.Empty;
         public string? Description { get; set; }
+        public int? AssignedToMemberId { get; set; }
+        public string? CompletedByMemberIds { get; set; }
     }
 }
 

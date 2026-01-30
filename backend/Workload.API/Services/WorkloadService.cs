@@ -50,12 +50,28 @@ public class WorkloadService : IWorkloadService
                 throw new KeyNotFoundException($"Member with ID {memberId} not found");
 
             // Get all tasks assigned to this member
-            var tasks = await _context.Tasks
+            var assignedTasks = await _context.Tasks
                 .Where(t => t.AssignedToMemberId == memberId)
                 .ToListAsync();
 
-        // Calculate metrics
-        var metrics = CalculateMetrics(member, tasks);
+            // Get tasks where this member completed a stage (task moved to another member)
+            // These are tasks where CompletedByMemberIds contains this member's ID
+            var memberIdStr = memberId.ToString();
+            var stageCompletedTasksQuery = await _context.Tasks
+                .Where(t => t.CompletedByMemberIds != null && 
+                           t.AssignedToMemberId != memberId)  // Not currently assigned to them
+                .ToListAsync();
+            
+            // Filter in memory for exact member ID match (avoid SQL issues with Contains)
+            var stageCompletedCount = stageCompletedTasksQuery
+                .Count(t => t.CompletedByMemberIds!.Split(',').Contains(memberIdStr));
+
+            _logger.LogInformation(
+                "Workload calculation for member {MemberId}: AssignedTasks={AssignedCount}, StageCompletedTasks={StageCompletedCount}",
+                memberId, assignedTasks.Count, stageCompletedCount);
+
+        // Calculate metrics (including stage completions)
+        var metrics = CalculateMetrics(member, assignedTasks, stageCompletedCount);
         var breakdown = CalculateBreakdown(metrics);
         var workloadScore = CalculateWorkloadScore(breakdown);
         var workloadStatus = DetermineWorkloadStatus(workloadScore);
@@ -93,7 +109,10 @@ public class WorkloadService : IWorkloadService
     /// <summary>
     /// Calculates workload metrics from member and task data
     /// </summary>
-    private WorkloadMetricsDto CalculateMetrics(Member member, List<Models.Task> tasks)
+    /// <param name="member">The member to calculate metrics for</param>
+    /// <param name="tasks">Tasks currently assigned to the member</param>
+    /// <param name="stageCompletedCount">Number of tasks where member completed a stage but task moved to another member</param>
+    private WorkloadMetricsDto CalculateMetrics(Member member, List<Models.Task> tasks, int stageCompletedCount = 0)
     {
         // Active tasks = tasks currently being worked on
         var activeTasks = tasks.Where(t => 
@@ -115,11 +134,12 @@ public class WorkloadService : IWorkloadService
             t.Status == "Overdue").ToList();
 
         var totalTasks = tasks.Count;
-        var completedCount = completedTasks.Count;
+        // CompletedCount includes both fully completed tasks AND stage completions (tasks that moved to next stage/member)
+        var completedCount = completedTasks.Count + stageCompletedCount;
         var overdueCount = overdueTasks.Count;
 
-        // If member has no tasks, they should be considered available (low workload)
-        if (totalTasks == 0)
+        // If member has no tasks and no stage completions, they should be considered available (low workload)
+        if (totalTasks == 0 && stageCompletedCount == 0)
         {
             return new WorkloadMetricsDto
             {
@@ -137,8 +157,11 @@ public class WorkloadService : IWorkloadService
             };
         }
 
+        // Total work includes assigned tasks plus stage completions
+        var totalWork = totalTasks + stageCompletedCount;
+
         // Calculate efficiency (0-1): Based on completion rate
-        var efficiency = Math.Min(1.0, (double)completedCount / totalTasks);
+        var efficiency = totalWork > 0 ? Math.Min(1.0, (double)completedCount / totalWork) : 1.0;
 
         // Skill level (1-5): Use the skill level from member profile
         var skillLevel = member.SkillLevel;
@@ -151,8 +174,8 @@ public class WorkloadService : IWorkloadService
             skillLevel = MapRoleToSkillLevel(member.Role);
         }
 
-        // Task completion rate (0-100%): Percentage of completed tasks
-        var taskCompletionRate = (double)completedCount / totalTasks * 100;
+        // Task completion rate (0-100%): Percentage of completed work (tasks + stages)
+        var taskCompletionRate = totalWork > 0 ? (double)completedCount / totalWork * 100 : 100.0;
 
         // Availability: Check if member has too many active tasks
         // Consider available if active tasks < 5, otherwise busy
@@ -165,9 +188,9 @@ public class WorkloadService : IWorkloadService
             TaskCompletionRate = Math.Round(taskCompletionRate, 2),
             ActiveTaskCount = activeTasks.Count,
             PendingTaskCount = pendingTasks.Count,
-            CompletedTaskCount = completedCount,
+            CompletedTaskCount = completedCount,  // Now includes stage completions
             OverdueTaskCount = overdueCount,
-            TotalTaskCount = totalTasks,
+            TotalTaskCount = totalWork,  // Now includes stage completions in total
             IsAvailable = isAvailable
         };
     }
