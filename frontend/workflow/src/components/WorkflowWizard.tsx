@@ -37,6 +37,9 @@ interface StageForm {
   stageOrder: number;
   teamId: number;
   tempId: number;
+  stageType?: 'Process' | 'Escalation';
+  transitionPolicy?: 'OnComplete' | 'OnTimeout' | 'Manual';
+  timeoutMinutes?: number;
 }
 
 const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
@@ -217,7 +220,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
     setNewMembers(newMembers.filter((_, i) => i !== index));
   };
 
-  // Step 2: Add Members - ALWAYS create immediately if teams exist
+  // Step 2: Add Members - Create members without team assignment
   const handleSaveMembers = async () => {
     if (newMembers.length === 0 && !skipMemberCreation) {
       toast.error('Please add at least one member or skip this step');
@@ -232,16 +235,9 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
       return;
     }
 
-    // Check if teams exist - members require a team
-    if (teams.length === 0) {
-      toast.error('You need to create at least one team before adding members. Please create a team in the next step first, then come back to add members.');
-      return;
-    }
-
-    // Teams exist - create members immediately and assign to first team
+    // Create members without team assignment (they'll be assigned when team is created)
     setLoading(true);
     try {
-      const defaultTeamId = teams[0].teamId;
       const membersCount = newMembers.length;
       for (const member of newMembers) {
         await memberService.create({
@@ -250,7 +246,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
           email: member.email,
           role: member.role,
           skillLevel: member.skillLevel,
-          teamId: defaultTeamId, // Assign to first available team
+          // Don't assign teamId - members will be assigned in Step 3 when team is created
         });
       }
       
@@ -258,7 +254,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
       setNewMembers([]);
       await refetchMembers();
       
-      toast.success(`${membersCount} member(s) created successfully! They have been assigned to "${teams[0].teamName}". You can reassign them to a different team later if needed.`);
+      toast.success(`${membersCount} member(s) created successfully! They will be assigned to a team when you create the team in the next step.`);
       if (!completedSteps.includes(2)) {
         setCompletedSteps([...completedSteps, 2]);
       }
@@ -317,6 +313,9 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
           stageOrder: stage.stageOrder,
           workflowId: workflow.workflowId,
           teamId: stage.teamId,
+          stageType: stage.stageType || 'Process',
+          transitionPolicy: stage.transitionPolicy || 'OnComplete',
+          timeoutMinutes: stage.timeoutMinutes,
         });
       }
 
@@ -481,21 +480,9 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
         return (
           <div>
             <h2 className="text-xl font-semibold mb-4 text-black font-sans">Add Members</h2>
-            {teams.length === 0 && (
-              <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-azure-sm">
-                <p className="text-sm font-semibold text-amber-800 mb-1 font-sans">
-                  ⚠️ No teams exist yet. You need to create a team first before adding members.
-                </p>
-                <p className="text-sm text-amber-700 mt-1 font-sans">
-                  Please proceed to the next step to create a team, then come back here to add members.
-                </p>
-              </div>
-            )}
-            {teams.length > 0 && (
-              <p className="text-sm text-black/60 mb-4 font-sans">
-                Add members and they will be assigned to "{teams[0].teamName}". You can reassign them to a different team later if needed.
-              </p>
-            )}
+            <p className="text-sm text-black/60 mb-4 font-sans">
+              Add members who will work on tasks. They will be assigned to a team in the next step.
+            </p>
             {!skipMemberCreation && (
               <>
                 <div className="mb-6 p-4 border border-[#434E78]/30 rounded-azure-sm bg-[#434E78]/5">
@@ -567,9 +554,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                   <div className="mb-4">
                     <h3 className="text-lg font-semibold mb-3 text-black font-sans">New Members to Create ({newMembers.length})</h3>
                     <p className="text-sm text-black/60 mb-3 font-sans">
-                      {teams.length > 0 
-                        ? `These members will be created and assigned to "${teams[0].teamName}".`
-                        : 'These members cannot be created until at least one team exists.'}
+                      These members will be created without a team. You can assign them to a team in the next step.
                     </p>
                     <div className="space-y-2">
                       {newMembers.map((member, index) => (
@@ -589,15 +574,13 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                         </div>
                       ))}
                     </div>
-                    {teams.length > 0 && (
-                      <button
-                        onClick={handleSaveMembers}
-                        disabled={loading}
-                        className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-azure-sm hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                      >
-                        {loading ? 'Creating...' : 'Create Members'}
-                      </button>
-                    )}
+                    <button
+                      onClick={handleSaveMembers}
+                      disabled={loading}
+                      className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-azure-sm hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
+                    >
+                      {loading ? 'Creating...' : 'Create Members'}
+                    </button>
                   </div>
                 )}
               </>

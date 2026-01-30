@@ -85,7 +85,7 @@ const WorkloadConfiguration = () => {
       member.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       member.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.teamName.toLowerCase().includes(searchTerm.toLowerCase());
+      (member.teamName && member.teamName.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesSearch;
   });
 
@@ -217,7 +217,7 @@ const WorkloadConfiguration = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
-                        {member.teamName}
+                        {member.teamName || 'Unassigned'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {isLoading ? (

@@ -14,5 +14,6 @@ public interface ITaskService
     System.Threading.Tasks.Task<bool> DeleteTaskAsync(Guid taskId);
     System.Threading.Tasks.Task SyncAllOverdueTasksAsync();
     System.Threading.Tasks.Task CleanupOrphanedTasksAsync();
+    System.Threading.Tasks.Task CompleteCurrentStageAsync(Guid taskId);
 }
 

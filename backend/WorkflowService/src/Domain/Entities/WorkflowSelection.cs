@@ -14,5 +14,9 @@ public class WorkflowSelection
     
     // Idempotency
     public Guid? TaskCreatedEventId { get; set; }
+    
+    // Stage orchestration tracking - prevents restarting Stage 1 on reassignment
+    public bool StageOrchestrationStarted { get; set; } = false;
+    public DateTime? StageOrchestrationStartedAt { get; set; }
 }
 

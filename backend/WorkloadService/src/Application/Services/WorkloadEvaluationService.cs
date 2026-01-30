@@ -76,27 +76,22 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
             }
             else
             {
-                // Workflow doesn't have TeamId, but stages do - get team from stages
+                // Workflow doesn't have TeamId, but stages do - get team from FIRST stage (Stage 1)
+                // New tasks should be assigned to Stage 1 team members for initial assignment
                 var stages = await _repository.GetStagesByWorkflowIdAsync(workflow.WorkflowId);
-                var stagesList = stages.ToList();
+                var stagesList = stages.OrderBy(s => s.StageOrder).ToList();
                 
                 if (stagesList.Any())
                 {
-                    // Get unique team IDs from all stages
-                    var teamIds = stagesList.Select(s => s.TeamId).Distinct().ToList();
+                    // Get Stage 1's team (first stage) for initial assignment
+                    var firstStage = stagesList.First();
+                    var firstStageTeamId = firstStage.TeamId;
                     
-                    // Get members from all teams that have stages in this workflow
-                    var allMembers = new List<Member>();
-                    foreach (var teamId in teamIds)
-                    {
-                        var teamMembers = await _repository.GetMembersByTeamIdAsync(teamId);
-                        allMembers.AddRange(teamMembers);
-                    }
-                    members = allMembers.DistinctBy(m => m.MemberId);
+                    members = await _repository.GetMembersByTeamIdAsync(firstStageTeamId);
                     
                     _logger.LogInformation(
-                        "Filtering members by workflow stages' teams. Found {MemberCount} members from {TeamCount} teams. WorkflowId: {WorkflowId}, TeamIds: {TeamIds}, TaskId: {TaskId}, CorrelationId: {CorrelationId}",
-                        members.Count(), teamIds.Count, workflow.WorkflowId, string.Join(", ", teamIds), slaConfiguredEvent.TaskId, slaConfiguredEvent.CorrelationId);
+                        "Filtering members by first stage's team for initial assignment. Found {MemberCount} members. WorkflowId: {WorkflowId}, StageId: {StageId}, StageName: {StageName}, TeamId: {TeamId}, TaskId: {TaskId}, CorrelationId: {CorrelationId}",
+                        members.Count(), workflow.WorkflowId, firstStage.StageId, firstStage.StageName, firstStageTeamId, slaConfiguredEvent.TaskId, slaConfiguredEvent.CorrelationId);
                 }
                 else
                 {
@@ -289,6 +284,172 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
     {
         var activeTasks = tasks.Count(t => t.Status == "In Progress" || t.Status == "Active");
         return $"WorkloadScore: {workloadScore:F2}, ActiveTasks: {activeTasks}, SkillLevel: {member.SkillLevel}";
+    }
+
+    /// <summary>
+    /// Reassigns a task to the best available member in a specific team (used when stage changes)
+    /// </summary>
+    public async System.Threading.Tasks.Task ReassignTaskToTeamMemberAsync(TaskStageReassignmentNeededEvent reassignmentEvent)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "Processing task reassignment. TaskId: {TaskId}, NewTeamId: {NewTeamId}, StageName: {StageName}, CorrelationId: {CorrelationId}",
+                reassignmentEvent.TaskId, reassignmentEvent.NewTeamId, reassignmentEvent.StageName, reassignmentEvent.CorrelationId);
+
+            // Get members from the new team
+            var members = await _repository.GetMembersByTeamIdAsync(reassignmentEvent.NewTeamId);
+            var membersList = members.ToList();
+
+            if (!membersList.Any())
+            {
+                _logger.LogError(
+                    "No members available in team for reassignment. TaskId: {TaskId}, TeamId: {TeamId}, CorrelationId: {CorrelationId}",
+                    reassignmentEvent.TaskId, reassignmentEvent.NewTeamId, reassignmentEvent.CorrelationId);
+                throw new InvalidOperationException($"No members available in team {reassignmentEvent.NewTeamId} for reassignment");
+            }
+
+            _logger.LogInformation(
+                "Evaluating workload for {MemberCount} team members. TaskId: {TaskId}, TeamId: {TeamId}, CorrelationId: {CorrelationId}",
+                membersList.Count, reassignmentEvent.TaskId, reassignmentEvent.NewTeamId, reassignmentEvent.CorrelationId);
+
+            // Evaluate workload for each member
+            var memberScores = new List<(Member Member, double WorkloadScore, string Reason)>();
+
+            foreach (var member in membersList)
+            {
+                try
+                {
+                    var tasks = await _repository.GetTasksByMemberIdAsync(member.MemberId);
+                    var tasksList = tasks.ToList();
+                    var workloadScore = CalculateWorkloadScore(member, tasksList);
+                    var reason = GenerateAssignmentReason(member, tasksList, workloadScore);
+                    memberScores.Add((member, workloadScore, reason));
+
+                    _logger.LogInformation(
+                        "Evaluated member for reassignment. MemberId: {MemberId}, MemberName: {MemberName}, TaskCount: {TaskCount}, WorkloadScore: {WorkloadScore}, TaskId: {TaskId}, CorrelationId: {CorrelationId}",
+                        member.MemberId, $"{member.FirstName} {member.LastName}", tasksList.Count, workloadScore, reassignmentEvent.TaskId, reassignmentEvent.CorrelationId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error evaluating workload for member during reassignment. MemberId: {MemberId}, TaskId: {TaskId}, CorrelationId: {CorrelationId}",
+                        member.MemberId, reassignmentEvent.TaskId, reassignmentEvent.CorrelationId);
+                }
+            }
+
+            if (!memberScores.Any())
+            {
+                _logger.LogError(
+                    "No member scores calculated for reassignment. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
+                    reassignmentEvent.TaskId, reassignmentEvent.CorrelationId);
+                throw new InvalidOperationException($"All members failed evaluation for task reassignment: {reassignmentEvent.TaskId}");
+            }
+
+            // Select member with lowest workload score (most available)
+            var taskPriority = reassignmentEvent.TaskPriority ?? "Medium";
+
+            // Separate members into two groups: those with/without same priority tasks
+            var membersWithoutConflict = new List<(Member Member, double WorkloadScore, string Reason)>();
+            var membersWithConflict = new List<(Member Member, double WorkloadScore, string Reason)>();
+
+            foreach (var ms in memberScores)
+            {
+                var memberTasks = await _repository.GetTasksByMemberIdAsync(ms.Member.MemberId);
+                var tasksList = memberTasks.ToList();
+                var hasSamePriorityTask = tasksList.Any(t =>
+                    (t.Status == "In Progress" ||
+                     t.Status == "Active" ||
+                     t.Status == "Assigned" ||
+                     t.Status == "Pending" ||
+                     t.Status == "To Do") &&
+                    string.Equals(t.Priority, taskPriority, StringComparison.OrdinalIgnoreCase));
+
+                if (hasSamePriorityTask)
+                {
+                    membersWithConflict.Add(ms);
+                }
+                else
+                {
+                    membersWithoutConflict.Add(ms);
+                }
+            }
+
+            // Prefer members without conflicts
+            var bestMember = membersWithoutConflict.Any()
+                ? membersWithoutConflict.OrderBy(ms => ms.WorkloadScore).First()
+                : membersWithConflict.OrderBy(ms => ms.WorkloadScore).First();
+
+            _logger.LogInformation(
+                "Selected best member for reassignment. MemberId: {MemberId}, MemberName: {MemberName}, WorkloadScore: {WorkloadScore}, TaskId: {TaskId}, TeamId: {TeamId}, CorrelationId: {CorrelationId}",
+                bestMember.Member.MemberId, $"{bestMember.Member.FirstName} {bestMember.Member.LastName}", bestMember.WorkloadScore, reassignmentEvent.TaskId, reassignmentEvent.NewTeamId, reassignmentEvent.CorrelationId);
+
+            // Check if task already has an assignment
+            var existingAssignment = await _repository.GetAssignmentByTaskIdAsync(reassignmentEvent.TaskId);
+            TaskAssignment assignment;
+
+            if (existingAssignment != null)
+            {
+                // Update existing assignment
+                existingAssignment.MemberId = bestMember.Member.MemberId;
+                existingAssignment.WorkloadScore = bestMember.WorkloadScore;
+                existingAssignment.AssignmentReason = $"Stage reassignment to {reassignmentEvent.StageName} (prev: {reassignmentEvent.PreviousMemberId}): {bestMember.Reason}";
+                existingAssignment.AssignedAt = DateTime.UtcNow;
+                assignment = await _repository.UpdateAssignmentAsync(existingAssignment);
+                
+                _logger.LogInformation(
+                    "Updated existing assignment for task. TaskId: {TaskId}, AssignmentId: {AssignmentId}",
+                    reassignmentEvent.TaskId, assignment.AssignmentId);
+            }
+            else
+            {
+                // Create new assignment record
+                assignment = new TaskAssignment
+                {
+                    TaskId = reassignmentEvent.TaskId,
+                    MemberId = bestMember.Member.MemberId,
+                    WorkloadScore = bestMember.WorkloadScore,
+                    AssignmentReason = $"Stage reassignment to {reassignmentEvent.StageName}: {bestMember.Reason}",
+                    AssignedAt = DateTime.UtcNow,
+                    SLAConfiguredEventId = Guid.NewGuid() // Generate new ID for this reassignment
+                };
+                assignment = await _repository.CreateAssignmentAsync(assignment);
+                
+                _logger.LogInformation(
+                    "Created new assignment for task. TaskId: {TaskId}, AssignmentId: {AssignmentId}",
+                    reassignmentEvent.TaskId, assignment.AssignmentId);
+            }
+
+            // Publish TaskAssignedEvent so TaskService updates the task
+            var taskAssignedEvent = new TaskAssignedEvent
+            {
+                AssignmentId = assignment.AssignmentId,
+                TaskId = reassignmentEvent.TaskId,
+                MemberId = bestMember.Member.MemberId,
+                MemberName = $"{bestMember.Member.FirstName} {bestMember.Member.LastName}",
+                MemberEmail = bestMember.Member.Email,
+                WorkloadScore = bestMember.WorkloadScore,
+                AssignedAt = DateTime.UtcNow,
+                CorrelationId = reassignmentEvent.CorrelationId
+            };
+
+            await _publisher.PublishAsync(
+                taskAssignedEvent,
+                RabbitMQConstants.WorkloadExchange,
+                RabbitMQConstants.TaskAssigned,
+                reassignmentEvent.CorrelationId);
+
+            _logger.LogInformation(
+                "Task reassigned to new team member. TaskId: {TaskId}, NewMemberId: {NewMemberId}, PreviousMemberId: {PreviousMemberId}, NewTeamId: {TeamId}, StageName: {StageName}, CorrelationId: {CorrelationId}",
+                reassignmentEvent.TaskId, bestMember.Member.MemberId, reassignmentEvent.PreviousMemberId, reassignmentEvent.NewTeamId, reassignmentEvent.StageName, reassignmentEvent.CorrelationId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error reassigning task. TaskId: {TaskId}, TeamId: {TeamId}, CorrelationId: {CorrelationId}",
+                reassignmentEvent.TaskId, reassignmentEvent.NewTeamId, reassignmentEvent.CorrelationId);
+            throw;
+        }
     }
 }
 

@@ -9,8 +9,10 @@ public interface IWorkflowRepository
 {
     Task<WorkflowSelection?> GetByTaskIdAsync(Guid taskId);
     Task<WorkflowSelection> CreateAsync(WorkflowSelection selection);
+    Task<WorkflowSelection> UpdateAsync(WorkflowSelection selection);
     Task<IEnumerable<Workflow>> GetAllWorkflowsAsync();
     Task<Workflow?> GetWorkflowByIdAsync(int workflowId);
+    Task<IEnumerable<Stage>> GetStagesByWorkflowIdAsync(int workflowId);
 }
 
 /// <summary>

@@ -51,6 +51,13 @@ public class WorkloadRepository : IWorkloadRepository
         return assignment;
     }
 
+    public async System.Threading.Tasks.Task<TaskAssignment> UpdateAssignmentAsync(TaskAssignment assignment)
+    {
+        _context.TaskAssignments.Update(assignment);
+        await _context.SaveChangesAsync();
+        return assignment;
+    }
+
     public async System.Threading.Tasks.Task<Workflow?> GetWorkflowByIdAsync(int workflowId)
     {
         return await _context.Workflows

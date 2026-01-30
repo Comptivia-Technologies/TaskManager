@@ -30,18 +30,29 @@ public class TaskDbContext : DbContext
             entity.Property(e => e.Status).IsRequired().HasConversion<int>();
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();
+            
+            // Stage tracking fields
+            entity.Property(e => e.CurrentStageId).IsRequired(false);
+            entity.Property(e => e.CurrentStageStartedAt).IsRequired(false).HasColumnType("timestamp with time zone");
+            entity.Property(e => e.StageTimeoutAt).IsRequired(false).HasColumnType("timestamp with time zone");
 
             // Indexes for performance
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.WorkflowId);
             entity.HasIndex(e => e.MemberId);
+            entity.HasIndex(e => e.CurrentStageId);
             entity.HasIndex(e => e.SLADeadline);
+            entity.HasIndex(e => e.StageTimeoutAt); // For escalation monitoring
             entity.HasIndex(e => e.IsOverdue);
             
             // Indexes for idempotency checks
             entity.HasIndex(e => e.WorkflowSelectedEventId);
             entity.HasIndex(e => e.SLAConfiguredEventId);
             entity.HasIndex(e => e.TaskAssignedEventId);
+            entity.HasIndex(e => e.TaskStageStartedEventId);
+            entity.HasIndex(e => e.TaskStageCompletedEventId);
+            entity.HasIndex(e => e.TaskStageEscalationTriggeredEventId);
+            entity.HasIndex(e => e.TaskCompletedEventId);
         });
     }
 }

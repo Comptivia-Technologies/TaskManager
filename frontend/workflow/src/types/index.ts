@@ -22,8 +22,8 @@ export interface Member {
   firstName: string;
   lastName: string;
   email: string;
-  teamId: number;
-  teamName: string;
+  teamId?: number;
+  teamName?: string;
   role: string;
   skillLevel: number;
   createdAt: string;
@@ -34,7 +34,7 @@ export interface MemberCreate {
   firstName: string;
   lastName: string;
   email: string;
-  teamId: number;
+  teamId?: number;
   role: string;
   skillLevel: number;
 }
@@ -43,7 +43,7 @@ export interface MemberUpdate {
   firstName: string;
   lastName: string;
   email: string;
-  teamId: number;
+  teamId?: number;
   role: string;
   skillLevel: number;
 }
@@ -71,6 +71,9 @@ export interface WorkflowUpdate {
   description?: string;
 }
 
+export type StageType = 'Process' | 'Escalation';
+export type TransitionPolicy = 'OnComplete' | 'OnTimeout' | 'Manual';
+
 export interface Stage {
   stageId: number;
   stageName: string;
@@ -78,6 +81,9 @@ export interface Stage {
   workflowId: number;
   teamId: number;
   teamName: string;
+  stageType: StageType;
+  transitionPolicy: TransitionPolicy;
+  timeoutMinutes?: number;
   createdAt: string;
 }
 
@@ -86,12 +92,18 @@ export interface StageCreate {
   stageOrder: number;
   workflowId: number;
   teamId: number;
+  stageType: StageType;
+  transitionPolicy: TransitionPolicy;
+  timeoutMinutes?: number;
 }
 
 export interface StageUpdate {
   stageName: string;
   stageOrder: number;
   teamId: number;
+  stageType: StageType;
+  transitionPolicy: TransitionPolicy;
+  timeoutMinutes?: number;
 }
 
 export interface Task {

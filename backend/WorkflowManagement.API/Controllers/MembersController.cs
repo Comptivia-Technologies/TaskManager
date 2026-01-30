@@ -56,19 +56,25 @@ public class MembersController : ControllerBase
         try
         {
             if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            {
+                var errors = ModelState
+                    .Where(x => x.Value?.Errors.Count > 0)
+                    .SelectMany(x => x.Value!.Errors.Select(e => e.ErrorMessage))
+                    .ToList();
+                return BadRequest(new { error = string.Join("; ", errors) });
+            }
 
             var member = await _memberService.CreateMemberAsync(memberCreateDto);
             return CreatedAtAction(nameof(GetMemberById), new { id = member.MemberId }, member);
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(ex.Message);
+            return BadRequest(new { error = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating member");
-            return StatusCode(500, "An error occurred while creating the member");
+            _logger.LogError(ex, "Error creating member: {Message}", ex.Message);
+            return StatusCode(500, new { error = $"An error occurred while creating the member: {ex.Message}" });
         }
     }
 

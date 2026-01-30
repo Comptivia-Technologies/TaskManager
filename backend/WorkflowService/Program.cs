@@ -5,6 +5,7 @@ using WorkflowService.Application.Interfaces;
 using WorkflowService.Infrastructure.Repositories;
 using WorkflowService.Application.Services;
 using WorkflowService.Application.EventHandlers;
+using WorkflowService.Infrastructure.BackgroundJobs;
 using Shared.Messaging;
 using Shared.Contracts.Constants;
 using Shared.Contracts.EventContracts;
@@ -33,9 +34,16 @@ builder.Services.AddScoped<IWorkflowRepository, WorkflowRepository>();
 
 // Services
 builder.Services.AddScoped<IWorkflowSelectionService, WorkflowSelectionService>();
+builder.Services.AddScoped<IStageOrchestrationService, StageOrchestrationService>();
+
+// Background Services
+builder.Services.AddHostedService<StageEscalationMonitorService>();
 
 // Event Handlers
 builder.Services.AddScoped<TaskCreatedEventHandler>();
+builder.Services.AddScoped<TaskAssignedEventHandler>();
+builder.Services.AddScoped<TaskStageCompletedEventHandler>();
+builder.Services.AddScoped<TaskStageEscalationTriggeredEventHandler>();
 
 var app = builder.Build();
 
@@ -74,6 +82,66 @@ catch (Exception ex)
     logger.LogError(ex, "✗ Failed to start TaskCreatedEvent consumer");
 }
 
+try
+{
+    logger.LogInformation("Starting TaskAssignedEvent consumer...");
+    consumer.StartConsuming<TaskAssignedEvent>(
+        RabbitMQConstants.WorkloadExchange,
+        RabbitMQConstants.TaskAssignedWorkflowQueue, // Use separate queue so both services get the event
+        RabbitMQConstants.TaskAssigned,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskAssignedEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskAssignedEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskAssignedEvent consumer");
+}
+
+try
+{
+    logger.LogInformation("Starting TaskStageCompletedEvent consumer...");
+    consumer.StartConsuming<TaskStageCompletedEvent>(
+        RabbitMQConstants.WorkflowExchange,
+        RabbitMQConstants.TaskStageCompletedWorkflowQueue, // Use separate queue so both TaskService and WorkflowService get the event
+        RabbitMQConstants.TaskStageCompleted,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskStageCompletedEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskStageCompletedEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskStageCompletedEvent consumer");
+}
+
+try
+{
+    logger.LogInformation("Starting TaskStageEscalationTriggeredEvent consumer...");
+    consumer.StartConsuming<TaskStageEscalationTriggeredEvent>(
+        RabbitMQConstants.WorkflowExchange,
+        RabbitMQConstants.TaskStageEscalationTriggeredWorkflowQueue, // Use separate queue so both TaskService and WorkflowService get the event
+        RabbitMQConstants.TaskStageEscalationTriggered,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskStageEscalationTriggeredEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskStageEscalationTriggeredEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskStageEscalationTriggeredEvent consumer");
+}
+
 // Ensure database and tables are created
 using (var scope = app.Services.CreateScope())
 {
@@ -106,8 +174,10 @@ using (var scope = app.Services.CreateScope())
                     ""WorkflowId"" INTEGER NOT NULL,
                     ""WorkflowName"" VARCHAR(200) NOT NULL,
                     ""SelectionReason"" VARCHAR(500),
-                    ""SelectedAt"" TIMESTAMP NOT NULL,
-                    ""TaskCreatedEventId"" UUID
+                    ""SelectedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
+                    ""TaskCreatedEventId"" UUID,
+                    ""StageOrchestrationStarted"" BOOLEAN NOT NULL DEFAULT FALSE,
+                    ""StageOrchestrationStartedAt"" TIMESTAMP WITH TIME ZONE NULL
                 )";
             
             await dbContext.Database.ExecuteSqlRawAsync(createTableSql);

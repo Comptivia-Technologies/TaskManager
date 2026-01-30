@@ -43,6 +43,10 @@ builder.Services.AddScoped<PriorityAssignedEventHandler>();
 builder.Services.AddScoped<SLAConfiguredEventHandler>();
 builder.Services.AddScoped<TaskAssignedEventHandler>();
 builder.Services.AddScoped<TaskOverdueEventHandler>();
+builder.Services.AddScoped<TaskStageStartedEventHandler>();
+builder.Services.AddScoped<TaskStageCompletedEventHandler>();
+builder.Services.AddScoped<TaskStageEscalationTriggeredEventHandler>();
+builder.Services.AddScoped<TaskCompletedEventHandler>();
 
 // CORS
 builder.Services.AddCors(options =>
@@ -193,6 +197,86 @@ try
 catch (Exception ex)
 {
     logger.LogError(ex, "✗ Failed to start TaskOverdueEvent consumer");
+}
+
+try
+{
+    logger.LogInformation("Starting TaskStageStartedEvent consumer...");
+    consumer.StartConsuming<TaskStageStartedEvent>(
+        RabbitMQConstants.WorkflowExchange,
+        RabbitMQConstants.TaskStageStartedQueue,
+        RabbitMQConstants.TaskStageStarted,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskStageStartedEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskStageStartedEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskStageStartedEvent consumer");
+}
+
+try
+{
+    logger.LogInformation("Starting TaskStageCompletedEvent consumer...");
+    consumer.StartConsuming<TaskStageCompletedEvent>(
+        RabbitMQConstants.WorkflowExchange,
+        RabbitMQConstants.TaskStageCompletedQueue,
+        RabbitMQConstants.TaskStageCompleted,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskStageCompletedEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskStageCompletedEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskStageCompletedEvent consumer");
+}
+
+try
+{
+    logger.LogInformation("Starting TaskStageEscalationTriggeredEvent consumer...");
+    consumer.StartConsuming<TaskStageEscalationTriggeredEvent>(
+        RabbitMQConstants.WorkflowExchange,
+        RabbitMQConstants.TaskStageEscalationTriggeredQueue,
+        RabbitMQConstants.TaskStageEscalationTriggered,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskStageEscalationTriggeredEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskStageEscalationTriggeredEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskStageEscalationTriggeredEvent consumer");
+}
+
+try
+{
+    logger.LogInformation("Starting TaskCompletedEvent consumer...");
+    consumer.StartConsuming<TaskCompletedEvent>(
+        RabbitMQConstants.WorkflowExchange,
+        RabbitMQConstants.TaskCompletedQueue,
+        RabbitMQConstants.TaskCompleted,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskCompletedEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskCompletedEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskCompletedEvent consumer");
 }
 
 // Ensure database is created

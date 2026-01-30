@@ -13,22 +13,16 @@ const Members = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [formData, setFormData] = useState<MemberCreate>({
+  const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
-    teamId: 0,
     role: '',
     skillLevel: 1,
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<number | 'all'>('all');
 
-  useEffect(() => {
-    if (teams.length > 0 && formData.teamId === 0) {
-      setFormData({ ...formData, teamId: teams[0].teamId });
-    }
-  }, [teams]);
 
   const handleOpenModal = (member?: Member) => {
     if (member) {
@@ -38,7 +32,6 @@ const Members = () => {
         firstName: member.firstName,
         lastName: member.lastName,
         email: member.email,
-        teamId: member.teamId,
         role: member.role,
         skillLevel: member.skillLevel,
       });
@@ -48,7 +41,6 @@ const Members = () => {
         firstName: '',
         lastName: '',
         email: '',
-        teamId: teams.length > 0 ? teams[0].teamId : 0,
         role: '',
         skillLevel: 1,
       });
@@ -65,7 +57,6 @@ const Members = () => {
       firstName: '',
       lastName: '',
       email: '',
-      teamId: teams.length > 0 ? teams[0].teamId : 0,
       role: '',
       skillLevel: 1,
     });
@@ -74,21 +65,32 @@ const Members = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // For new members, require team assignment through team creation
-    if (!isEditMode) {
-      toast.error('Members must be created and assigned through team creation. Please create members in the Teams page.');
-      return;
-    }
-    
     try {
       if (isEditMode && selectedMember) {
-        await memberService.update(selectedMember.memberId, formData);
+        // For edit mode, always use the existing teamId (don't allow changing team from Members page)
+        await memberService.update(selectedMember.memberId, {
+          ...formData,
+          teamId: selectedMember.teamId // Keep original teamId
+        });
         toast.success('Member updated successfully');
+        handleCloseModal();
+        refetch();
+      } else {
+        // Create new member without team (team will be assigned from Teams page)
+        // Explicitly omit teamId from the request
+        const { teamId, ...createData } = formData as any;
+        await memberService.create(createData);
+        toast.success('Member created successfully');
         handleCloseModal();
         refetch();
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to save member');
+      const errorMessage = error.response?.data?.error 
+        || error.response?.data?.message 
+        || error.message 
+        || `Failed to ${isEditMode ? 'update' : 'create'} member`;
+      toast.error(errorMessage);
+      console.error('Member creation error:', error);
     }
   };
 
@@ -110,10 +112,10 @@ const Members = () => {
       member.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       member.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.teamName.toLowerCase().includes(searchTerm.toLowerCase());
+      (member.teamName && member.teamName.toLowerCase().includes(searchTerm.toLowerCase()));
     
     // Filter by team
-    const matchesTeam = selectedTeamFilter === 'all' || member.teamId === selectedTeamFilter;
+    const matchesTeam = selectedTeamFilter === 'all' || (member.teamId && member.teamId === selectedTeamFilter);
     
     return matchesSearch && matchesTeam;
   });
@@ -228,7 +230,7 @@ const Members = () => {
                     {member.email}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
-                    {member.teamName}
+                    {member.teamName || 'Unassigned'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
                     {member.role}
@@ -305,25 +307,18 @@ const Members = () => {
                   required
                 />
               </div>
-              {isEditMode && (
+              {/* Team - Show only in edit mode, read-only */}
+              {isEditMode && selectedMember && (
                 <div className="mb-4">
                   <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                    Team
+                    Team <span className="text-xs text-black/60 font-normal">(Change team from Teams page)</span>
                   </label>
-                  <select
-                    value={formData.teamId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, teamId: parseInt(e.target.value) })
-                    }
-                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                    required
-                  >
-                    {teams.map((team) => (
-                      <option key={team.teamId} value={team.teamId}>
-                        {team.teamName}
-                      </option>
-                    ))}
-                  </select>
+                  <input
+                    type="text"
+                    value={selectedMember.teamName || 'Unassigned'}
+                    disabled
+                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm bg-gray-50 text-sm font-sans cursor-not-allowed"
+                  />
                 </div>
               )}
               <div className="mb-4">

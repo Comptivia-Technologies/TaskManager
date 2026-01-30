@@ -41,14 +41,25 @@ public class TaskAssignedEventHandler
                 "Received TaskAssignedEvent. TaskId: {TaskId}, AssignmentId: {AssignmentId}, MemberId: {MemberId}, CorrelationId: {CorrelationId}",
                 @event.TaskId, @event.AssignmentId, @event.MemberId, correlationId);
 
-            // Idempotency check - use AssignmentId instead of TaskId
+            // Idempotency check - skip only if same AssignmentId AND same MemberId
+            // This allows reassignments (same AssignmentId, different MemberId) to be processed
             var existingTask = await _repository.GetByEventIdAsync("TaskAssignedEvent", @event.AssignmentId);
             if (existingTask != null && existingTask.TaskAssignedEventId == @event.AssignmentId)
             {
-                _logger.LogWarning(
-                    "TaskAssignedEvent already processed. TaskId: {TaskId}, AssignmentId: {AssignmentId}, CorrelationId: {CorrelationId}",
-                    @event.TaskId, @event.AssignmentId, correlationId);
-                return;
+                // Check if member is actually different - if so, it's a reassignment and should be processed
+                if (existingTask.MemberId == @event.MemberId)
+                {
+                    _logger.LogWarning(
+                        "TaskAssignedEvent already processed (same member). TaskId: {TaskId}, AssignmentId: {AssignmentId}, MemberId: {MemberId}, CorrelationId: {CorrelationId}",
+                        @event.TaskId, @event.AssignmentId, @event.MemberId, correlationId);
+                    return;
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "TaskAssignedEvent is a reassignment (different member). Processing. TaskId: {TaskId}, AssignmentId: {AssignmentId}, OldMemberId: {OldMemberId}, NewMemberId: {NewMemberId}, CorrelationId: {CorrelationId}",
+                        @event.TaskId, @event.AssignmentId, existingTask.MemberId, @event.MemberId, correlationId);
+                }
             }
 
             var task = await _repository.GetByIdAsync(@event.TaskId);
@@ -110,6 +121,7 @@ public class TaskAssignedEventHandler
 
     /// <summary>
     /// Syncs task to WorkflowManagement.API so frontend can display it
+    /// Creates new task if not exists, updates if already exists (for reassignments)
     /// </summary>
     private async System.Threading.Tasks.Task SyncTaskToWorkflowManagementAPIAsync(DomainTask task)
     {
@@ -128,46 +140,114 @@ public class TaskAssignedEventHandler
                 ?? "http://localhost:5000/api";
 
             // Map task to WorkflowManagement.API format
-            // WorkloadService expects "In Progress" (with space), not "InProgress"
             var statusString = task.Status.ToString();
             if (statusString == "InProgress")
             {
                 statusString = "In Progress";
             }
 
-            var taskCreateDto = new
-            {
-                TaskName = task.TaskName,
-                Description = task.Description,
-                Status = statusString,
-                Priority = task.Priority, // This should already have the priority from PriorityAssignedEvent
-                DueDate = task.SLADeadline, // Use SLA deadline as due date
-                WorkflowId = task.WorkflowId.Value,
-                StageId = (int?)null, // Can be set later if needed
-                AssignedToMemberId = task.MemberId.Value
-            };
-            
-            _logger.LogInformation(
-                "Syncing task to WorkflowManagement.API with Priority: {Priority}, TaskId: {TaskId}",
-                task.Priority, task.TaskId);
+            // First, check if task already exists in WorkflowManagement.API
+            var searchResponse = await _httpClient.GetAsync(
+                $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}");
 
-            var response = await _httpClient.PostAsJsonAsync(
-                $"{workflowManagementApiUrl}/tasks",
-                taskCreateDto);
-
-            if (response.IsSuccessStatusCode)
+            int? existingTaskId = null;
+            if (searchResponse.IsSuccessStatusCode)
             {
-                var responseContent = await response.Content.ReadAsStringAsync();
+                var tasksJson = await searchResponse.Content.ReadAsStringAsync();
+                var tasks = System.Text.Json.JsonSerializer.Deserialize<List<WorkflowTaskInfo>>(tasksJson, new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                // Find existing task by name (or description containing TaskId)
+                var existingTask = tasks?.FirstOrDefault(t => 
+                    t.TaskName == task.TaskName || 
+                    (t.Description != null && t.Description.Contains(task.TaskId.ToString())));
+
+                if (existingTask != null)
+                {
+                    existingTaskId = existingTask.TaskId;
+                    _logger.LogInformation(
+                        "Found existing task in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}",
+                        task.TaskId, existingTaskId);
+                }
+            }
+
+            if (existingTaskId.HasValue)
+            {
+                // UPDATE existing task
+                var taskUpdateDto = new
+                {
+                    TaskName = task.TaskName,
+                    Description = task.Description,
+                    Status = statusString,
+                    Priority = task.Priority,
+                    DueDate = task.SLADeadline,
+                    WorkflowId = task.WorkflowId.Value,
+                    StageId = task.CurrentStageId,
+                    AssignedToMemberId = task.MemberId.Value
+                };
+
                 _logger.LogInformation(
-                    "Task synced to WorkflowManagement.API. TaskId: {TaskId}, Response: {Response}",
-                    task.TaskId, responseContent);
+                    "Updating existing task in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, NewMemberId: {MemberId}",
+                    task.TaskId, existingTaskId.Value, task.MemberId.Value);
+
+                var updateResponse = await _httpClient.PutAsJsonAsync(
+                    $"{workflowManagementApiUrl}/tasks/{existingTaskId.Value}",
+                    taskUpdateDto);
+
+                if (updateResponse.IsSuccessStatusCode)
+                {
+                    var responseContent = await updateResponse.Content.ReadAsStringAsync();
+                    _logger.LogInformation(
+                        "Task updated in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, Response: {Response}",
+                        task.TaskId, existingTaskId.Value, responseContent);
+                }
+                else
+                {
+                    var errorContent = await updateResponse.Content.ReadAsStringAsync();
+                    _logger.LogWarning(
+                        "Failed to update task in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, Status: {Status}, Error: {Error}",
+                        task.TaskId, existingTaskId.Value, updateResponse.StatusCode, errorContent);
+                }
             }
             else
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning(
-                    "Failed to sync task to WorkflowManagement.API. TaskId: {TaskId}, Status: {Status}, Error: {Error}",
-                    task.TaskId, response.StatusCode, errorContent);
+                // CREATE new task
+                var taskCreateDto = new
+                {
+                    TaskName = task.TaskName,
+                    Description = task.Description,
+                    Status = statusString,
+                    Priority = task.Priority,
+                    DueDate = task.SLADeadline,
+                    WorkflowId = task.WorkflowId.Value,
+                    StageId = task.CurrentStageId,
+                    AssignedToMemberId = task.MemberId.Value
+                };
+                
+                _logger.LogInformation(
+                    "Creating new task in WorkflowManagement.API. TaskId: {TaskId}, Priority: {Priority}",
+                    task.TaskId, task.Priority);
+
+                var response = await _httpClient.PostAsJsonAsync(
+                    $"{workflowManagementApiUrl}/tasks",
+                    taskCreateDto);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogInformation(
+                        "Task created in WorkflowManagement.API. TaskId: {TaskId}, Response: {Response}",
+                        task.TaskId, responseContent);
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogWarning(
+                        "Failed to create task in WorkflowManagement.API. TaskId: {TaskId}, Status: {Status}, Error: {Error}",
+                        task.TaskId, response.StatusCode, errorContent);
+                }
             }
         }
         catch (Exception ex)
@@ -177,6 +257,13 @@ public class TaskAssignedEventHandler
                 "Error syncing task to WorkflowManagement.API. TaskId: {TaskId}",
                 task.TaskId);
         }
+    }
+
+    private class WorkflowTaskInfo
+    {
+        public int TaskId { get; set; }
+        public string TaskName { get; set; } = string.Empty;
+        public string? Description { get; set; }
     }
 }
 

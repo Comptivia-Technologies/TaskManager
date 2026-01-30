@@ -20,6 +20,11 @@ public class Task
     public int? MemberId { get; set; }
     public int? SLAConfigurationId { get; set; }
     
+    // Stage tracking (for stage orchestration)
+    public int? CurrentStageId { get; set; }
+    public DateTime? CurrentStageStartedAt { get; set; }
+    public DateTime? StageTimeoutAt { get; set; } // For escalation stages
+    
     // SLA tracking
     public DateTime? SLADeadline { get; set; }
     public DateTime? SLAStartTime { get; set; }
@@ -34,5 +39,9 @@ public class Task
     public Guid? SLAConfiguredEventId { get; set; }
     public Guid? TaskAssignedEventId { get; set; }
     public Guid? TaskOverdueEventId { get; set; }
+    public Guid? TaskStageStartedEventId { get; set; }
+    public Guid? TaskStageCompletedEventId { get; set; }
+    public Guid? TaskStageEscalationTriggeredEventId { get; set; }
+    public Guid? TaskCompletedEventId { get; set; }
 }
 

@@ -535,6 +535,96 @@ public class TaskService : ITaskService
         }
     }
 
+    /// <summary>
+    /// Complete the current stage and move to the next stage
+    /// Publishes TaskStageCompletedEvent which triggers stage orchestration
+    /// </summary>
+    public async System.Threading.Tasks.Task CompleteCurrentStageAsync(Guid taskId)
+    {
+        var task = await _repository.GetByIdAsync(taskId);
+        if (task == null)
+            throw new KeyNotFoundException($"Task with ID {taskId} not found");
+
+        if (!task.CurrentStageId.HasValue)
+            throw new InvalidOperationException($"Task {taskId} is not currently in any stage");
+
+        if (!task.WorkflowId.HasValue)
+            throw new InvalidOperationException($"Task {taskId} does not have a workflow assigned");
+
+        // Get stages from WorkflowManagement.API to find stage details
+        var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
+            ?? "http://localhost:5000/api";
+
+        var stagesResponse = await _httpClient.GetAsync(
+            $"{workflowManagementApiUrl}/stages/workflow/{task.WorkflowId.Value}");
+
+        if (!stagesResponse.IsSuccessStatusCode)
+        {
+            _logger.LogError(
+                "Failed to get stages for workflow. TaskId: {TaskId}, WorkflowId: {WorkflowId}, StatusCode: {StatusCode}",
+                taskId, task.WorkflowId.Value, stagesResponse.StatusCode);
+            throw new InvalidOperationException($"Failed to get workflow stages");
+        }
+
+        var stagesJson = await stagesResponse.Content.ReadAsStringAsync();
+        var stages = System.Text.Json.JsonSerializer.Deserialize<List<StageInfo>>(stagesJson, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        if (stages == null || !stages.Any())
+        {
+            throw new InvalidOperationException($"No stages found for workflow {task.WorkflowId.Value}");
+        }
+
+        // Find current stage and next stage
+        var orderedStages = stages.OrderBy(s => s.StageOrder).ToList();
+        var currentStage = orderedStages.FirstOrDefault(s => s.StageId == task.CurrentStageId.Value);
+        
+        if (currentStage == null)
+        {
+            throw new InvalidOperationException($"Current stage {task.CurrentStageId.Value} not found in workflow");
+        }
+
+        var nextStage = orderedStages.FirstOrDefault(s => s.StageOrder > currentStage.StageOrder);
+
+        // Publish TaskStageCompletedEvent
+        var correlationId = Guid.NewGuid();
+        var stageCompletedEvent = new TaskStageCompletedEvent
+        {
+            TaskId = taskId,
+            StageId = currentStage.StageId,
+            StageName = currentStage.StageName,
+            WorkflowId = task.WorkflowId.Value,
+            NextStageId = nextStage?.StageId,
+            NextStageName = nextStage?.StageName,
+            CompletedAt = DateTime.UtcNow,
+            CorrelationId = correlationId
+        };
+
+        await _publisher.PublishAsync(
+            stageCompletedEvent,
+            RabbitMQConstants.WorkflowExchange,
+            RabbitMQConstants.TaskStageCompleted,
+            correlationId);
+
+        _logger.LogInformation(
+            "Stage completed for task. TaskId: {TaskId}, StageId: {StageId}, StageName: {StageName}, NextStageId: {NextStageId}, CorrelationId: {CorrelationId}",
+            taskId, currentStage.StageId, currentStage.StageName, nextStage?.StageId, correlationId);
+    }
+
+    /// <summary>
+    /// Internal class for deserializing stage info from WorkflowManagement.API
+    /// </summary>
+    private class StageInfo
+    {
+        public int StageId { get; set; }
+        public string StageName { get; set; } = string.Empty;
+        public int StageOrder { get; set; }
+        public int WorkflowId { get; set; }
+        public int TeamId { get; set; }
+    }
+
     private TaskReadDto MapToDto(DomainTask task)
     {
         return new TaskReadDto

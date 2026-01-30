@@ -8,5 +8,6 @@ namespace WorkloadService.Application.Interfaces;
 public interface IWorkloadEvaluationService
 {
     System.Threading.Tasks.Task AssignTaskToBestMemberAsync(SLAConfiguredEvent slaConfiguredEvent);
+    System.Threading.Tasks.Task ReassignTaskToTeamMemberAsync(TaskStageReassignmentNeededEvent reassignmentEvent);
 }
 

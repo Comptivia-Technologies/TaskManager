@@ -142,5 +142,34 @@ public class TasksController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Complete the current stage of a task
+    /// This publishes a TaskStageCompletedEvent which triggers transition to the next stage
+    /// </summary>
+    [HttpPost("{id}/complete-stage")]
+    public async Task<ActionResult> CompleteStage(Guid id)
+    {
+        try
+        {
+            await _taskService.CompleteCurrentStageAsync(id);
+            return Ok(new { message = "Stage completed successfully. Task will transition to the next stage." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Task not found: {TaskId}", id);
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Cannot complete stage for task {TaskId}: {Message}", id, ex.Message);
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error completing stage for task {TaskId}", id);
+            return StatusCode(500, new { error = "An error occurred while completing the stage" });
+        }
+    }
+
 }
 

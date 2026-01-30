@@ -19,6 +19,9 @@ interface StageForm {
   stageOrder: number;
   teamId: number;
   teamName?: string;
+  stageType?: 'Process' | 'Escalation';
+  transitionPolicy?: 'OnComplete' | 'OnTimeout' | 'Manual';
+  timeoutMinutes?: number;
 }
 
 const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
@@ -45,6 +48,9 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
       stageOrder: stage.stageOrder,
       teamId: stage.teamId,
       teamName: stage.teamName,
+      stageType: stage.stageType || 'Process',
+      transitionPolicy: stage.transitionPolicy || 'OnComplete',
+      timeoutMinutes: stage.timeoutMinutes,
     }));
     setStages(existingStages);
     setNextTempId(1);
@@ -175,6 +181,9 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
                 stageName: stage.stageName,
                 stageOrder: stageOrder,
                 teamId: stage.teamId,
+                stageType: stage.stageType || 'Process',
+                transitionPolicy: stage.transitionPolicy || 'OnComplete',
+                timeoutMinutes: stage.timeoutMinutes,
               });
             }
           }
@@ -185,6 +194,9 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
             stageOrder: stageOrder,
             workflowId: workflow.workflowId,
             teamId: stage.teamId,
+            stageType: stage.stageType || 'Process',
+            transitionPolicy: stage.transitionPolicy || 'OnComplete',
+            timeoutMinutes: stage.timeoutMinutes,
           });
         }
       }

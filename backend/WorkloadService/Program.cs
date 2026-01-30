@@ -36,6 +36,7 @@ builder.Services.AddScoped<IWorkloadEvaluationService, WorkloadEvaluationService
 // Event Handlers
 builder.Services.AddScoped<SLAConfiguredEventHandler>();
 builder.Services.AddScoped<TaskStatusUpdatedEventHandler>();
+builder.Services.AddScoped<TaskStageReassignmentNeededEventHandler>();
 
 var app = builder.Build();
 
@@ -92,6 +93,26 @@ try
 catch (Exception ex)
 {
     logger.LogError(ex, "✗ Failed to start TaskStatusUpdatedEvent consumer");
+}
+
+try
+{
+    logger.LogInformation("Starting TaskStageReassignmentNeededEvent consumer...");
+    consumer.StartConsuming<TaskStageReassignmentNeededEvent>(
+        RabbitMQConstants.WorkloadExchange,
+        RabbitMQConstants.TaskStageReassignmentNeededQueue,
+        RabbitMQConstants.TaskStageReassignmentNeeded,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskStageReassignmentNeededEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskStageReassignmentNeededEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskStageReassignmentNeededEvent consumer");
 }
 
 // Ensure database and tables are created before starting

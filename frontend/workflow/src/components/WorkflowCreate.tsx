@@ -15,6 +15,9 @@ interface StageForm {
   stageOrder: number;
   teamId: number;
   tempId: number; // Temporary ID for mapping during creation
+  stageType?: 'Process' | 'Escalation';
+  transitionPolicy?: 'OnComplete' | 'OnTimeout' | 'Manual';
+  timeoutMinutes?: number;
 }
 
 
@@ -104,6 +107,9 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
           stageOrder: stage.stageOrder,
           workflowId: workflow.workflowId,
           teamId: stage.teamId,
+          stageType: stage.stageType || 'Process',
+          transitionPolicy: stage.transitionPolicy || 'OnComplete',
+          timeoutMinutes: stage.timeoutMinutes,
         });
       }
 
