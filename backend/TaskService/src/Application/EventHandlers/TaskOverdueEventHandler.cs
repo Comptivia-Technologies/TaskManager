@@ -161,7 +161,7 @@ public class TaskOverdueEventHandler
                         Status = statusString,
                         Priority = task.Priority,
                         DueDate = task.SLADeadline,
-                        StageId = (int?)null,
+                        StageId = task.CurrentStageId,
                         AssignedToMemberId = task.MemberId.Value
                     };
 

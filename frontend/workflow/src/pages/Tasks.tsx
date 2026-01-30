@@ -186,6 +186,9 @@ const Tasks = () => {
                       Workflow
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
+                      Stage
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
                       Due Date
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
@@ -255,6 +258,15 @@ const Tasks = () => {
                             {getWorkflowName(task.workflowId)}
                           </span>
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {task.stageName ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-azure-sm text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200 font-sans">
+                            {task.stageName}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-black/40 font-sans italic">No stage</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {task.dueDate ? (
