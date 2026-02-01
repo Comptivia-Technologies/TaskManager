@@ -1,8 +1,10 @@
 using AutoMapper;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using WorkflowManagement.API.DTOs;
 using WorkflowManagement.API.Models;
 using WorkflowManagement.API.Repositories;
+using WorkflowManagement.API.Data;
 
 namespace WorkflowManagement.API.Services;
 
@@ -10,30 +12,52 @@ public class WorkflowService : IWorkflowService
 {
     private readonly IWorkflowRepository _workflowRepository;
     private readonly ITeamRepository _teamRepository;
+    private readonly ApplicationDbContext _context;
     private readonly IMapper _mapper;
 
-    public WorkflowService(IWorkflowRepository workflowRepository, ITeamRepository teamRepository, IMapper mapper)
+    public WorkflowService(IWorkflowRepository workflowRepository, ITeamRepository teamRepository, ApplicationDbContext context, IMapper mapper)
     {
         _workflowRepository = workflowRepository;
         _teamRepository = teamRepository;
+        _context = context;
         _mapper = mapper;
     }
 
     public async System.Threading.Tasks.Task<IEnumerable<WorkflowReadDto>> GetAllWorkflowsAsync()
     {
-        var workflows = await _workflowRepository.GetAllAsync();
-        var workflowsList = workflows.ToList();
+        // Load workflows with stages included
+        var workflows = await _context.Workflows
+            .Include(w => w.Stages)
+            .Include(w => w.Team)
+            .ToListAsync();
+        
         var workflowsDto = new List<WorkflowReadDto>();
 
-        foreach (var workflow in workflowsList)
+        foreach (var workflow in workflows)
         {
             var workflowDto = _mapper.Map<WorkflowReadDto>(workflow);
-            if (workflow.TeamId.HasValue)
+            if (workflow.Team != null)
+            {
+                workflowDto.TeamName = workflow.Team.TeamName;
+            }
+            else if (workflow.TeamId.HasValue)
             {
                 var team = await _teamRepository.GetByIdAsync(workflow.TeamId.Value);
                 if (team != null)
                     workflowDto.TeamName = team.TeamName;
             }
+            
+            // Populate team names for stages
+            foreach (var stageDto in workflowDto.Stages)
+            {
+                if (string.IsNullOrEmpty(stageDto.TeamName) && stageDto.TeamId > 0)
+                {
+                    var team = await _teamRepository.GetByIdAsync(stageDto.TeamId);
+                    if (team != null)
+                        stageDto.TeamName = team.TeamName;
+                }
+            }
+            
             workflowsDto.Add(workflowDto);
         }
 

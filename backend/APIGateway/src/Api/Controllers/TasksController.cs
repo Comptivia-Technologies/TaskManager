@@ -1,0 +1,89 @@
+using Microsoft.AspNetCore.Mvc;
+using APIGateway.Application.DTOs;
+using Shared.Contracts.EventContracts;
+using Shared.Contracts.Constants;
+using Shared.Messaging;
+
+namespace APIGateway.Api.Controllers;
+
+/// <summary>
+/// API Gateway - Entry point for task creation
+/// Orchestrates the flow by publishing events (no business logic)
+/// </summary>
+[ApiController]
+[Route("api/tasks")]
+public class TasksController : ControllerBase
+{
+    private readonly IRabbitMQPublisher _publisher;
+    private readonly ILogger<TasksController> _logger;
+
+    public TasksController(
+        IRabbitMQPublisher publisher,
+        ILogger<TasksController> logger)
+    {
+        _publisher = publisher;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Create a new task - Entry point for orchestration flow
+    /// Publishes TaskCreatedEvent to priority rule engine first, then to workflow services
+    /// </summary>
+    [HttpPost]
+    public async Task<ActionResult> CreateTask([FromBody] CreateTaskRequestDto request)
+    {
+        try
+        {
+            var correlationId = Guid.NewGuid();
+            var taskId = Guid.NewGuid();
+
+            // Create TaskCreatedEvent - priority will be assigned by rule engine AFTER workflow selection
+            var taskCreatedEvent = new TaskCreatedEvent
+            {
+                TaskId = taskId,
+                TaskName = request.TaskName,
+                Description = request.Description,
+                Priority = string.Empty,  // Will be set by rule engine after workflow selection
+                TaskType = request.TaskType,
+                TaskData = request.TaskData,  // Generic task data for rule evaluation
+                PriorityAssigned = false,
+                CreatedAt = DateTime.UtcNow,
+                CorrelationId = correlationId
+            };
+
+            // Publish event to main task queue (WorkflowService and TaskService will consume)
+            await _publisher.PublishAsync(
+                taskCreatedEvent,
+                RabbitMQConstants.TaskExchange,
+                RabbitMQConstants.TaskCreated,
+                correlationId);
+
+            _logger.LogInformation(
+                "Task creation initiated via API Gateway. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
+                taskId, correlationId);
+
+            // Return accepted (202) since processing is asynchronous
+            return Accepted(new
+            {
+                taskId = taskId,
+                correlationId = correlationId,
+                message = "Task creation initiated. Processing asynchronously."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error initiating task creation via API Gateway");
+            return StatusCode(500, new { error = "An error occurred while initiating task creation" });
+        }
+    }
+
+    /// <summary>
+    /// Health check endpoint
+    /// </summary>
+    [HttpGet("health")]
+    public IActionResult Health()
+    {
+        return Ok(new { status = "healthy", service = "API Gateway" });
+    }
+}
+

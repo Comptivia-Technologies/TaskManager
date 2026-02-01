@@ -23,7 +23,19 @@ public class MemberService : IMemberService
     public async Task<IEnumerable<MemberReadDto>> GetAllMembersAsync()
     {
         var members = await _memberRepository.GetMembersWithTeamAsync();
-        return _mapper.Map<IEnumerable<MemberReadDto>>(members);
+        var memberDtos = _mapper.Map<IEnumerable<MemberReadDto>>(members).ToList();
+        
+        // Populate team names from the included Team navigation property
+        foreach (var memberDto in memberDtos)
+        {
+            var member = members.FirstOrDefault(m => m.MemberId == memberDto.MemberId);
+            if (member?.Team != null)
+            {
+                memberDto.TeamName = member.Team.TeamName;
+            }
+        }
+        
+        return memberDtos;
     }
 
     public async Task<MemberReadDto?> GetMemberByIdAsync(int id)
@@ -32,7 +44,9 @@ public class MemberService : IMemberService
         if (member == null)
             return null;
 
-        var team = await _teamRepository.GetByIdAsync(member.TeamId);
+        var team = member.TeamId.HasValue 
+            ? await _teamRepository.GetByIdAsync(member.TeamId.Value) 
+            : null;
         var memberDto = _mapper.Map<MemberReadDto>(member);
         if (team != null)
             memberDto.TeamName = team.TeamName;
@@ -42,15 +56,23 @@ public class MemberService : IMemberService
 
     public async Task<MemberReadDto> CreateMemberAsync(MemberCreateDto memberCreateDto)
     {
-        if (!await _teamRepository.ExistsAsync(memberCreateDto.TeamId))
+        // Only validate team if TeamId is provided and is greater than 0
+        if (memberCreateDto.TeamId.HasValue && memberCreateDto.TeamId.Value > 0 && !await _teamRepository.ExistsAsync(memberCreateDto.TeamId.Value))
             throw new ArgumentException("Team does not exist");
 
         var member = _mapper.Map<Member>(memberCreateDto);
+        // Ensure TeamId is null if it's 0 or invalid
+        if (member.TeamId.HasValue && member.TeamId.Value == 0)
+        {
+            member.TeamId = null;
+        }
         member.CreatedAt = DateTime.UtcNow;
         member.UpdatedAt = DateTime.UtcNow;
 
         var createdMember = await _memberRepository.AddAsync(member);
-        var team = await _teamRepository.GetByIdAsync(createdMember.TeamId);
+        var team = createdMember.TeamId.HasValue 
+            ? await _teamRepository.GetByIdAsync(createdMember.TeamId.Value) 
+            : null;
         var memberDto = _mapper.Map<MemberReadDto>(createdMember);
         if (team != null)
             memberDto.TeamName = team.TeamName;
@@ -64,14 +86,22 @@ public class MemberService : IMemberService
         if (member == null)
             return null;
 
-        if (!await _teamRepository.ExistsAsync(memberUpdateDto.TeamId))
+        // Only validate team if TeamId is provided and is greater than 0
+        if (memberUpdateDto.TeamId.HasValue && memberUpdateDto.TeamId.Value > 0 && !await _teamRepository.ExistsAsync(memberUpdateDto.TeamId.Value))
             throw new ArgumentException("Team does not exist");
 
         _mapper.Map(memberUpdateDto, member);
+        // Ensure TeamId is null if it's 0 or invalid
+        if (member.TeamId.HasValue && member.TeamId.Value == 0)
+        {
+            member.TeamId = null;
+        }
         member.UpdatedAt = DateTime.UtcNow;
 
         var updatedMember = await _memberRepository.UpdateAsync(member);
-        var team = await _teamRepository.GetByIdAsync(updatedMember.TeamId);
+        var team = updatedMember.TeamId.HasValue 
+            ? await _teamRepository.GetByIdAsync(updatedMember.TeamId.Value) 
+            : null;
         var memberDto = _mapper.Map<MemberReadDto>(updatedMember);
         if (team != null)
             memberDto.TeamName = team.TeamName;

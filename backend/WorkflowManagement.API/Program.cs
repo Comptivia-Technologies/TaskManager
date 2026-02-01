@@ -68,8 +68,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Ensure database is created
-// Note: For schema changes, run the migration script: Scripts/MigrateStagesTeamId.sql
+// Ensure database is created and migrations are applied
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -79,6 +78,80 @@ using (var scope = app.Services.CreateScope())
     {
         dbContext.Database.EnsureCreated();
         logger.LogInformation("Database ensured/created successfully.");
+        
+        // Check and add SkillLevel column if it doesn't exist
+        var connection = dbContext.Database.GetDbConnection();
+        var wasOpen = connection.State == System.Data.ConnectionState.Open;
+        if (!wasOpen)
+            await connection.OpenAsync();
+        
+        try
+        {
+            using var checkCommand = connection.CreateCommand();
+            checkCommand.CommandText = @"
+                SELECT COUNT(*) 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                AND table_name = 'Members' 
+                AND column_name = 'SkillLevel'
+            ";
+            var result = await checkCommand.ExecuteScalarAsync();
+            var columnExists = Convert.ToInt32(result) > 0;
+
+            if (!columnExists)
+            {
+                logger.LogInformation("SkillLevel column not found. Adding it to Members table...");
+                
+                // Add column as nullable first
+                using var addColumnCommand = connection.CreateCommand();
+                addColumnCommand.CommandText = @"
+                    ALTER TABLE ""Members"" ADD COLUMN ""SkillLevel"" INTEGER;
+                ";
+                await addColumnCommand.ExecuteNonQueryAsync();
+                
+                // Set default value for existing records
+                using var updateCommand = connection.CreateCommand();
+                updateCommand.CommandText = @"
+                    UPDATE ""Members"" SET ""SkillLevel"" = 3 WHERE ""SkillLevel"" IS NULL;
+                ";
+                await updateCommand.ExecuteNonQueryAsync();
+                
+                // Make column NOT NULL
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = @"
+                    ALTER TABLE ""Members"" ALTER COLUMN ""SkillLevel"" SET NOT NULL;
+                ";
+                await alterCommand.ExecuteNonQueryAsync();
+                
+                // Add check constraint
+                using var constraintCommand = connection.CreateCommand();
+                constraintCommand.CommandText = @"
+                    ALTER TABLE ""Members""
+                    ADD CONSTRAINT ""CK_Members_SkillLevel_Range"" 
+                    CHECK (""SkillLevel"" >= 1 AND ""SkillLevel"" <= 5);
+                ";
+                await constraintCommand.ExecuteNonQueryAsync();
+                
+                // Create index
+                using var indexCommand = connection.CreateCommand();
+                indexCommand.CommandText = @"
+                    CREATE INDEX IF NOT EXISTS ""IX_Members_SkillLevel"" 
+                    ON ""Members"" (""SkillLevel"");
+                ";
+                await indexCommand.ExecuteNonQueryAsync();
+                
+                logger.LogInformation("SkillLevel column added successfully to Members table.");
+            }
+            else
+            {
+                logger.LogInformation("SkillLevel column already exists in Members table.");
+            }
+        }
+        finally
+        {
+            if (!wasOpen)
+                await connection.CloseAsync();
+        }
     }
     catch (Exception ex)
     {

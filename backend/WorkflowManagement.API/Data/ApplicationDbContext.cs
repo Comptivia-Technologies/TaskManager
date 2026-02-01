@@ -37,13 +37,16 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Email).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Role).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.SkillLevel).IsRequired();
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();
+            entity.Property(e => e.TeamId).IsRequired(false);
 
             entity.HasOne(m => m.Team)
                 .WithMany(t => t.Members)
                 .HasForeignKey(m => m.TeamId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
         });
 
         // Workflow configuration
@@ -76,6 +79,20 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.StageOrder).IsRequired();
             entity.Property(e => e.TeamId).IsRequired();
             entity.Property(e => e.CreatedAt).IsRequired();
+            
+            // Stage orchestration fields
+            entity.Property(e => e.StageType)
+                .HasConversion<int>() // Store as integer in database
+                .IsRequired()
+                .HasDefaultValue(StageType.Process);
+            
+            entity.Property(e => e.TransitionPolicy)
+                .HasConversion<int>() // Store as integer in database
+                .IsRequired()
+                .HasDefaultValue(TransitionPolicy.OnComplete);
+            
+            entity.Property(e => e.TimeoutMinutes)
+                .IsRequired(false);
 
             entity.HasOne(s => s.Workflow)
                 .WithMany(w => w.Stages)

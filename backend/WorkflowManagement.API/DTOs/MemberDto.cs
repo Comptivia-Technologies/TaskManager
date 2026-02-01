@@ -8,9 +8,10 @@ public class MemberReadDto
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
-    public int TeamId { get; set; }
+    public int? TeamId { get; set; }
     public string TeamName { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
+    public int SkillLevel { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -30,12 +31,15 @@ public class MemberCreateDto
     [StringLength(200)]
     public string Email { get; set; } = string.Empty;
 
-    [Required]
-    public int TeamId { get; set; }
+    public int? TeamId { get; set; }
 
     [Required]
     [StringLength(100)]
     public string Role { get; set; } = string.Empty;
+
+    [Required]
+    [Range(1, 5, ErrorMessage = "Skill level must be between 1 and 5")]
+    public int SkillLevel { get; set; }
 }
 
 public class MemberUpdateDto
@@ -53,12 +57,15 @@ public class MemberUpdateDto
     [StringLength(200)]
     public string Email { get; set; } = string.Empty;
 
-    [Required]
-    public int TeamId { get; set; }
+    public int? TeamId { get; set; }
 
     [Required]
     [StringLength(100)]
     public string Role { get; set; } = string.Empty;
+
+    [Required]
+    [Range(1, 5, ErrorMessage = "Skill level must be between 1 and 5")]
+    public int SkillLevel { get; set; }
 }
 
 
