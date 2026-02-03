@@ -82,7 +82,8 @@ public class TaskStageStartedEventHandler
             task.CurrentStageId = @event.StageId;
             task.CurrentStageStartedAt = @event.StartedAt;
             task.StageTimeoutAt = @event.StageTimeoutAt;
-            task.Status = DomainTaskStatus.InStage;
+            // Don't change status to InStage - keep it as Assigned until member manually changes to InProgress
+            // task.Status = DomainTaskStatus.InStage;  // Removed - status stays as Assigned
             task.TaskStageStartedEventId = correlationId; // Store CorrelationId for idempotency (unique per stage event)
             task.UpdatedAt = DateTime.UtcNow;
 

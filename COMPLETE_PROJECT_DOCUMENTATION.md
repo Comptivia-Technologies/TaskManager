@@ -222,6 +222,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
   - `/api/members/*` → WorkflowManagement.API (5000)
   - `/api/stages/*` → WorkflowManagement.API (5000)
   - `/api/tasks/*` (GET/PUT/DELETE) → WorkflowManagement.API (5000)
+  - `/api/task-service/*` → TaskService (5005)
   - `/api/sla-configurations/*` → SLAConfiguration.API (5002)
   - `/api/priority-rules/*` → PriorityRuleEngine.API (5010)
   - `/api/workload/*` → Workload.API (5003)
@@ -260,7 +261,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 - `TaskService` - Task business logic, stage completion API
 
 **API Endpoints**:
-- `POST /api/tasks/{id}/complete-stage` - Complete current stage and transition to next
+- `POST /api/task-service/complete-stage/{id}` - Complete current stage and transition to next
 
 #### 3.2.3 WorkflowService (Port 5006)
 **Purpose**: Automated workflow selection + Stage orchestration
@@ -452,7 +453,7 @@ CREATE TABLE "Tasks" (
     "Description" VARCHAR(1000),
     "Priority" VARCHAR(50) NOT NULL,
     "TaskType" VARCHAR(50) NOT NULL,
-    "Status" INTEGER NOT NULL,  -- 0=Created, 1=WorkflowSelected, 2=SLAConfigured, 3=Assigned, 4=InProgress, 5=InStage, 6=Completed, 7=Overdue, 8=Cancelled
+    "Status" INTEGER NOT NULL,  -- 0=Created, 1=WorkflowSelected, 2=SLAConfigured, 3=Assigned, 4=InProgress, 5=Completed, 6=Overdue, 7=Cancelled
     "WorkflowId" INTEGER,
     "MemberId" INTEGER,
     "SLAConfigurationId" UUID,
@@ -487,10 +488,9 @@ CREATE INDEX "IX_Tasks_StageTimeoutAt" ON "Tasks" ("StageTimeoutAt") WHERE "Stag
 - `2` = SLAConfigured
 - `3` = Assigned
 - `4` = InProgress
-- `5` = InStage
-- `6` = Completed
-- `7` = Overdue
-- `8` = Cancelled
+- `5` = Completed
+- `6` = Overdue
+- `7` = Cancelled
 ```
 
 ### 4.3 Microservice Support Tables
@@ -659,20 +659,23 @@ CREATE TABLE "PriorityRules" (
 - `/api/members/*` → WorkflowManagement.API:5000
 - `/api/stages/*` → WorkflowManagement.API:5000
 - `/api/tasks/*` (GET/PUT/DELETE) → WorkflowManagement.API:5000
+- `/api/task-service/*` → TaskService:5005
 - `/api/sla-configurations/*` → SLAConfiguration.API:5002
 - `/api/priority-rules/*` → PriorityRuleEngine.API:5010
 - `/api/workload/*` → Workload.API:5003
 
 ### 5.6 TaskService (Port 5005)
 
+**Note**: All TaskService endpoints are accessed via API Gateway at `/api/task-service/*`
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/tasks/{id}` | Get task by ID |
-| POST | `/api/tasks` | Create task (entry point for orchestration flow) |
-| PUT | `/api/tasks/{id}/status` | Update task status |
-| DELETE | `/api/tasks/{id}` | Delete task |
-| POST | `/api/tasks/{id}/complete-stage` | Complete current stage and transition to next |
-| POST | `/api/tasks/sync-overdue` | Sync all overdue tasks to WorkflowManagement.API |
+| GET | `/api/task-service/{id}` | Get task by ID |
+| POST | `/api/task-service` | Create task (entry point for orchestration flow) |
+| PUT | `/api/task-service/{id}/status` | Update task status |
+| DELETE | `/api/task-service/{id}` | Delete task |
+| POST | `/api/task-service/complete-stage/{id}` | Complete current stage and transition to next |
+| POST | `/api/task-service/sync-overdue` | Sync all overdue tasks to WorkflowManagement.API |
 | POST | `/api/tasks/cleanup-orphaned` | Cleanup orphaned tasks from WorkflowManagement.API |
 
 ---
@@ -949,7 +952,7 @@ The `StageEscalationMonitorService` background service:
    ↓
 4. TaskService updates task (Status: InStage, CurrentStageId set)
    ↓
-5. User calls POST /api/tasks/{id}/complete-stage
+5. User calls POST /api/task-service/complete-stage/{id}
    ↓
 6. TaskService publishes TaskStageCompletedEvent
    ↓
@@ -1238,7 +1241,7 @@ export interface Member {
 
 ```
 ┌─────────────────────┐
-│ Stage 1 Completed   │ POST /api/tasks/{id}/complete-stage
+│ Stage 1 Completed   │ POST /api/task-service/complete-stage/{id}
 └──────────┬──────────┘
            │
            ▼ TaskStageCompletedEvent

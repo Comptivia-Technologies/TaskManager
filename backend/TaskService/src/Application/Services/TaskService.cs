@@ -150,6 +150,7 @@ public class TaskService : ITaskService
             {
                 statusString = "In Progress";
             }
+            // Removed: Map Assigned to Pending - WorkloadService handles both statuses
 
             // Get all tasks for this workflow to find the matching task
             var tasksResponse = await _httpClient.GetAsync(
@@ -195,7 +196,7 @@ public class TaskService : ITaskService
                         Status = statusString,
                         Priority = task.Priority,
                         DueDate = task.SLADeadline,
-                        StageId = (int?)null,
+                        StageId = task.CurrentStageId, // Preserve current stage instead of null
                         AssignedToMemberId = task.MemberId.Value
                     };
 

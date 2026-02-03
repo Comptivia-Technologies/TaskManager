@@ -145,6 +145,7 @@ public class TaskAssignedEventHandler
             {
                 statusString = "In Progress";
             }
+            // Removed: Map Assigned to Pending - WorkloadService handles both statuses
 
             // First, check if task already exists in WorkflowManagement.API
             var searchResponse = await _httpClient.GetAsync(

@@ -9,10 +9,9 @@ public enum TaskStatus
     WorkflowSelected = 1,
     SLAConfigured = 2,
     Assigned = 3,
-    InProgress = 4,  // Task is in a stage
-    InStage = 5,  // Explicitly in a stage (for clarity)
-    Completed = 6,
-    Overdue = 7,
-    Cancelled = 8
+    InProgress = 4,
+    Completed = 5,
+    Overdue = 6,
+    Cancelled = 7
 }
 
