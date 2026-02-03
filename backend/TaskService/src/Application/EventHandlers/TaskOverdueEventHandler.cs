@@ -56,6 +56,16 @@ public class TaskOverdueEventHandler
                 return;
             }
 
+            // Don't mark completed or cancelled tasks as overdue
+            if (task.Status == DomainTaskStatus.Completed || 
+                task.Status == DomainTaskStatus.Cancelled)
+            {
+                _logger.LogInformation(
+                    "Skipping overdue marking - task is already {Status}. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
+                    task.Status, @event.TaskId, correlationId);
+                return;
+            }
+
             // Update BreachedAt to actual time when message was delivered (may be slightly after deadline)
             var now = DateTime.UtcNow;
             if (@event.BreachedAt < now.AddMinutes(-1)) // If BreachedAt is more than 1 minute old, use current time

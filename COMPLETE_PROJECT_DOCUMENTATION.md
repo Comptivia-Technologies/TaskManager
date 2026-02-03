@@ -60,20 +60,25 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 ### Two-Tier Architecture
 
 #### **Tier 1: REST APIs (Data Management)**
-- **SLAConfiguration.API** (Port 5001) - SLA CRUD operations
+- **SLAConfiguration.API** (Port 5002) - SLA CRUD operations
 - **WorkflowManagement.API** (Port 5000) - Core workflow CRUD
 - **Workload.API** (Port 5003) - Workload queries
-- **PriorityRuleEngine.API** (Port 5002) - Priority rules management
+- **PriorityRuleEngine.API** (Port 5010) - Priority rules management
 
 #### **Tier 2: Event-Driven Microservices (Orchestration)**
-- **APIGateway** (Port 5004) - Entry point for task creation
+- **APIGateway** (Port 5004) - **Single entry point** for all frontend requests + Task creation orchestration
+  - Reverse proxy routing (YARP) to all backend services
+  - Task creation publishes to RabbitMQ
 - **TaskService** (Port 5005) - Task lifecycle management + Stage completion API
 - **WorkflowService** (Port 5006) - Automated workflow selection + Stage orchestration
 - **SLAManagerService** (Port 5007) - SLA configuration and monitoring
 - **WorkloadService** (Port 5008) - Automated task assignment + Stage reassignment
 
 ### Communication Patterns
-- **REST APIs**: HTTP/REST for frontend communication
+- **Frontend → API Gateway**: All HTTP requests route through API Gateway (Port 5004)
+- **API Gateway → Backend Services**: Reverse proxy routing using YARP
+- **Task Creation**: API Gateway → RabbitMQ (event-driven)
+- **Other CRUD**: API Gateway → Direct proxy to respective services
 - **Microservices**: RabbitMQ for event-driven communication
 - **Databases**: PostgreSQL (multiple databases)
 
@@ -84,13 +89,21 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 │                              FRONTEND (React)                                │
 │                              Port 3000                                       │
 └─────────────────────────────────┬───────────────────────────────────────────┘
-                                  │ HTTP
+                                  │ HTTP (All requests)
+                                  │
+                    ┌─────────────▼─────────────┐
+                    │      API GATEWAY          │
+                    │      (Port 5004)          │
+                    │  - Reverse Proxy (YARP)   │
+                    │  - Task Creation → Queue  │
+                    └─────────────┬─────────────┘
+                                  │
           ┌───────────────────────┼───────────────────────────────┐
           │                       │                               │
           ▼                       ▼                               ▼
 ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────────────────────┐
 │ WorkflowMgmt    │   │ SLAConfig       │   │ Other REST APIs                 │
-│ API (5000)      │   │ API (5001)      │   │ PriorityRule(5002) Workload(5003)│
+│ API (5000)      │   │ API (5002)      │   │ PriorityRule(5010) Workload(5003)│
 └─────────────────┘   └─────────────────┘   └─────────────────────────────────┘
           │                       │                               │
           └───────────────────────┼───────────────────────────────┘
@@ -154,7 +167,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 **Database**: `WorkflowManagement`
 **Tables**: Teams, Members, Workflows, Stages, Tasks
 
-#### 3.1.2 SLAConfiguration.API (Port 5001)
+#### 3.1.2 SLAConfiguration.API (Port 5002)
 **Purpose**: SLA configuration management
 
 **Controllers**:
@@ -197,18 +210,33 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 ### 3.2 Event-Driven Microservices
 
 #### 3.2.1 APIGateway (Port 5004)
-**Purpose**: Entry point for automated task creation
+**Purpose**: Single entry point for all frontend requests + Task creation orchestration
 
 **Controllers**:
-- `TasksController` - Receives task creation requests
+- `TasksController` - Receives task creation requests (publishes to RabbitMQ)
+
+**Reverse Proxy Configuration** (YARP):
+- Routes all frontend requests to backend services:
+  - `/api/workflows/*` → WorkflowManagement.API (5000)
+  - `/api/teams/*` → WorkflowManagement.API (5000)
+  - `/api/members/*` → WorkflowManagement.API (5000)
+  - `/api/stages/*` → WorkflowManagement.API (5000)
+  - `/api/tasks/*` (GET/PUT/DELETE) → WorkflowManagement.API (5000)
+  - `/api/sla-configurations/*` → SLAConfiguration.API (5002)
+  - `/api/priority-rules/*` → PriorityRuleEngine.API (5010)
+  - `/api/workload/*` → Workload.API (5003)
 
 **Responsibilities**:
-- Receives HTTP POST requests for task creation
-- Generates TaskId and CorrelationId
-- Publishes `TaskCreatedEvent` to RabbitMQ
-- Returns HTTP 202 (Accepted) immediately
+- **Reverse Proxy**: Routes all CRUD requests to appropriate backend services
+- **Task Creation**: Receives HTTP POST `/api/tasks` requests
+  - Generates TaskId and CorrelationId
+  - Publishes `TaskCreatedEvent` to RabbitMQ
+  - Returns HTTP 202 (Accepted) immediately
+- **Single Entry Point**: All frontend services point to API Gateway (port 5004)
 
 **Database**: None (stateless)
+
+**Technology**: YARP (Yet Another Reverse Proxy) for routing
 
 #### 3.2.2 TaskService (Port 5005)
 **Purpose**: Task lifecycle management via events + Stage completion API
@@ -424,7 +452,7 @@ CREATE TABLE "Tasks" (
     "Description" VARCHAR(1000),
     "Priority" VARCHAR(50) NOT NULL,
     "TaskType" VARCHAR(50) NOT NULL,
-    "Status" INTEGER NOT NULL,  -- 0=Created, 1=WorkflowSelected, ..., 8=InStage
+    "Status" INTEGER NOT NULL,  -- 0=Created, 1=WorkflowSelected, 2=SLAConfigured, 3=Assigned, 4=InProgress, 5=InStage, 6=Completed, 7=Overdue, 8=Cancelled
     "WorkflowId" INTEGER,
     "MemberId" INTEGER,
     "SLAConfigurationId" UUID,
@@ -451,6 +479,18 @@ CREATE TABLE "Tasks" (
 -- Indexes for performance
 CREATE INDEX "IX_Tasks_CurrentStageId" ON "Tasks" ("CurrentStageId");
 CREATE INDEX "IX_Tasks_StageTimeoutAt" ON "Tasks" ("StageTimeoutAt") WHERE "StageTimeoutAt" IS NOT NULL;
+```
+
+**Task Status Enum Values**:
+- `0` = Created
+- `1` = WorkflowSelected
+- `2` = SLAConfigured
+- `3` = Assigned
+- `4` = InProgress
+- `5` = InStage
+- `6` = Completed
+- `7` = Overdue
+- `8` = Cancelled
 ```
 
 ### 4.3 Microservice Support Tables
@@ -578,7 +618,7 @@ CREATE TABLE "PriorityRules" (
 | GET | `/api/tasks/stage/{stageId}` | Get tasks by stage |
 | GET | `/api/tasks/member/{memberId}` | Get tasks by member |
 
-### 5.2 SLAConfiguration.API (Port 5001)
+### 5.2 SLAConfiguration.API (Port 5002)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -594,7 +634,7 @@ CREATE TABLE "PriorityRules" (
 |--------|----------|-------------|
 | GET | `/api/workload/{memberId}` | Get workload summary for member |
 
-### 5.4 PriorityRuleEngine.API (Port 5002)
+### 5.4 PriorityRuleEngine.API (Port 5010)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -607,15 +647,33 @@ CREATE TABLE "PriorityRules" (
 
 ### 5.5 APIGateway (Port 5004)
 
+**Direct Endpoints**:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/tasks` | Create task (triggers orchestration, returns 202 Accepted) |
+| POST | `/api/tasks` | Create task (publishes to RabbitMQ, returns 202 Accepted) |
+| GET | `/api/tasks/health` | Health check endpoint |
+
+**Reverse Proxy Routes** (All other requests are proxied to backend services):
+- `/api/workflows/*` → WorkflowManagement.API:5000
+- `/api/teams/*` → WorkflowManagement.API:5000
+- `/api/members/*` → WorkflowManagement.API:5000
+- `/api/stages/*` → WorkflowManagement.API:5000
+- `/api/tasks/*` (GET/PUT/DELETE) → WorkflowManagement.API:5000
+- `/api/sla-configurations/*` → SLAConfiguration.API:5002
+- `/api/priority-rules/*` → PriorityRuleEngine.API:5010
+- `/api/workload/*` → Workload.API:5003
 
 ### 5.6 TaskService (Port 5005)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| GET | `/api/tasks/{id}` | Get task by ID |
+| POST | `/api/tasks` | Create task (entry point for orchestration flow) |
+| PUT | `/api/tasks/{id}/status` | Update task status |
+| DELETE | `/api/tasks/{id}` | Delete task |
 | POST | `/api/tasks/{id}/complete-stage` | Complete current stage and transition to next |
+| POST | `/api/tasks/sync-overdue` | Sync all overdue tasks to WorkflowManagement.API |
+| POST | `/api/tasks/cleanup-orphaned` | Cleanup orphaned tasks from WorkflowManagement.API |
 
 ---
 
@@ -802,6 +860,17 @@ Each routing key has corresponding queues with dead letter queues for failed mes
     SLADeadline: DateTime,
     BreachedAt: DateTime,
     MinutesOverdue: int,
+    CorrelationId: Guid
+}
+```
+
+#### TaskStatusUpdatedEvent
+```csharp
+{
+    TaskId: Guid,
+    PreviousStatus: string,
+    NewStatus: string,
+    UpdatedAt: DateTime,
     CorrelationId: Guid
 }
 ```
@@ -1085,13 +1154,22 @@ export interface Member {
 
 ### 9.5 API Service Configuration
 
-**Base URLs**:
-| Service | URL |
-|---------|-----|
-| WorkflowManagement API | `http://localhost:5000` |
-| SLA Configuration API | `http://localhost:5001` |
-| Priority Rules API | `http://localhost:5002` |
-| Workload API | `http://localhost:5003` |
+**All frontend services route through API Gateway**:
+
+| Frontend Service | Base URL | Proxied To |
+|------------------|----------|------------|
+| Main API (`api.ts`) | `http://localhost:5004/api` | WorkflowManagement.API:5000 |
+| SLA API (`slaApi.ts`) | `http://localhost:5004/api` | SLAConfiguration.API:5002 |
+| Priority Rules API (`priorityRulesApi.ts`) | `http://localhost:5004/api` | PriorityRuleEngine.API:5010 |
+| Workload API (`workloadService.ts`) | `http://localhost:5004/api` | Workload.API:5003 |
+
+**Backend Service Ports** (accessed via API Gateway):
+| Service | Port | Purpose |
+|--------|------|----------|
+| WorkflowManagement.API | 5000 | Core workflow CRUD |
+| SLAConfiguration.API | 5002 | SLA CRUD |
+| PriorityRuleEngine.API | 5010 | Priority rules CRUD |
+| Workload.API | 5003 | Workload queries |
 
 ---
 
@@ -1104,11 +1182,13 @@ export interface Member {
 │   Client    │
 └──────┬──────┘
        │ POST /api/tasks
+       │ (via API Gateway:5004)
        ▼
 ┌─────────────┐
 │ APIGateway  │ Generates TaskId, CorrelationId
 │  (Port 5004)│ Publishes TaskCreatedEvent
-└──────┬──────┘ Returns HTTP 202
+│  Controller │ Returns HTTP 202
+└──────┬──────┘
        │
        ▼
 ┌─────────────────────────────────────┐
@@ -1368,11 +1448,11 @@ docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| WorkflowManagement.API | 5000 | Core workflow CRUD |
-| SLAConfiguration.API | 5001 | SLA CRUD |
-| PriorityRuleEngine.API | 5002 | Priority rules CRUD |
-| Workload.API | 5003 | Workload queries |
-| APIGateway | 5004 | Task orchestration entry |
+| **APIGateway** | **5004** | **Single entry point** - Reverse proxy + Task orchestration |
+| WorkflowManagement.API | 5000 | Core workflow CRUD (accessed via API Gateway) |
+| SLAConfiguration.API | 5002 | SLA CRUD (accessed via API Gateway) |
+| PriorityRuleEngine.API | 5010 | Priority rules CRUD (accessed via API Gateway) |
+| Workload.API | 5003 | Workload queries (accessed via API Gateway) |
 | TaskService | 5005 | Task lifecycle + Stage completion API |
 | WorkflowService | 5006 | Workflow selection + Stage orchestration |
 | SLAManagerService | 5007 | SLA management |
@@ -1403,7 +1483,44 @@ npm start
 ```
 
 ### 11.6 CORS Configuration
-All backend APIs are configured to allow requests from `http://localhost:3000`.
+API Gateway is configured to allow requests from `http://localhost:3000`. All CORS is handled at the gateway level.
+
+### 11.7 API Gateway Routing Configuration
+
+The API Gateway uses **YARP (Yet Another Reverse Proxy)** for routing. Configuration is in `appsettings.json`:
+
+```json
+{
+  "ReverseProxy": {
+    "Routes": {
+      "workflow-route": {
+        "ClusterId": "workflow-cluster",
+        "Match": { "Path": "/api/workflows/{**catch-all}" }
+      },
+      "task-crud-route": {
+        "ClusterId": "workflow-cluster",
+        "Match": {
+          "Path": "/api/tasks/{**catch-all}",
+          "Methods": [ "GET", "PUT", "DELETE" ]
+        }
+      },
+      // ... other routes
+    },
+    "Clusters": {
+      "workflow-cluster": {
+        "Destinations": {
+          "destination1": { "Address": "http://localhost:5000" }
+        }
+      }
+      // ... other clusters
+    }
+  }
+}
+```
+
+**Routing Behavior**:
+- `POST /api/tasks` → Handled by API Gateway controller (publishes to RabbitMQ)
+- All other requests → Proxied to appropriate backend service
 
 ---
 
@@ -1417,6 +1534,7 @@ All backend APIs are configured to allow requests from `http://localhost:3000`.
 | Entity Framework Core | 8 | ORM |
 | PostgreSQL | 12+ | Database |
 | RabbitMQ | 3.x | Message broker |
+| YARP (Yet Another Reverse Proxy) | 2.2.0 | API Gateway routing |
 | AutoMapper | 12+ | Object mapping |
 
 ### Frontend
@@ -1491,13 +1609,15 @@ This system provides a complete **Generic Workflow Orchestration Platform** with
 
 ### Key Design Principles
 
-- ✅ **Fully event-driven** (RabbitMQ)
+- ✅ **Single entry point** (API Gateway routes all frontend requests)
+- ✅ **Fully event-driven** (RabbitMQ for orchestration)
 - ✅ **No synchronous service chaining**
 - ✅ **Idempotent consumers**
 - ✅ **Separate databases per service**
 - ✅ **Configuration-driven** (not hardcoded)
 - ✅ **Supports both Process and Escalation workflows**
 - ✅ **Automatic team handoffs** via reassignment
+- ✅ **Reverse proxy routing** (YARP) for centralized request handling
 
 ---
 
