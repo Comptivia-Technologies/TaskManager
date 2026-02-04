@@ -22,8 +22,18 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Host=localhost;Port=5432;Database=PriorityRuleEngine;Username=postgres;Password=postgres";
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrEmpty(connectionString))
+{
+    var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+    var dbPort = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+    var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "PriorityRuleEngine";
+    var dbUser = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
+    var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD")
+        ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
+    
+    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword}";
+}
 
 builder.Services.AddDbContext<PriorityRuleDbContext>(options =>
     options.UseNpgsql(connectionString));
@@ -112,8 +122,18 @@ using (var scope = app.Services.CreateScope())
         scopeLogger.LogInformation("Ensuring database and tables are created...");
         
         // First, ensure the database exists
-        var dbConnectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Host=localhost;Port=5432;Database=PriorityRuleEngine;Username=postgres;Password=sree";
+        var dbConnectionString = configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrEmpty(dbConnectionString))
+        {
+            var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+            var dbPort = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+            var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "PriorityRuleEngine";
+            var dbUser = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
+            var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD")
+                ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
+            
+            dbConnectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword}";
+        }
         
         // Extract database name from connection string
         var dbName = "PriorityRuleEngine";
