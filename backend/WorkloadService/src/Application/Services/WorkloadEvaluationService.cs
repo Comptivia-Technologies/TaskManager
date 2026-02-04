@@ -14,7 +14,7 @@ namespace WorkloadService.Application.Services;
 public class WorkloadEvaluationService : IWorkloadEvaluationService
 {
     private readonly IWorkloadRepository _repository;
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<WorkloadEvaluationService> _logger;
 
     // Weight configuration for workload calculation
@@ -26,11 +26,11 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
 
     public WorkloadEvaluationService(
         IWorkloadRepository repository,
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         ILogger<WorkloadEvaluationService> logger)
     {
         _repository = repository;
-        _publisher = publisher;
+        _eventBus = eventBus;
         _logger = logger;
     }
 
@@ -227,10 +227,10 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
                 CorrelationId = slaConfiguredEvent.CorrelationId
             };
 
-            await _publisher.PublishAsync(
+            await _eventBus.PublishAsync(
                 taskAssignedEvent,
-                RabbitMQConstants.WorkloadExchange,
-                RabbitMQConstants.TaskAssigned,
+                EventBusConstants.WorkloadSource,
+                EventBusConstants.TaskAssigned,
                 slaConfiguredEvent.CorrelationId);
 
             _logger.LogInformation(
@@ -433,10 +433,10 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
                 CorrelationId = reassignmentEvent.CorrelationId
             };
 
-            await _publisher.PublishAsync(
+            await _eventBus.PublishAsync(
                 taskAssignedEvent,
-                RabbitMQConstants.WorkloadExchange,
-                RabbitMQConstants.TaskAssigned,
+                EventBusConstants.WorkloadSource,
+                EventBusConstants.TaskAssigned,
                 reassignmentEvent.CorrelationId);
 
             _logger.LogInformation(

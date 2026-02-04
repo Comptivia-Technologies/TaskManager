@@ -18,20 +18,20 @@ namespace TaskService.Application.Services;
 public class TaskService : ITaskService
 {
     private readonly ITaskRepository _repository;
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<TaskService> _logger;
     private readonly IConfiguration _configuration;
     private readonly HttpClient _httpClient;
 
     public TaskService(
         ITaskRepository repository,
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         ILogger<TaskService> logger,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory)
     {
         _repository = repository;
-        _publisher = publisher;
+        _eventBus = eventBus;
         _logger = logger;
         _configuration = configuration;
         _httpClient = httpClientFactory.CreateClient();
@@ -66,10 +66,10 @@ public class TaskService : ITaskService
             CorrelationId = correlationId
         };
 
-        await _publisher.PublishAsync(
+        await _eventBus.PublishAsync(
             taskCreatedEvent,
-            RabbitMQConstants.TaskExchange,
-            RabbitMQConstants.TaskCreated,
+            EventBusConstants.TaskSource,
+            EventBusConstants.TaskCreated,
             correlationId);
 
         _logger.LogInformation(
@@ -111,10 +111,10 @@ public class TaskService : ITaskService
             CorrelationId = correlationId
         };
 
-        await _publisher.PublishAsync(
+        await _eventBus.PublishAsync(
             statusUpdatedEvent,
-            RabbitMQConstants.TaskExchange,
-            RabbitMQConstants.TaskStatusUpdated,
+            EventBusConstants.TaskSource,
+            EventBusConstants.TaskStatusUpdated,
             correlationId);
 
         _logger.LogInformation(
@@ -603,10 +603,10 @@ public class TaskService : ITaskService
             CorrelationId = correlationId
         };
 
-        await _publisher.PublishAsync(
+        await _eventBus.PublishAsync(
             stageCompletedEvent,
-            RabbitMQConstants.WorkflowExchange,
-            RabbitMQConstants.TaskStageCompleted,
+            EventBusConstants.WorkflowSource,
+            EventBusConstants.TaskStageCompleted,
             correlationId);
 
         _logger.LogInformation(

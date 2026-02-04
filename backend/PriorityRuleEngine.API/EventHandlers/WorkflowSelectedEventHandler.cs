@@ -12,16 +12,16 @@ namespace PriorityRuleEngine.API.EventHandlers;
 public class WorkflowSelectedEventHandler
 {
     private readonly IPriorityRuleService _priorityRuleService;
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowSelectedEventHandler> _logger;
 
     public WorkflowSelectedEventHandler(
         IPriorityRuleService priorityRuleService,
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         ILogger<WorkflowSelectedEventHandler> logger)
     {
         _priorityRuleService = priorityRuleService;
-        _publisher = publisher;
+        _eventBus = eventBus;
         _logger = logger;
     }
 
@@ -44,13 +44,13 @@ public class WorkflowSelectedEventHandler
 
             // Publish PriorityAssignedEvent
             _logger.LogInformation(
-                "Publishing PriorityAssignedEvent to exchange: {Exchange}, routing key: {RoutingKey}...",
-                RabbitMQConstants.TaskExchange, RabbitMQConstants.PriorityAssigned);
+                "Publishing PriorityAssignedEvent to source: {Source}, detail type: {DetailType}...",
+                EventBusConstants.PrioritySource, EventBusConstants.PriorityAssigned);
             
-            await _publisher.PublishAsync(
+            await _eventBus.PublishAsync(
                 priorityAssignedEvent,
-                RabbitMQConstants.TaskExchange,
-                RabbitMQConstants.PriorityAssigned,
+                EventBusConstants.PrioritySource,
+                EventBusConstants.PriorityAssigned,
                 correlationId);
 
             _logger.LogInformation(

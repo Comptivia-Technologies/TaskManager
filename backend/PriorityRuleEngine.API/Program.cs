@@ -28,10 +28,19 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<PriorityRuleDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// RabbitMQ
-builder.Services.Configure<RabbitMQOptions>(builder.Configuration.GetSection("RabbitMQ"));
-builder.Services.AddSingleton<IRabbitMQPublisher, RabbitMQPublisher>();
-builder.Services.AddSingleton<IRabbitMQConsumer, RabbitMQConsumer>();
+// Event Bus - Register all providers
+builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
+builder.Services.AddSingleton<AwsEventBus>();
+
+builder.Services.Configure<AzureEventBusOptions>(builder.Configuration.GetSection("EventBus:Azure"));
+builder.Services.AddSingleton<AzureEventBus>();
+
+builder.Services.Configure<GcpEventBusOptions>(builder.Configuration.GetSection("EventBus:GCP"));
+builder.Services.AddSingleton<GcpEventBus>();
+
+// Factory pattern - resolves provider from configuration
+builder.Services.AddSingleton<IEventBusFactory, EventBusFactory>();
+builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFactory>().CreateEventBus());
 
 // Repositories
 builder.Services.AddScoped<IPriorityRuleRepository, PriorityRuleRepository>();
@@ -70,17 +79,15 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-// Start RabbitMQ consumer
-var consumer = app.Services.GetRequiredService<IRabbitMQConsumer>();
+// Start EventBus consumer
+var eventBus = app.Services.GetRequiredService<IEventBus>();
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
     logger.LogInformation("Starting WorkflowSelectedEvent consumer for priority assignment...");
-    consumer.StartConsuming<WorkflowSelectedEvent>(
-        RabbitMQConstants.WorkflowExchange,
-        RabbitMQConstants.WorkflowSelectedPriorityQueue,
-        RabbitMQConstants.WorkflowSelected,
+    eventBus.StartConsuming<WorkflowSelectedEvent>(
+        EventBusConstants.PriorityServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
