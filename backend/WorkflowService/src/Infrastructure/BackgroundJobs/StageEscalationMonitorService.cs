@@ -51,7 +51,7 @@ public class StageEscalationMonitorService : BackgroundService
     {
         using var scope = _serviceProvider.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IWorkflowRepository>();
-        var publisher = scope.ServiceProvider.GetRequiredService<IRabbitMQPublisher>();
+        var eventBus = scope.ServiceProvider.GetRequiredService<IEventBus>();
 
         try
         {

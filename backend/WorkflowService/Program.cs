@@ -61,6 +61,9 @@ builder.Services.AddScoped<TaskAssignedEventHandler>();
 builder.Services.AddScoped<TaskStageCompletedEventHandler>();
 builder.Services.AddScoped<TaskStageEscalationTriggeredEventHandler>();
 
+// Background Services
+builder.Services.AddHostedService<StageEscalationMonitorService>();
+
 var app = builder.Build();
 
 // Configure pipeline

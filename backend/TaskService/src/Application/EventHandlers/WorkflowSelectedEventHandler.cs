@@ -47,7 +47,7 @@ public class WorkflowSelectedEventHandler
                 _logger.LogWarning(
                     "Task not found for WorkflowSelectedEvent. TaskId: {TaskId}, SelectionId: {SelectionId}, CorrelationId: {CorrelationId}. Will retry later.",
                     @event.TaskId, @event.SelectionId, correlationId);
-                // Don't throw - task might be created later, RabbitMQ will retry
+                // Don't throw - task might be created later, EventBus will retry
                 return;
             }
 

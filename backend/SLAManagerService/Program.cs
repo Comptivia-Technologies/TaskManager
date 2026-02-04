@@ -56,6 +56,9 @@ builder.Services.AddScoped<ISLAService, SLAService>();
 // Event Handlers
 builder.Services.AddScoped<PriorityAssignedEventHandler>();
 
+// Background Services
+builder.Services.AddHostedService<SLAMonitorService>();
+
 var app = builder.Build();
 
 // Configure pipeline

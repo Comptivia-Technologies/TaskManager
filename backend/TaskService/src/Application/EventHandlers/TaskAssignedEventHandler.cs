@@ -68,7 +68,7 @@ public class TaskAssignedEventHandler
                 _logger.LogWarning(
                     "Task not found for TaskAssignedEvent. TaskId: {TaskId}, AssignmentId: {AssignmentId}, CorrelationId: {CorrelationId}. Will retry later.",
                     @event.TaskId, @event.AssignmentId, correlationId);
-                // Don't throw - task might be created later, RabbitMQ will retry
+                // Don't throw - task might be created later, EventBus will retry
                 return;
             }
 

@@ -15,18 +15,18 @@ namespace APIGateway.Api.Controllers;
 [Route("api/tasks")]
 public class TasksController : ControllerBase
 {
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<TasksController> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
 
     public TasksController(
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         ILogger<TasksController> logger,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration)
     {
-        _publisher = publisher;
+        _eventBus = eventBus;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
@@ -57,10 +57,10 @@ public class TasksController : ControllerBase
                 CorrelationId = correlationId
             };
 
-            await _publisher.PublishAsync(
+            await _eventBus.PublishAsync(
                 taskCreatedEvent,
-                RabbitMQConstants.TaskExchange,
-                RabbitMQConstants.TaskCreated,
+                EventBusConstants.TaskSource,
+                EventBusConstants.TaskCreated,
                 correlationId);
 
             _logger.LogInformation(

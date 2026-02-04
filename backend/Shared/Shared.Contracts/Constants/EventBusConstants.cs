@@ -1,7 +1,7 @@
 namespace Shared.Contracts.Constants;
 
 /// <summary>
-/// EventBridge event sources and detail types (replaces RabbitMQ exchanges and routing keys)
+/// EventBus event sources and detail types (used by AWS EventBridge, Azure Event Grid, GCP Pub/Sub)
 /// </summary>
 public static class EventBusConstants
 {

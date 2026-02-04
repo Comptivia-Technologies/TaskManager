@@ -47,7 +47,7 @@ public class SLAConfiguredEventHandler
                 _logger.LogWarning(
                     "Task not found for SLAConfiguredEvent. TaskId: {TaskId}, SLAAssignmentId: {SLAAssignmentId}, CorrelationId: {CorrelationId}. Will retry later.",
                     @event.TaskId, @event.SLAAssignmentId, correlationId);
-                // Don't throw - task might be created later, RabbitMQ will retry
+                // Don't throw - task might be created later, EventBus will retry
                 return;
             }
 

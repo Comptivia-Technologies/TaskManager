@@ -18,20 +18,20 @@ namespace TaskService.Application.EventHandlers;
 public class TaskStageStartedEventHandler
 {
     private readonly ITaskRepository _repository;
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TaskStageStartedEventHandler> _logger;
 
     public TaskStageStartedEventHandler(
         ITaskRepository repository,
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         HttpClient httpClient,
         IConfiguration configuration,
         ILogger<TaskStageStartedEventHandler> logger)
     {
         _repository = repository;
-        _publisher = publisher;
+        _eventBus = eventBus;
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
@@ -114,10 +114,10 @@ public class TaskStageStartedEventHandler
                     CorrelationId = correlationId
                 };
 
-                await _publisher.PublishAsync(
+                await _eventBus.PublishAsync(
                     reassignmentEvent,
-                    RabbitMQConstants.WorkloadExchange,
-                    RabbitMQConstants.TaskStageReassignmentNeeded,
+                    EventBusConstants.WorkloadSource,
+                    EventBusConstants.TaskStageReassignmentNeeded,
                     correlationId);
 
                 _logger.LogInformation(
