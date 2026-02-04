@@ -8,6 +8,7 @@
       "applicationUrl": "http://localhost:5000",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
+        "EVENTBUS_PROVIDER": "AWS",
         "DB_HOST": "localhost",
         "DB_PORT": "5432",
         "DB_NAME": "WorkflowManagement",
@@ -23,6 +24,7 @@
       "applicationUrl": "https://localhost:5001;http://localhost:5000",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
+        "EVENTBUS_PROVIDER": "AWS",
         "DB_HOST": "localhost",
         "DB_PORT": "5432",
         "DB_NAME": "WorkflowManagement",

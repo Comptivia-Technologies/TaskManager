@@ -25,7 +25,9 @@ public class EventBusFactory : IEventBusFactory
 
     public IEventBus CreateEventBus()
     {
-        var provider = _configuration["EventBus:Provider"] ?? "AWS";
+        var provider = Environment.GetEnvironmentVariable("EVENTBUS_PROVIDER")
+            ?? _configuration["EventBus:Provider"]
+            ?? "AWS";
         
         _logger.LogInformation("Creating EventBus with provider: {Provider}", provider);
 
