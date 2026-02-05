@@ -63,7 +63,8 @@ builder.Services.AddScoped<IPriorityRuleService, PriorityRuleService>();
 builder.Services.AddScoped<WorkflowSelectedEventHandler>();
 
 // CORS
-var allowedOrigin = builder.Configuration["Cors:AllowedOrigin"] ?? "http://localhost:3000";
+var allowedOrigin = builder.Configuration["Cors:AllowedOrigin"] 
+    ?? throw new InvalidOperationException("Cors:AllowedOrigin configuration is required");
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>

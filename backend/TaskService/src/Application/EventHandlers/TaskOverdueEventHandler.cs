@@ -117,7 +117,7 @@ public class TaskOverdueEventHandler
             }
 
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Map status to WorkflowManagement.API format (string)
             // WorkflowManagement.API expects "Overdue" status

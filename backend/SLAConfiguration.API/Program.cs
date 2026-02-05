@@ -45,11 +45,14 @@ builder.Services.AddScoped<ISLARepository, SLARepository>();
 builder.Services.AddScoped<ISLAService, SLAService>();
 
 // CORS
+// CORS
+var allowedOrigin = builder.Configuration["Cors:AllowedOrigin"] 
+    ?? throw new InvalidOperationException("Cors:AllowedOrigin configuration is required");
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
+        policy.WithOrigins(allowedOrigin)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();

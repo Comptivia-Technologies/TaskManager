@@ -45,10 +45,14 @@ builder.Services.AddScoped<IWorkloadService, WorkloadService>();
 
 // CORS
 builder.Services.AddCors(options =>
+// CORS
+var allowedOrigin = builder.Configuration["Cors:AllowedOrigin"] 
+    ?? throw new InvalidOperationException("Cors:AllowedOrigin configuration is required");
+builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
+        policy.WithOrigins(allowedOrigin)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();

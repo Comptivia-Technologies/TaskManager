@@ -141,7 +141,7 @@ public class TaskService : ITaskService
             }
 
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Map status to WorkflowManagement.API format (string)
             // WorkloadService expects "In Progress" (with space), not "InProgress"
@@ -354,7 +354,7 @@ public class TaskService : ITaskService
             }
 
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Get all tasks for this workflow to find the matching task
             var tasksResponse = await _httpClient.GetAsync(
@@ -445,7 +445,7 @@ public class TaskService : ITaskService
                 taskServiceTaskNamesSet.Count);
 
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Get all tasks from WorkflowManagement.API
             var tasksResponse = await _httpClient.GetAsync($"{workflowManagementApiUrl}/tasks");

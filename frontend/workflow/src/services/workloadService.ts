@@ -2,7 +2,7 @@ import axios from 'axios';
 import { WorkloadResponse } from '../types';
 
 const workloadApi = axios.create({
-  baseURL: 'http://localhost:5004/api',
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5004/api',
   headers: {
     'Content-Type': 'application/json',
   },

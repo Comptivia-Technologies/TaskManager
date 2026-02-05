@@ -137,7 +137,7 @@ public class TaskAssignedEventHandler
             }
 
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Map task to WorkflowManagement.API format
             var statusString = task.Status.ToString();

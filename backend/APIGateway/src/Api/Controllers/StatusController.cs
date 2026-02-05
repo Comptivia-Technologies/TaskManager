@@ -33,7 +33,7 @@ public class StatusController : ControllerBase
         try
         {
             var taskServiceApiUrl = _configuration["TaskServiceApi:BaseUrl"] 
-                ?? "http://localhost:5005/api";
+                ?? throw new InvalidOperationException("TaskServiceApi:BaseUrl configuration is required");
             var httpClient = _httpClientFactory.CreateClient();
             httpClient.Timeout = TimeSpan.FromSeconds(30);
 

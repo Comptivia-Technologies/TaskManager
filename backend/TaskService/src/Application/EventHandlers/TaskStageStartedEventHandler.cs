@@ -189,7 +189,7 @@ public class TaskStageStartedEventHandler
         try
         {
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"]
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             var response = await _httpClient.GetAsync($"{workflowManagementApiUrl}/members/{memberId.Value}");
             
@@ -231,7 +231,7 @@ public class TaskStageStartedEventHandler
         try
         {
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"]
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Retry logic in case task hasn't been synced to WorkflowManagement.API yet (race condition)
             WorkflowTaskInfo? workflowTask = null;

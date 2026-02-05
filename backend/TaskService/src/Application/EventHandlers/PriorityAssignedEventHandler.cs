@@ -87,7 +87,7 @@ public class PriorityAssignedEventHandler
         try
         {
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Find the matching task in WorkflowManagement.API by TaskName
             // Try to get tasks by workflow first if WorkflowId is available
