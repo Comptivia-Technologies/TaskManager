@@ -14,16 +14,16 @@ namespace SLAManagerService.Application.Services;
 public class SLAService : ISLAService
 {
     private readonly ISLARepository _repository;
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<SLAService> _logger;
 
     public SLAService(
         ISLARepository repository,
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         ILogger<SLAService> logger)
     {
         _repository = repository;
-        _publisher = publisher;
+        _eventBus = eventBus;
         _logger = logger;
     }
 
@@ -159,10 +159,10 @@ public class SLAService : ISLAService
             };
 
             _logger.LogInformation("Publishing SLAConfiguredEvent...");
-            await _publisher.PublishAsync(
+            await _eventBus.PublishAsync(
                 slaConfiguredEvent,
-                RabbitMQConstants.SLAExchange,
-                RabbitMQConstants.SLAConfigured,
+                EventBusConstants.SLASource,
+                EventBusConstants.SLAConfigured,
                 priorityAssignedEvent.CorrelationId);
 
             _logger.LogInformation(
@@ -185,10 +185,10 @@ public class SLAService : ISLAService
                         CorrelationId = Guid.NewGuid()
                     };
 
-                    await _publisher.PublishDelayedAsync(
+                    await _eventBus.ScheduleAsync(
                         overdueEvent,
-                        RabbitMQConstants.SLAExchange,
-                        RabbitMQConstants.TaskOverdue,
+                        EventBusConstants.SLASource,
+                        EventBusConstants.TaskOverdue,
                         overdueEvent.CorrelationId,
                         delay);
 
@@ -223,10 +223,10 @@ public class SLAService : ISLAService
                     CorrelationId = Guid.NewGuid()
                 };
 
-                await _publisher.PublishAsync(
+                await _eventBus.PublishAsync(
                     overdueEvent,
-                    RabbitMQConstants.SLAExchange,
-                    RabbitMQConstants.TaskOverdue,
+                    EventBusConstants.SLASource,
+                    EventBusConstants.TaskOverdue,
                     overdueEvent.CorrelationId);
             }
 

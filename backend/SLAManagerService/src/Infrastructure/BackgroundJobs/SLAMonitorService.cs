@@ -15,17 +15,17 @@ namespace SLAManagerService.Infrastructure.BackgroundJobs;
 public class SLAMonitorService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<SLAMonitorService> _logger;
     private readonly TimeSpan _pollingInterval = TimeSpan.FromMinutes(1); // Check every 1 minute (fallback only - delayed messages handle most cases)
 
     public SLAMonitorService(
         IServiceProvider serviceProvider,
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         ILogger<SLAMonitorService> logger)
     {
         _serviceProvider = serviceProvider;
-        _publisher = publisher;
+        _eventBus = eventBus;
         _logger = logger;
     }
 
@@ -108,10 +108,10 @@ public class SLAMonitorService : BackgroundService
                     CorrelationId = Guid.NewGuid()
                 };
 
-                await _publisher.PublishAsync(
+                await _eventBus.PublishAsync(
                     overdueEvent,
-                    RabbitMQConstants.SLAExchange,
-                    RabbitMQConstants.TaskOverdue,
+                    EventBusConstants.SLASource,
+                    EventBusConstants.TaskOverdue,
                     overdueEvent.CorrelationId);
 
                 _logger.LogWarning(

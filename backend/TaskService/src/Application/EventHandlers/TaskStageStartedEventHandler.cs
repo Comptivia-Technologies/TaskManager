@@ -18,20 +18,20 @@ namespace TaskService.Application.EventHandlers;
 public class TaskStageStartedEventHandler
 {
     private readonly ITaskRepository _repository;
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TaskStageStartedEventHandler> _logger;
 
     public TaskStageStartedEventHandler(
         ITaskRepository repository,
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         HttpClient httpClient,
         IConfiguration configuration,
         ILogger<TaskStageStartedEventHandler> logger)
     {
         _repository = repository;
-        _publisher = publisher;
+        _eventBus = eventBus;
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
@@ -82,7 +82,8 @@ public class TaskStageStartedEventHandler
             task.CurrentStageId = @event.StageId;
             task.CurrentStageStartedAt = @event.StartedAt;
             task.StageTimeoutAt = @event.StageTimeoutAt;
-            task.Status = DomainTaskStatus.InStage;
+            // Don't change status to InStage - keep it as Assigned until member manually changes to InProgress
+            // task.Status = DomainTaskStatus.InStage;  // Removed - status stays as Assigned
             task.TaskStageStartedEventId = correlationId; // Store CorrelationId for idempotency (unique per stage event)
             task.UpdatedAt = DateTime.UtcNow;
 
@@ -113,10 +114,10 @@ public class TaskStageStartedEventHandler
                     CorrelationId = correlationId
                 };
 
-                await _publisher.PublishAsync(
+                await _eventBus.PublishAsync(
                     reassignmentEvent,
-                    RabbitMQConstants.WorkloadExchange,
-                    RabbitMQConstants.TaskStageReassignmentNeeded,
+                    EventBusConstants.WorkloadSource,
+                    EventBusConstants.TaskStageReassignmentNeeded,
                     correlationId);
 
                 _logger.LogInformation(
@@ -188,7 +189,7 @@ public class TaskStageStartedEventHandler
         try
         {
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"]
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             var response = await _httpClient.GetAsync($"{workflowManagementApiUrl}/members/{memberId.Value}");
             
@@ -230,7 +231,7 @@ public class TaskStageStartedEventHandler
         try
         {
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"]
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Retry logic in case task hasn't been synced to WorkflowManagement.API yet (race condition)
             WorkflowTaskInfo? workflowTask = null;

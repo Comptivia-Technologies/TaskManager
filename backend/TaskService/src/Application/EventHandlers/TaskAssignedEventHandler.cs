@@ -68,7 +68,7 @@ public class TaskAssignedEventHandler
                 _logger.LogWarning(
                     "Task not found for TaskAssignedEvent. TaskId: {TaskId}, AssignmentId: {AssignmentId}, CorrelationId: {CorrelationId}. Will retry later.",
                     @event.TaskId, @event.AssignmentId, correlationId);
-                // Don't throw - task might be created later, RabbitMQ will retry
+                // Don't throw - task might be created later, EventBus will retry
                 return;
             }
 
@@ -137,7 +137,7 @@ public class TaskAssignedEventHandler
             }
 
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Map task to WorkflowManagement.API format
             var statusString = task.Status.ToString();
@@ -145,6 +145,7 @@ public class TaskAssignedEventHandler
             {
                 statusString = "In Progress";
             }
+            // Removed: Map Assigned to Pending - WorkloadService handles both statuses
 
             // First, check if task already exists in WorkflowManagement.API
             var searchResponse = await _httpClient.GetAsync(

@@ -17,16 +17,35 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Host=localhost;Port=5432;Database=SLAConfiguration;Username=postgres;Password=postgres";
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrEmpty(connectionString))
+{
+    var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+    var dbPort = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+    var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "WorkflowManagement";
+    var dbUser = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
+    var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD")
+        ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
+    
+    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword}";
+}
 
 builder.Services.AddDbContext<SLADbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// RabbitMQ
-builder.Services.Configure<RabbitMQOptions>(builder.Configuration.GetSection("RabbitMQ"));
-builder.Services.AddSingleton<IRabbitMQPublisher, RabbitMQPublisher>();
-builder.Services.AddSingleton<IRabbitMQConsumer, RabbitMQConsumer>();
+// Event Bus - Register all providers
+builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
+builder.Services.AddSingleton<AwsEventBus>();
+
+builder.Services.Configure<AzureEventBusOptions>(builder.Configuration.GetSection("EventBus:Azure"));
+builder.Services.AddSingleton<AzureEventBus>();
+
+builder.Services.Configure<GcpEventBusOptions>(builder.Configuration.GetSection("EventBus:GCP"));
+builder.Services.AddSingleton<GcpEventBus>();
+
+// Factory pattern - resolves provider from configuration
+builder.Services.AddSingleton<IEventBusFactory, EventBusFactory>();
+builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFactory>().CreateEventBus());
 
 // Repositories
 builder.Services.AddScoped<ISLARepository, SLARepository>();
@@ -53,17 +72,15 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-// Start RabbitMQ consumer
-var consumer = app.Services.GetRequiredService<IRabbitMQConsumer>();
+// Start EventBus consumer
+var eventBus = app.Services.GetRequiredService<IEventBus>();
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
     logger.LogInformation("Starting PriorityAssignedEvent consumer...");
-    consumer.StartConsuming<PriorityAssignedEvent>(
-        RabbitMQConstants.TaskExchange,
-        RabbitMQConstants.PriorityAssignedSLAQueue,
-        RabbitMQConstants.PriorityAssigned,
+    eventBus.StartConsuming<PriorityAssignedEvent>(
+        EventBusConstants.SLAServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();

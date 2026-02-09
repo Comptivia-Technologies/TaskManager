@@ -16,16 +16,35 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Host=localhost;Port=5432;Database=WorkflowManagement;Username=postgres;Password=postgres";
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrEmpty(connectionString))
+{
+    var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+    var dbPort = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+    var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "WorkflowManagement";
+    var dbUser = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
+    var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD")
+        ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
+    
+    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword}";
+}
 
 builder.Services.AddDbContext<WorkloadDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// RabbitMQ
-builder.Services.Configure<RabbitMQOptions>(builder.Configuration.GetSection("RabbitMQ"));
-builder.Services.AddSingleton<IRabbitMQPublisher, RabbitMQPublisher>();
-builder.Services.AddSingleton<IRabbitMQConsumer, RabbitMQConsumer>();
+// Event Bus - Register all providers
+builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
+builder.Services.AddSingleton<AwsEventBus>();
+
+builder.Services.Configure<AzureEventBusOptions>(builder.Configuration.GetSection("EventBus:Azure"));
+builder.Services.AddSingleton<AzureEventBus>();
+
+builder.Services.Configure<GcpEventBusOptions>(builder.Configuration.GetSection("EventBus:GCP"));
+builder.Services.AddSingleton<GcpEventBus>();
+
+// Factory pattern - resolves provider from configuration
+builder.Services.AddSingleton<IEventBusFactory, EventBusFactory>();
+builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFactory>().CreateEventBus());
 
 // Repositories
 builder.Services.AddScoped<IWorkloadRepository, WorkloadRepository>();
@@ -51,17 +70,15 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-// Start RabbitMQ consumer
-var consumer = app.Services.GetRequiredService<IRabbitMQConsumer>();
+// Start EventBus consumers
+var eventBus = app.Services.GetRequiredService<IEventBus>();
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
     logger.LogInformation("Starting SLAConfiguredEvent consumer...");
-    consumer.StartConsuming<SLAConfiguredEvent>(
-        RabbitMQConstants.SLAExchange,
-        RabbitMQConstants.SLAConfiguredWorkloadQueue, // Use separate queue for WorkloadService
-        RabbitMQConstants.SLAConfigured,
+    eventBus.StartConsuming<SLAConfiguredEvent>(
+        EventBusConstants.WorkloadServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -78,10 +95,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskStatusUpdatedEvent consumer...");
-    consumer.StartConsuming<TaskStatusUpdatedEvent>(
-        RabbitMQConstants.TaskExchange,
-        RabbitMQConstants.TaskStatusUpdatedQueue,
-        RabbitMQConstants.TaskStatusUpdated,
+    eventBus.StartConsuming<TaskStatusUpdatedEvent>(
+        EventBusConstants.WorkloadServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -98,10 +113,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskStageReassignmentNeededEvent consumer...");
-    consumer.StartConsuming<TaskStageReassignmentNeededEvent>(
-        RabbitMQConstants.WorkloadExchange,
-        RabbitMQConstants.TaskStageReassignmentNeededQueue,
-        RabbitMQConstants.TaskStageReassignmentNeeded,
+    eventBus.StartConsuming<TaskStageReassignmentNeededEvent>(
+        EventBusConstants.WorkloadServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();

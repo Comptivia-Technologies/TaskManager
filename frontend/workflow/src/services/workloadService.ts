@@ -1,8 +1,12 @@
 import axios from 'axios';
 import { WorkloadResponse } from '../types';
 
+if (!process.env.REACT_APP_API_URL) {
+  throw new Error('REACT_APP_API_URL environment variable is required');
+}
+
 const workloadApi = axios.create({
-  baseURL: 'http://localhost:5003/api',
+  baseURL: process.env.REACT_APP_API_URL,
   headers: {
     'Content-Type': 'application/json',
   },

@@ -16,16 +16,35 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Host=localhost;Port=5432;Database=TaskService;Username=postgres;Password=postgres";
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrEmpty(connectionString))
+{
+    var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+    var dbPort = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+    var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "TaskService";
+    var dbUser = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
+    var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD")
+        ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
+    
+    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword}";
+}
 
 builder.Services.AddDbContext<TaskDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// RabbitMQ
-builder.Services.Configure<RabbitMQOptions>(builder.Configuration.GetSection("RabbitMQ"));
-builder.Services.AddSingleton<IRabbitMQPublisher, RabbitMQPublisher>();
-builder.Services.AddSingleton<IRabbitMQConsumer, RabbitMQConsumer>();
+// Event Bus - Register all providers
+builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
+builder.Services.AddSingleton<AwsEventBus>();
+
+builder.Services.Configure<AzureEventBusOptions>(builder.Configuration.GetSection("EventBus:Azure"));
+builder.Services.AddSingleton<AzureEventBus>();
+
+builder.Services.Configure<GcpEventBusOptions>(builder.Configuration.GetSection("EventBus:GCP"));
+builder.Services.AddSingleton<GcpEventBus>();
+
+// Factory pattern - resolves provider from configuration
+builder.Services.AddSingleton<IEventBusFactory, EventBusFactory>();
+builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFactory>().CreateEventBus());
 
 // HTTP Client for syncing to WorkflowManagement.API
 builder.Services.AddHttpClient();
@@ -73,19 +92,17 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-// Start RabbitMQ consumers
-var consumer = app.Services.GetRequiredService<IRabbitMQConsumer>();
+// Start EventBus consumers
+var eventBus = app.Services.GetRequiredService<IEventBus>();
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 // Subscribe to events - create scope for each event to resolve scoped handlers
-// TaskService consumes TaskCreatedEvent to create tasks in its database
+// TaskService consumes events from its dedicated queue
 try
 {
     logger.LogInformation("Starting TaskCreatedEvent consumer...");
-    consumer.StartConsuming<TaskCreatedEvent>(
-        RabbitMQConstants.TaskExchange,
-        RabbitMQConstants.TaskCreatedQueue,
-        RabbitMQConstants.TaskCreated,
+    eventBus.StartConsuming<TaskCreatedEvent>(
+        EventBusConstants.TaskServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -102,10 +119,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting WorkflowSelectedEvent consumer...");
-    consumer.StartConsuming<WorkflowSelectedEvent>(
-        RabbitMQConstants.WorkflowExchange,
-        RabbitMQConstants.WorkflowSelectedQueue,
-        RabbitMQConstants.WorkflowSelected,
+    eventBus.StartConsuming<WorkflowSelectedEvent>(
+        EventBusConstants.TaskServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -122,10 +137,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting PriorityAssignedEvent consumer...");
-    consumer.StartConsuming<PriorityAssignedEvent>(
-        RabbitMQConstants.TaskExchange,
-        RabbitMQConstants.PriorityAssignedTaskQueue,
-        RabbitMQConstants.PriorityAssigned,
+    eventBus.StartConsuming<PriorityAssignedEvent>(
+        EventBusConstants.TaskServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -142,10 +155,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting SLAConfiguredEvent consumer...");
-    consumer.StartConsuming<SLAConfiguredEvent>(
-        RabbitMQConstants.SLAExchange,
-        RabbitMQConstants.SLAConfiguredQueue,
-        RabbitMQConstants.SLAConfigured,
+    eventBus.StartConsuming<SLAConfiguredEvent>(
+        EventBusConstants.TaskServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -162,10 +173,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskAssignedEvent consumer...");
-    consumer.StartConsuming<TaskAssignedEvent>(
-        RabbitMQConstants.WorkloadExchange,
-        RabbitMQConstants.TaskAssignedQueue,
-        RabbitMQConstants.TaskAssigned,
+    eventBus.StartConsuming<TaskAssignedEvent>(
+        EventBusConstants.TaskServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -182,10 +191,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskOverdueEvent consumer...");
-    consumer.StartConsuming<TaskOverdueEvent>(
-        RabbitMQConstants.SLAExchange,
-        RabbitMQConstants.TaskOverdueQueue,
-        RabbitMQConstants.TaskOverdue,
+    eventBus.StartConsuming<TaskOverdueEvent>(
+        EventBusConstants.TaskServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -202,10 +209,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskStageStartedEvent consumer...");
-    consumer.StartConsuming<TaskStageStartedEvent>(
-        RabbitMQConstants.WorkflowExchange,
-        RabbitMQConstants.TaskStageStartedQueue,
-        RabbitMQConstants.TaskStageStarted,
+    eventBus.StartConsuming<TaskStageStartedEvent>(
+        EventBusConstants.TaskServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -222,10 +227,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskStageCompletedEvent consumer...");
-    consumer.StartConsuming<TaskStageCompletedEvent>(
-        RabbitMQConstants.WorkflowExchange,
-        RabbitMQConstants.TaskStageCompletedQueue,
-        RabbitMQConstants.TaskStageCompleted,
+    eventBus.StartConsuming<TaskStageCompletedEvent>(
+        EventBusConstants.TaskServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -242,10 +245,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskStageEscalationTriggeredEvent consumer...");
-    consumer.StartConsuming<TaskStageEscalationTriggeredEvent>(
-        RabbitMQConstants.WorkflowExchange,
-        RabbitMQConstants.TaskStageEscalationTriggeredQueue,
-        RabbitMQConstants.TaskStageEscalationTriggered,
+    eventBus.StartConsuming<TaskStageEscalationTriggeredEvent>(
+        EventBusConstants.TaskServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -262,10 +263,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskCompletedEvent consumer...");
-    consumer.StartConsuming<TaskCompletedEvent>(
-        RabbitMQConstants.WorkflowExchange,
-        RabbitMQConstants.TaskCompletedQueue,
-        RabbitMQConstants.TaskCompleted,
+    eventBus.StartConsuming<TaskCompletedEvent>(
+        EventBusConstants.TaskServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();

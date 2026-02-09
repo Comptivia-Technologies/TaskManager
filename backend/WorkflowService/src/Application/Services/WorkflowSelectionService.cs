@@ -13,16 +13,16 @@ namespace WorkflowService.Application.Services;
 public class WorkflowSelectionService : IWorkflowSelectionService
 {
     private readonly IWorkflowRepository _repository;
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<WorkflowSelectionService> _logger;
 
     public WorkflowSelectionService(
         IWorkflowRepository repository,
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         ILogger<WorkflowSelectionService> logger)
     {
         _repository = repository;
-        _publisher = publisher;
+        _eventBus = eventBus;
         _logger = logger;
     }
 
@@ -93,10 +93,10 @@ public class WorkflowSelectionService : IWorkflowSelectionService
                 CorrelationId = taskCreatedEvent.CorrelationId
             };
 
-            await _publisher.PublishAsync(
+            await _eventBus.PublishAsync(
                 workflowSelectedEvent,
-                RabbitMQConstants.WorkflowExchange,
-                RabbitMQConstants.WorkflowSelected,
+                EventBusConstants.WorkflowSource,
+                EventBusConstants.WorkflowSelected,
                 taskCreatedEvent.CorrelationId);
 
             _logger.LogInformation(

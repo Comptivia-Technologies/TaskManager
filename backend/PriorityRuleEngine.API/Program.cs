@@ -22,16 +22,35 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Host=localhost;Port=5432;Database=PriorityRuleEngine;Username=postgres;Password=postgres";
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrEmpty(connectionString))
+{
+    var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+    var dbPort = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+    var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "PriorityRuleEngine";
+    var dbUser = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
+    var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD")
+        ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
+    
+    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword}";
+}
 
 builder.Services.AddDbContext<PriorityRuleDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// RabbitMQ
-builder.Services.Configure<RabbitMQOptions>(builder.Configuration.GetSection("RabbitMQ"));
-builder.Services.AddSingleton<IRabbitMQPublisher, RabbitMQPublisher>();
-builder.Services.AddSingleton<IRabbitMQConsumer, RabbitMQConsumer>();
+// Event Bus - Register all providers
+builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
+builder.Services.AddSingleton<AwsEventBus>();
+
+builder.Services.Configure<AzureEventBusOptions>(builder.Configuration.GetSection("EventBus:Azure"));
+builder.Services.AddSingleton<AzureEventBus>();
+
+builder.Services.Configure<GcpEventBusOptions>(builder.Configuration.GetSection("EventBus:GCP"));
+builder.Services.AddSingleton<GcpEventBus>();
+
+// Factory pattern - resolves provider from configuration
+builder.Services.AddSingleton<IEventBusFactory, EventBusFactory>();
+builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFactory>().CreateEventBus());
 
 // Repositories
 builder.Services.AddScoped<IPriorityRuleRepository, PriorityRuleRepository>();
@@ -44,7 +63,8 @@ builder.Services.AddScoped<IPriorityRuleService, PriorityRuleService>();
 builder.Services.AddScoped<WorkflowSelectedEventHandler>();
 
 // CORS
-var allowedOrigin = builder.Configuration["Cors:AllowedOrigin"] ?? "http://localhost:3000";
+var allowedOrigin = builder.Configuration["Cors:AllowedOrigin"] 
+    ?? throw new InvalidOperationException("Cors:AllowedOrigin configuration is required");
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
@@ -70,17 +90,15 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-// Start RabbitMQ consumer
-var consumer = app.Services.GetRequiredService<IRabbitMQConsumer>();
+// Start EventBus consumer
+var eventBus = app.Services.GetRequiredService<IEventBus>();
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
     logger.LogInformation("Starting WorkflowSelectedEvent consumer for priority assignment...");
-    consumer.StartConsuming<WorkflowSelectedEvent>(
-        RabbitMQConstants.WorkflowExchange,
-        RabbitMQConstants.WorkflowSelectedPriorityQueue,
-        RabbitMQConstants.WorkflowSelected,
+    eventBus.StartConsuming<WorkflowSelectedEvent>(
+        EventBusConstants.PriorityServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -105,12 +123,27 @@ using (var scope = app.Services.CreateScope())
         scopeLogger.LogInformation("Ensuring database and tables are created...");
         
         // First, ensure the database exists
-        var dbConnectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Host=localhost;Port=5432;Database=PriorityRuleEngine;Username=postgres;Password=sree";
+        var dbConnectionString = configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrEmpty(dbConnectionString))
+        {
+            var dbHost2 = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+            var dbPort2 = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+            var dbName2 = Environment.GetEnvironmentVariable("DB_NAME") ?? "PriorityRuleEngine";
+            var dbUser2 = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
+            var dbPassword2 = Environment.GetEnvironmentVariable("DB_PASSWORD")
+                ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
+            
+            dbConnectionString = $"Host={dbHost2};Port={dbPort2};Database={dbName2};Username={dbUser2};Password={dbPassword2}";
+        }
         
         // Extract database name from connection string
-        var dbName = "PriorityRuleEngine";
-        var postgresConnectionString = dbConnectionString.Replace($"Database={dbName}", "Database=postgres");
+        var targetDbName = "PriorityRuleEngine";
+        var dbNameMatch = System.Text.RegularExpressions.Regex.Match(dbConnectionString, @"Database=([^;]+)");
+        if (dbNameMatch.Success)
+        {
+            targetDbName = dbNameMatch.Groups[1].Value;
+        }
+        var postgresConnectionString = dbConnectionString.Replace($"Database={targetDbName}", "Database=postgres");
         
         // Connect to postgres database to create the target database if needed
         using (var tempConnection = new NpgsqlConnection(postgresConnectionString))
@@ -120,23 +153,23 @@ using (var scope = app.Services.CreateScope())
             // Check if database exists
             using var checkDbCommand = tempConnection.CreateCommand();
             checkDbCommand.CommandText = $@"
-                SELECT 1 FROM pg_database WHERE datname = '{dbName}'
+                SELECT 1 FROM pg_database WHERE datname = '{targetDbName}'
             ";
             var dbExists = await checkDbCommand.ExecuteScalarAsync() != null;
             
             if (!dbExists)
             {
-                scopeLogger.LogInformation($"Database '{dbName}' does not exist. Creating...");
+                scopeLogger.LogInformation($"Database '{targetDbName}' does not exist. Creating...");
                 using var createDbCommand = tempConnection.CreateCommand();
                 createDbCommand.CommandText = $@"
-                    CREATE DATABASE ""{dbName}""
+                    CREATE DATABASE ""{targetDbName}""
                 ";
                 await createDbCommand.ExecuteNonQueryAsync();
-                scopeLogger.LogInformation($"Database '{dbName}' created successfully.");
+                scopeLogger.LogInformation($"Database '{targetDbName}' created successfully.");
             }
             else
             {
-                scopeLogger.LogInformation($"Database '{dbName}' already exists.");
+                scopeLogger.LogInformation($"Database '{targetDbName}' already exists.");
             }
         }
         

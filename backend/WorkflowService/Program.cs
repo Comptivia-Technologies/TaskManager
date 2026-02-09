@@ -18,16 +18,35 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Host=localhost;Port=5432;Database=WorkflowManagement;Username=postgres;Password=postgres";
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrEmpty(connectionString))
+{
+    var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+    var dbPort = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+    var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "WorkflowManagement";
+    var dbUser = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
+    var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD")
+        ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
+    
+    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword}";
+}
 
 builder.Services.AddDbContext<WorkflowDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// RabbitMQ
-builder.Services.Configure<RabbitMQOptions>(builder.Configuration.GetSection("RabbitMQ"));
-builder.Services.AddSingleton<IRabbitMQPublisher, RabbitMQPublisher>();
-builder.Services.AddSingleton<IRabbitMQConsumer, RabbitMQConsumer>();
+// Event Bus - Register all providers
+builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
+builder.Services.AddSingleton<AwsEventBus>();
+
+builder.Services.Configure<AzureEventBusOptions>(builder.Configuration.GetSection("EventBus:Azure"));
+builder.Services.AddSingleton<AzureEventBus>();
+
+builder.Services.Configure<GcpEventBusOptions>(builder.Configuration.GetSection("EventBus:GCP"));
+builder.Services.AddSingleton<GcpEventBus>();
+
+// Factory pattern - resolves provider from configuration
+builder.Services.AddSingleton<IEventBusFactory, EventBusFactory>();
+builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFactory>().CreateEventBus());
 
 // Repositories
 builder.Services.AddScoped<IWorkflowRepository, WorkflowRepository>();
@@ -36,14 +55,14 @@ builder.Services.AddScoped<IWorkflowRepository, WorkflowRepository>();
 builder.Services.AddScoped<IWorkflowSelectionService, WorkflowSelectionService>();
 builder.Services.AddScoped<IStageOrchestrationService, StageOrchestrationService>();
 
-// Background Services
-builder.Services.AddHostedService<StageEscalationMonitorService>();
-
 // Event Handlers
 builder.Services.AddScoped<TaskCreatedEventHandler>();
 builder.Services.AddScoped<TaskAssignedEventHandler>();
 builder.Services.AddScoped<TaskStageCompletedEventHandler>();
 builder.Services.AddScoped<TaskStageEscalationTriggeredEventHandler>();
+
+// Background Services
+builder.Services.AddHostedService<StageEscalationMonitorService>();
 
 var app = builder.Build();
 
@@ -58,17 +77,15 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-// Start RabbitMQ consumer
-var consumer = app.Services.GetRequiredService<IRabbitMQConsumer>();
+// Start EventBus consumers
+var eventBus = app.Services.GetRequiredService<IEventBus>();
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
     logger.LogInformation("Starting TaskCreatedEvent consumer...");
-    consumer.StartConsuming<TaskCreatedEvent>(
-        RabbitMQConstants.TaskExchange,
-        RabbitMQConstants.TaskCreatedWorkflowQueue, // Use separate queue for WorkflowService
-        RabbitMQConstants.TaskCreated,
+    eventBus.StartConsuming<TaskCreatedEvent>(
+        EventBusConstants.WorkflowServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -85,10 +102,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskAssignedEvent consumer...");
-    consumer.StartConsuming<TaskAssignedEvent>(
-        RabbitMQConstants.WorkloadExchange,
-        RabbitMQConstants.TaskAssignedWorkflowQueue, // Use separate queue so both services get the event
-        RabbitMQConstants.TaskAssigned,
+    eventBus.StartConsuming<TaskAssignedEvent>(
+        EventBusConstants.WorkflowServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -105,10 +120,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskStageCompletedEvent consumer...");
-    consumer.StartConsuming<TaskStageCompletedEvent>(
-        RabbitMQConstants.WorkflowExchange,
-        RabbitMQConstants.TaskStageCompletedWorkflowQueue, // Use separate queue so both TaskService and WorkflowService get the event
-        RabbitMQConstants.TaskStageCompleted,
+    eventBus.StartConsuming<TaskStageCompletedEvent>(
+        EventBusConstants.WorkflowServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();
@@ -125,10 +138,8 @@ catch (Exception ex)
 try
 {
     logger.LogInformation("Starting TaskStageEscalationTriggeredEvent consumer...");
-    consumer.StartConsuming<TaskStageEscalationTriggeredEvent>(
-        RabbitMQConstants.WorkflowExchange,
-        RabbitMQConstants.TaskStageEscalationTriggeredWorkflowQueue, // Use separate queue so both TaskService and WorkflowService get the event
-        RabbitMQConstants.TaskStageEscalationTriggered,
+    eventBus.StartConsuming<TaskStageEscalationTriggeredEvent>(
+        EventBusConstants.WorkflowServiceQueue,
         async (evt, correlationId) =>
         {
             using var scope = app.Services.CreateScope();

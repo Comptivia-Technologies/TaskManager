@@ -13,16 +13,16 @@ namespace WorkflowService.Application.Services;
 public class StageOrchestrationService : IStageOrchestrationService
 {
     private readonly IWorkflowRepository _workflowRepository;
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<StageOrchestrationService> _logger;
 
     public StageOrchestrationService(
         IWorkflowRepository workflowRepository,
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         ILogger<StageOrchestrationService> logger)
     {
         _workflowRepository = workflowRepository;
-        _publisher = publisher;
+        _eventBus = eventBus;
         _logger = logger;
     }
 
@@ -91,11 +91,38 @@ public class StageOrchestrationService : IStageOrchestrationService
                 CorrelationId = taskAssignedEvent.CorrelationId
             };
 
-            await _publisher.PublishAsync(
+            await _eventBus.PublishAsync(
                 stageStartedEvent,
-                RabbitMQConstants.WorkflowExchange,
-                RabbitMQConstants.TaskStageStarted,
+                EventBusConstants.WorkflowSource,
+                EventBusConstants.TaskStageStarted,
                 taskAssignedEvent.CorrelationId);
+
+            // Schedule escalation event if this is an escalation stage
+            if (firstStage.StageType == "Escalation" && stageTimeoutAt.HasValue)
+            {
+                var escalationEvent = new TaskStageEscalationTriggeredEvent
+                {
+                    TaskId = taskAssignedEvent.TaskId,
+                    CurrentStageId = firstStage.StageId,
+                    CurrentStageName = firstStage.StageName,
+                    WorkflowId = workflowSelection.WorkflowId,
+                    NextStageId = null, // Will be determined when event fires
+                    NextStageName = null,
+                    EscalatedAt = stageTimeoutAt.Value,
+                    CorrelationId = taskAssignedEvent.CorrelationId
+                };
+
+                await _eventBus.ScheduleAsync(
+                    escalationEvent,
+                    EventBusConstants.WorkflowSource,
+                    EventBusConstants.TaskStageEscalationTriggered,
+                    escalationEvent.CorrelationId,
+                    stageTimeoutAt.Value);
+
+                _logger.LogInformation(
+                    "Scheduled escalation event for stage. TaskId: {TaskId}, StageId: {StageId}, TimeoutAt: {TimeoutAt}, CorrelationId: {CorrelationId}",
+                    taskAssignedEvent.TaskId, firstStage.StageId, stageTimeoutAt.Value, taskAssignedEvent.CorrelationId);
+            }
 
             // Mark stage orchestration as started to prevent restarting on reassignment
             workflowSelection.StageOrchestrationStarted = true;
@@ -166,11 +193,38 @@ public class StageOrchestrationService : IStageOrchestrationService
                     CorrelationId = stageCompletedEvent.CorrelationId
                 };
 
-                await _publisher.PublishAsync(
+                await _eventBus.PublishAsync(
                     stageStartedEvent,
-                    RabbitMQConstants.WorkflowExchange,
-                    RabbitMQConstants.TaskStageStarted,
+                    EventBusConstants.WorkflowSource,
+                    EventBusConstants.TaskStageStarted,
                     stageCompletedEvent.CorrelationId);
+
+                // Schedule escalation event if this is an escalation stage
+                if (nextStage.StageType == "Escalation" && stageTimeoutAt.HasValue)
+                {
+                    var escalationEvent = new TaskStageEscalationTriggeredEvent
+                    {
+                        TaskId = stageCompletedEvent.TaskId,
+                        CurrentStageId = nextStage.StageId,
+                        CurrentStageName = nextStage.StageName,
+                        WorkflowId = stageCompletedEvent.WorkflowId,
+                        NextStageId = null, // Will be determined when event fires
+                        NextStageName = null,
+                        EscalatedAt = stageTimeoutAt.Value,
+                        CorrelationId = stageCompletedEvent.CorrelationId
+                    };
+
+                    await _eventBus.ScheduleAsync(
+                        escalationEvent,
+                        EventBusConstants.WorkflowSource,
+                        EventBusConstants.TaskStageEscalationTriggered,
+                        escalationEvent.CorrelationId,
+                        stageTimeoutAt.Value);
+
+                    _logger.LogInformation(
+                        "Scheduled escalation event for stage. TaskId: {TaskId}, StageId: {StageId}, TimeoutAt: {TimeoutAt}, CorrelationId: {CorrelationId}",
+                        stageCompletedEvent.TaskId, nextStage.StageId, stageTimeoutAt.Value, stageCompletedEvent.CorrelationId);
+                }
 
                 _logger.LogInformation(
                     "Task transitioned to next stage. TaskId: {TaskId}, FromStageId: {FromStageId}, ToStageId: {ToStageId}, CorrelationId: {CorrelationId}",
@@ -201,10 +255,10 @@ public class StageOrchestrationService : IStageOrchestrationService
                     CorrelationId = stageCompletedEvent.CorrelationId
                 };
 
-                await _publisher.PublishAsync(
+                await _eventBus.PublishAsync(
                     taskCompletedEvent,
-                    RabbitMQConstants.WorkflowExchange,
-                    RabbitMQConstants.TaskCompleted,
+                    EventBusConstants.WorkflowSource,
+                    EventBusConstants.TaskCompleted,
                     stageCompletedEvent.CorrelationId);
 
                 _logger.LogInformation(
@@ -272,11 +326,38 @@ public class StageOrchestrationService : IStageOrchestrationService
                     CorrelationId = escalationEvent.CorrelationId
                 };
 
-                await _publisher.PublishAsync(
+                await _eventBus.PublishAsync(
                     stageStartedEvent,
-                    RabbitMQConstants.WorkflowExchange,
-                    RabbitMQConstants.TaskStageStarted,
+                    EventBusConstants.WorkflowSource,
+                    EventBusConstants.TaskStageStarted,
                     escalationEvent.CorrelationId);
+
+                // Schedule escalation event if this is an escalation stage
+                if (nextStage.StageType == "Escalation" && stageTimeoutAt.HasValue)
+                {
+                    var nextEscalationEvent = new TaskStageEscalationTriggeredEvent
+                    {
+                        TaskId = escalationEvent.TaskId,
+                        CurrentStageId = nextStage.StageId,
+                        CurrentStageName = nextStage.StageName,
+                        WorkflowId = escalationEvent.WorkflowId,
+                        NextStageId = null, // Will be determined when event fires
+                        NextStageName = null,
+                        EscalatedAt = stageTimeoutAt.Value,
+                        CorrelationId = escalationEvent.CorrelationId
+                    };
+
+                    await _eventBus.ScheduleAsync(
+                        nextEscalationEvent,
+                        EventBusConstants.WorkflowSource,
+                        EventBusConstants.TaskStageEscalationTriggered,
+                        nextEscalationEvent.CorrelationId,
+                        stageTimeoutAt.Value);
+
+                    _logger.LogInformation(
+                        "Scheduled escalation event for stage. TaskId: {TaskId}, StageId: {StageId}, TimeoutAt: {TimeoutAt}, CorrelationId: {CorrelationId}",
+                        escalationEvent.TaskId, nextStage.StageId, stageTimeoutAt.Value, escalationEvent.CorrelationId);
+                }
 
                 _logger.LogInformation(
                     "Task escalated to next stage. TaskId: {TaskId}, FromStageId: {FromStageId}, ToStageId: {ToStageId}, CorrelationId: {CorrelationId}",
@@ -307,10 +388,10 @@ public class StageOrchestrationService : IStageOrchestrationService
                     CorrelationId = escalationEvent.CorrelationId
                 };
 
-                await _publisher.PublishAsync(
+                await _eventBus.PublishAsync(
                     taskCompletedEvent,
-                    RabbitMQConstants.WorkflowExchange,
-                    RabbitMQConstants.TaskCompleted,
+                    EventBusConstants.WorkflowSource,
+                    EventBusConstants.TaskCompleted,
                     escalationEvent.CorrelationId);
 
                 _logger.LogInformation(

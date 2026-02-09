@@ -1,0 +1,89 @@
+---
+alwaysApply: true
+---
+ 
+You are an AI coding assistant for this Task Management & Workflow Orchestration system.
+ 
+STACK
+- Frontend: React (TypeScript)
+- Backend: .NET (Web API, async/await)
+- Architecture: Hybrid REST + Event-driven microservices (RabbitMQ)
+- Databases: PostgreSQL (multiple bounded-context DBs)
+ 
+PROJECT CONTEXT
+- Generic workflow engine supporting Process and Escalation workflows
+- Stage-based orchestration with SLA, priority rules, workload-based assignment
+- Strong separation between CRUD APIs and orchestration microservices
+- Idempotent event consumers with event-id tracking
+ 
+RESPONSE STYLE
+- Highly concise and token-efficient
+- No emojis, no fluff, no restating context
+- Answer only what is explicitly asked
+ 
+GLOBAL CODE RULES
+- NO code duplication
+- Before writing code, search the repo for existing:
+  services, repositories, DTOs, handlers, helpers, hooks, utilities
+- Reuse or extend existing code instead of creating new ones
+- Do NOT introduce new patterns, libraries, or architectures
+- Follow existing naming, folder structure, layering, and conventions
+- Show ONLY changed or newly added code
+- Use `// ...` to omit unchanged code
+- Prefer minimal, direct fixes over refactors
+ 
+FRONTEND (REACT) RULES
+- Functional components + hooks only
+- Reuse shared components from `components/` before creating new ones
+- Use existing service clients in `services/` (no direct fetch/axios in components)
+- Keep business logic out of components; place it in services or hooks if already used
+- Do not add inline styles if styling is handled via CSS/Tailwind in that area
+- Follow existing form and validation approach (React Hook Form, etc.)
+- Do not introduce new global state libraries
+ 
+BACKEND (.NET) RULES
+- Strict layering: Controller → Service → Repository
+- No business logic in controllers
+- All endpoints must be async and return proper HTTP status codes
+- Reuse existing DTOs, base response models, logging, and middleware
+- Do not modify global middleware, auth, or base abstractions unless asked
+ 
+EVENT-DRIVEN RULES
+- Do NOT publish events directly from controllers
+- Use existing event publisher / application service layer
+- Follow existing routing keys and event naming (e.g., TaskCreatedEvent)
+- Event payloads must match existing contracts exactly
+- Consumers must be idempotent (check stored EventId before processing)
+- Do NOT introduce synchronous service-to-service calls where events are used
+ 
+WORKFLOW & STAGE RULES
+- Stage progression logic belongs ONLY in WorkflowService / StageOrchestrationService
+- Process stages advance via explicit completion
+- Escalation stages advance via timeout events
+- Do not mix escalation logic into task CRUD services
+ 
+WORKLOAD & ASSIGNMENT RULES
+- Assignment and reassignment logic belongs ONLY in WorkloadService
+- Reassignment must trigger only when stage team differs from current assignee team
+- Always publish TaskAssignedEvent after assignment changes
+ 
+PRIORITY & SLA RULES
+- Priority evaluation handled only by PriorityRuleEngine
+- SLA configuration handled only by SLAManagerService
+- SLA deadlines must be derived from configured priority levels
+- Do not hardcode priority or SLA values
+ 
+DATABASE RULES
+- Follow existing entity structure and audit fields
+- Do not move business logic into entities
+- Respect existing migration and naming conventions
+- No schema changes unless explicitly requested
+ 
+SECURITY RULES
+- Do not bypass authentication or authorization
+- Reuse existing role/claim checks
+- Never log sensitive data (tokens, passwords, personal info)
+ 
+CLARIFICATION
+- Ask a question ONLY if absolutely required to proceed
+ 

@@ -5,10 +5,10 @@ using TaskService.Application.Interfaces;
 namespace TaskService.Api.Controllers;
 
 /// <summary>
-/// API Gateway entry point for task creation
+/// TaskService API - Task lifecycle management
 /// </summary>
 [ApiController]
-[Route("api/tasks")]
+[Route("api/task-service")]
 public class TasksController : ControllerBase
 {
     private readonly ITaskService _taskService;
@@ -146,7 +146,7 @@ public class TasksController : ControllerBase
     /// Complete the current stage of a task
     /// This publishes a TaskStageCompletedEvent which triggers transition to the next stage
     /// </summary>
-    [HttpPost("{id}/complete-stage")]
+    [HttpPost("complete-stage/{id}")]
     public async Task<ActionResult> CompleteStage(Guid id)
     {
         try

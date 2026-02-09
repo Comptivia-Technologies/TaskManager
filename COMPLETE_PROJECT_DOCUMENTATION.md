@@ -14,6 +14,8 @@
 11. [Configuration & Setup](#11-configuration--setup)
 12. [Technologies Used](#12-technologies-used)
 13. [Implementation Status](#13-implementation-status)
+14. [Multi-Cloud Event Bus Architecture](#14-multi-cloud-event-bus-architecture)
+15. [Migration Guide: RabbitMQ to AWS EventBridge](#15-migration-guide-rabbitmq-to-aws-eventbridge)
 
 ---
 
@@ -41,7 +43,9 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 - ✅ Priority rule engine with condition-based evaluation
 - ✅ Kanban board for task visualization
 - ✅ Real-time SLA monitoring
-- ✅ Event-driven architecture with RabbitMQ
+- ✅ **Multi-cloud event bus architecture** (AWS EventBridge, Azure Service Bus, GCP Pub/Sub)
+- ✅ **Factory pattern for cloud provider abstraction**
+- ✅ **EventBridge Scheduler for SLA deadlines and escalation timeouts**
 
 ### Workflow Types Supported
 
@@ -60,21 +64,26 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 ### Two-Tier Architecture
 
 #### **Tier 1: REST APIs (Data Management)**
-- **SLAConfiguration.API** (Port 5001) - SLA CRUD operations
+- **SLAConfiguration.API** (Port 5002) - SLA CRUD operations
 - **WorkflowManagement.API** (Port 5000) - Core workflow CRUD
 - **Workload.API** (Port 5003) - Workload queries
-- **PriorityRuleEngine.API** (Port 5002) - Priority rules management
+- **PriorityRuleEngine.API** (Port 5010) - Priority rules management
 
 #### **Tier 2: Event-Driven Microservices (Orchestration)**
-- **APIGateway** (Port 5004) - Entry point for task creation
+- **APIGateway** (Port 5004) - **Single entry point** for all frontend requests + Task creation orchestration
+  - Reverse proxy routing (YARP) to all backend services
+  - Task creation publishes to Event Bus (AWS/Azure/GCP)
 - **TaskService** (Port 5005) - Task lifecycle management + Stage completion API
 - **WorkflowService** (Port 5006) - Automated workflow selection + Stage orchestration
 - **SLAManagerService** (Port 5007) - SLA configuration and monitoring
 - **WorkloadService** (Port 5008) - Automated task assignment + Stage reassignment
 
 ### Communication Patterns
-- **REST APIs**: HTTP/REST for frontend communication
-- **Microservices**: RabbitMQ for event-driven communication
+- **Frontend → API Gateway**: All HTTP requests route through API Gateway (Port 5004)
+- **API Gateway → Backend Services**: Reverse proxy routing using YARP
+- **Task Creation**: API Gateway → Event Bus (event-driven)
+- **Other CRUD**: API Gateway → Direct proxy to respective services
+- **Microservices**: Event Bus (AWS/Azure/GCP) for event-driven communication
 - **Databases**: PostgreSQL (multiple databases)
 
 ### High-Level Architecture Diagram
@@ -84,13 +93,21 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 │                              FRONTEND (React)                                │
 │                              Port 3000                                       │
 └─────────────────────────────────┬───────────────────────────────────────────┘
-                                  │ HTTP
+                                  │ HTTP (All requests)
+                                  │
+                    ┌─────────────▼─────────────┐
+                    │      API GATEWAY          │
+                    │      (Port 5004)          │
+                    │  - Reverse Proxy (YARP)   │
+                    │  - Task Creation → Queue  │
+                    └─────────────┬─────────────┘
+                                  │
           ┌───────────────────────┼───────────────────────────────┐
           │                       │                               │
           ▼                       ▼                               ▼
 ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────────────────────┐
 │ WorkflowMgmt    │   │ SLAConfig       │   │ Other REST APIs                 │
-│ API (5000)      │   │ API (5001)      │   │ PriorityRule(5002) Workload(5003)│
+│ API (5000)      │   │ API (5002)      │   │ PriorityRule(5010) Workload(5003)│
 └─────────────────┘   └─────────────────┘   └─────────────────────────────────┘
           │                       │                               │
           └───────────────────────┼───────────────────────────────┘
@@ -154,7 +171,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 **Database**: `WorkflowManagement`
 **Tables**: Teams, Members, Workflows, Stages, Tasks
 
-#### 3.1.2 SLAConfiguration.API (Port 5001)
+#### 3.1.2 SLAConfiguration.API (Port 5002)
 **Purpose**: SLA configuration management
 
 **Controllers**:
@@ -197,18 +214,34 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 ### 3.2 Event-Driven Microservices
 
 #### 3.2.1 APIGateway (Port 5004)
-**Purpose**: Entry point for automated task creation
+**Purpose**: Single entry point for all frontend requests + Task creation orchestration
 
 **Controllers**:
-- `TasksController` - Receives task creation requests
+- `TasksController` - Receives task creation requests (publishes to Event Bus)
+
+**Reverse Proxy Configuration** (YARP):
+- Routes all frontend requests to backend services:
+  - `/api/workflows/*` → WorkflowManagement.API (5000)
+  - `/api/teams/*` → WorkflowManagement.API (5000)
+  - `/api/members/*` → WorkflowManagement.API (5000)
+  - `/api/stages/*` → WorkflowManagement.API (5000)
+  - `/api/tasks/*` (GET/PUT/DELETE) → WorkflowManagement.API (5000)
+  - `/api/task-service/*` → TaskService (5005)
+  - `/api/sla-configurations/*` → SLAConfiguration.API (5002)
+  - `/api/priority-rules/*` → PriorityRuleEngine.API (5010)
+  - `/api/workload/*` → Workload.API (5003)
 
 **Responsibilities**:
-- Receives HTTP POST requests for task creation
-- Generates TaskId and CorrelationId
-- Publishes `TaskCreatedEvent` to RabbitMQ
-- Returns HTTP 202 (Accepted) immediately
+- **Reverse Proxy**: Routes all CRUD requests to appropriate backend services
+- **Task Creation**: Receives HTTP POST `/api/tasks` requests
+  - Generates TaskId and CorrelationId
+  - Publishes `TaskCreatedEvent` to Event Bus
+  - Returns HTTP 202 (Accepted) immediately
+- **Single Entry Point**: All frontend services point to API Gateway (port 5004)
 
 **Database**: None (stateless)
+
+**Technology**: YARP (Yet Another Reverse Proxy) for routing
 
 #### 3.2.2 TaskService (Port 5005)
 **Purpose**: Task lifecycle management via events + Stage completion API
@@ -232,7 +265,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 - `TaskService` - Task business logic, stage completion API
 
 **API Endpoints**:
-- `POST /api/tasks/{id}/complete-stage` - Complete current stage and transition to next
+- `POST /api/task-service/complete-stage/{id}` - Complete current stage and transition to next
 
 #### 3.2.3 WorkflowService (Port 5006)
 **Purpose**: Automated workflow selection + Stage orchestration
@@ -253,15 +286,16 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 - `WorkflowSelectionService` - Workflow selection logic
 - `StageOrchestrationService` - Stage transition logic
 
-**Background Services**:
-- `StageEscalationMonitorService` - Monitors stage timeouts for escalation workflows
+**Background Services**: 
+- Primary: Scheduled events via EventBridge Scheduler (no polling)
+- Fallback: `StageEscalationMonitorService` - Polls every 60 seconds as backup (if scheduled events fail)
 
 **Publishes**: `WorkflowSelectedEvent`, `TaskStageStartedEvent`, `TaskCompletedEvent`
 
 #### 3.2.4 SLAManagerService (Port 5007)
 **Purpose**: SLA configuration and deadline monitoring
 
-**Database**: `SLAConfiguration` (read), SLAAssignments (write)
+**Database**: `WorkflowManagement` (read and write)
 
 **Tables**:
 - Reads: SLAConfigurations
@@ -273,10 +307,10 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 
 **Services**:
 - `SLAService` - SLA configuration logic
-- `SLAMonitorService` - Background worker that monitors SLA deadlines
 
-**Background Services**:
-- `SLAMonitorService` - Polls every 1 minute for overdue tasks, publishes `TaskOverdueEvent`
+**Background Services**: 
+- Primary: Scheduled events via EventBridge Scheduler (no polling)
+- Fallback: `SLAMonitorService` - Polls every 1 minute as backup (if scheduled events fail)
 
 **Publishes**: `SLAConfiguredEvent`, `TaskOverdueEvent`
 
@@ -424,7 +458,7 @@ CREATE TABLE "Tasks" (
     "Description" VARCHAR(1000),
     "Priority" VARCHAR(50) NOT NULL,
     "TaskType" VARCHAR(50) NOT NULL,
-    "Status" INTEGER NOT NULL,  -- 0=Created, 1=WorkflowSelected, ..., 8=InStage
+    "Status" INTEGER NOT NULL,  -- 0=Created, 1=WorkflowSelected, 2=SLAConfigured, 3=Assigned, 4=InProgress, 5=Completed, 6=Overdue, 7=Cancelled
     "WorkflowId" INTEGER,
     "MemberId" INTEGER,
     "SLAConfigurationId" UUID,
@@ -451,6 +485,17 @@ CREATE TABLE "Tasks" (
 -- Indexes for performance
 CREATE INDEX "IX_Tasks_CurrentStageId" ON "Tasks" ("CurrentStageId");
 CREATE INDEX "IX_Tasks_StageTimeoutAt" ON "Tasks" ("StageTimeoutAt") WHERE "StageTimeoutAt" IS NOT NULL;
+```
+
+**Task Status Enum Values**:
+- `0` = Created
+- `1` = WorkflowSelected
+- `2` = SLAConfigured
+- `3` = Assigned
+- `4` = InProgress
+- `5` = Completed
+- `6` = Overdue
+- `7` = Cancelled
 ```
 
 ### 4.3 Microservice Support Tables
@@ -578,7 +623,7 @@ CREATE TABLE "PriorityRules" (
 | GET | `/api/tasks/stage/{stageId}` | Get tasks by stage |
 | GET | `/api/tasks/member/{memberId}` | Get tasks by member |
 
-### 5.2 SLAConfiguration.API (Port 5001)
+### 5.2 SLAConfiguration.API (Port 5002)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -594,7 +639,7 @@ CREATE TABLE "PriorityRules" (
 |--------|----------|-------------|
 | GET | `/api/workload/{memberId}` | Get workload summary for member |
 
-### 5.4 PriorityRuleEngine.API (Port 5002)
+### 5.4 PriorityRuleEngine.API (Port 5010)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -607,49 +652,189 @@ CREATE TABLE "PriorityRules" (
 
 ### 5.5 APIGateway (Port 5004)
 
+**Direct Endpoints**:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/tasks` | Create task (triggers orchestration, returns 202 Accepted) |
+| POST | `/api/tasks` | Create task (publishes to RabbitMQ, returns 202 Accepted) |
+| GET | `/api/tasks/health` | Health check endpoint |
+
+**Reverse Proxy Routes** (All other requests are proxied to backend services):
+- `/api/workflows/*` → WorkflowManagement.API:5000
+- `/api/teams/*` → WorkflowManagement.API:5000
+- `/api/members/*` → WorkflowManagement.API:5000
+- `/api/stages/*` → WorkflowManagement.API:5000
+- `/api/tasks/*` (GET/PUT/DELETE) → WorkflowManagement.API:5000
+- `/api/task-service/*` → TaskService:5005
+- `/api/sla-configurations/*` → SLAConfiguration.API:5002
+- `/api/priority-rules/*` → PriorityRuleEngine.API:5010
+- `/api/workload/*` → Workload.API:5003
 
 ### 5.6 TaskService (Port 5005)
 
+**Note**: All TaskService endpoints are accessed via API Gateway at `/api/task-service/*`
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/tasks/{id}/complete-stage` | Complete current stage and transition to next |
+| GET | `/api/task-service/{id}` | Get task by ID |
+| POST | `/api/task-service` | Create task (entry point for orchestration flow) |
+| PUT | `/api/task-service/{id}/status` | Update task status |
+| DELETE | `/api/task-service/{id}` | Delete task |
+| POST | `/api/task-service/complete-stage/{id}` | Complete current stage and transition to next |
+| POST | `/api/task-service/sync-overdue` | Sync all overdue tasks to WorkflowManagement.API |
+| POST | `/api/task-service/cleanup-orphaned` | Cleanup orphaned tasks from WorkflowManagement.API |
+
+### 5.7 Error Handling
+
+All services implement consistent error handling via `ExceptionHandlingMiddleware`:
+
+**Error Response Format**:
+```json
+{
+  "error": "Error message"
+}
+```
+
+**HTTP Status Codes**:
+- `400 Bad Request` - Invalid input (ArgumentException)
+- `404 Not Found` - Resource not found (KeyNotFoundException)
+- `500 Internal Server Error` - Server errors
+
+**Services with ExceptionHandlingMiddleware**:
+- WorkflowManagement.API
+- SLAConfiguration.API
+- Workload.API
+- TaskService (via try-catch in controllers)
 
 ---
 
 ## 6. Event-Driven Architecture
 
-### 6.1 RabbitMQ Configuration
+### 6.1 Multi-Cloud Event Bus Architecture
 
-#### Exchanges (Direct, Durable)
-- `task.exchange` - Task-related events
-- `workflow.exchange` - Workflow and stage-related events
-- `sla.exchange` - SLA-related events
-- `workload.exchange` - Workload and assignment events
+The system uses a **provider-agnostic event bus abstraction** that supports multiple cloud providers:
+- **AWS**: EventBridge + SQS + SNS + EventBridge Scheduler
+- **Azure**: Service Bus + Event Grid + Service Bus Scheduled Messages
+- **GCP**: Cloud Pub/Sub + Cloud Scheduler
 
-#### Routing Keys
-| Routing Key | Description |
-|-------------|-------------|
-| `task.created` | Task created |
-| `task.created.forpriority` | Task created for priority evaluation |
-| `priority.assigned` | Priority assigned to task |
-| `workflow.selected` | Workflow selected for task |
-| `sla.configured` | SLA configured for task |
-| `task.assigned` | Task assigned to member |
-| `task.overdue` | Task has breached SLA |
-| `task.status.updated` | Task status changed |
-| `task.stage.started` | Task entered a stage |
-| `task.stage.completed` | Task completed a stage |
-| `task.stage.escalation.triggered` | Stage timeout triggered escalation |
-| `task.stage.reassignment.needed` | Task needs reassignment to new team |
-| `task.completed` | Task fully completed all stages |
+#### Event Bus Abstraction Layer
 
-#### Queues (Durable, with DLQ)
-Each routing key has corresponding queues with dead letter queues for failed messages.
+**Interface**: `IEventBus`
+- `PublishAsync<T>()` - Immediate event publishing
+- `ScheduleAsync<T>(DateTime)` - Schedule event at specific time
+- `ScheduleAsync<T>(TimeSpan)` - Schedule event after delay
+- `StartConsuming<T>()` - Start consuming from queue
+- `StopConsuming()` - Stop all consumers
+
+**Factory Pattern**: `EventBusFactory`
+- Reads `EventBus:Provider` from configuration
+- Resolves appropriate implementation at runtime
+- Supports switching providers via configuration only
+
+#### Provider Selection
+
+Configure in `appsettings.json`:
+```json
+{
+  "EventBus": {
+    "Provider": "AWS",  // Options: "AWS", "Azure", "GCP"
+    "AWS": { ... },
+    "Azure": { ... },
+    "GCP": { ... }
+  }
+}
+```
+
+#### AWS Implementation (Default)
+
+**Services Used**:
+- **EventBridge**: Central event bus (replaces RabbitMQ exchanges)
+- **SQS**: Per-service queues (replaces RabbitMQ queues)
+- **SNS**: Fan-out for multiple consumers (optional)
+- **EventBridge Scheduler**: Delayed events (replaces RabbitMQ delayed exchange)
+
+**Event Sources** (replaces exchanges):
+- `task-manager.task` - Task-related events
+- `task-manager.workflow` - Workflow and stage events
+- `task-manager.sla` - SLA-related events
+- `task-manager.workload` - Workload and assignment events
+- `task-manager.priority` - Priority assignment events
+
+**Detail Types** (replaces routing keys):
+- `TaskCreated`, `WorkflowSelected`, `PriorityAssigned`, `SLAConfigured`, `TaskAssigned`, `TaskOverdue`, `TaskStageStarted`, `TaskStageCompleted`, `TaskStageEscalationTriggered`, `TaskStageReassignmentNeeded`, `TaskCompleted`, `TaskStatusUpdated`
+
+**Queue Names** (per service):
+- `task-service` - TaskService queue
+- `workflow-service` - WorkflowService queue
+- `sla-service` - SLAManagerService queue
+- `workload-service` - WorkloadService queue
+- `priority-service` - PriorityRuleEngine queue
+
+#### Azure Implementation
+
+**Services Used**:
+- **Azure Service Bus**: Messaging and queues
+- **Azure Event Grid**: Event routing (optional)
+- **Service Bus Scheduled Messages**: Delayed events
+
+**Configuration**:
+```json
+{
+  "EventBus": {
+    "Provider": "Azure",
+    "Azure": {
+      "ServiceBusConnectionString": "Endpoint=sb://...",
+      "EventGridTopicEndpoint": "https://...",
+      "EventGridAccessKey": "...",
+      "ServicePrefix": "task-manager"
+    }
+  }
+}
+```
+
+#### GCP Implementation
+
+**Services Used**:
+- **Cloud Pub/Sub**: Messaging and subscriptions
+- **Cloud Scheduler**: Delayed events
+
+**Configuration**:
+```json
+{
+  "EventBus": {
+    "Provider": "GCP",
+    "GCP": {
+      "ProjectId": "your-project-id",
+      "CredentialsPath": "path/to/service-account-key.json",
+      "ServicePrefix": "task-manager",
+      "SchedulerLocation": "us-central1"
+    }
+  }
+}
+```
+
+#### Scheduled Events (Replaces Polling)
+
+**Before (RabbitMQ)**:
+- `SLAMonitorService` - Polled every 1 minute for overdue tasks
+- `StageEscalationMonitorService` - Polled every 1 minute for escalation timeouts
+
+**After (EventBridge Scheduler)**:
+- SLA deadlines: Scheduled via `ScheduleAsync()` when SLA is configured
+- Escalation timeouts: Scheduled via `ScheduleAsync()` when escalation stage starts
+- **No polling required** - Events fire exactly at scheduled time
+
+#### Benefits of Multi-Cloud Architecture
+
+1. **Cloud Agnostic**: Switch providers via configuration
+2. **No Vendor Lock-in**: Abstraction layer allows migration
+3. **Native Cloud Services**: Leverages managed services (no infrastructure management)
+4. **Scalability**: Cloud-native services auto-scale
+5. **Reliability**: Managed services with built-in redundancy
+6. **Cost Optimization**: Choose provider based on cost/requirements
 
 ### 6.2 Event Contracts
+
+**Note**: `TaskCreatedForPriority` is defined in EventBusConstants but is currently unused (reserved for future priority-first workflow selection).
 
 #### TaskCreatedEvent
 ```csharp
@@ -806,6 +991,17 @@ Each routing key has corresponding queues with dead letter queues for failed mes
 }
 ```
 
+#### TaskStatusUpdatedEvent
+```csharp
+{
+    TaskId: Guid,
+    PreviousStatus: string,
+    NewStatus: string,
+    UpdatedAt: DateTime,
+    CorrelationId: Guid
+}
+```
+
 ### 6.3 Idempotency
 
 Each event handler implements idempotency:
@@ -863,12 +1059,15 @@ The `StageOrchestrationService` in WorkflowService handles:
 - Transitions task to next stage automatically
 - Works same as completion but triggered by timeout
 
-### 7.4 Stage Escalation Monitor
+### 7.4 Stage Escalation Scheduling
 
-The `StageEscalationMonitorService` background service:
-- Runs every 60 seconds
-- Queries tasks where `StageTimeoutAt < Now`
-- Publishes `TaskStageEscalationTriggeredEvent` for timed-out tasks
+**Before (Polling)**:
+- `StageEscalationMonitorService` background service polled every 60 seconds
+
+**After (Scheduled Events)**:
+- When escalation stage starts, `ScheduleAsync()` is called with timeout duration
+- EventBridge Scheduler (or equivalent) fires event at exact timeout time
+- No polling required - event fires exactly when needed
 
 ### 7.5 Process Workflow Flow
 ```
@@ -880,7 +1079,7 @@ The `StageEscalationMonitorService` background service:
    ↓
 4. TaskService updates task (Status: InStage, CurrentStageId set)
    ↓
-5. User calls POST /api/tasks/{id}/complete-stage
+5. User calls POST /api/task-service/complete-stage/{id}
    ↓
 6. TaskService publishes TaskStageCompletedEvent
    ↓
@@ -898,15 +1097,17 @@ The `StageEscalationMonitorService` background service:
    ↓
 3. TaskStageStartedEvent published (includes StageTimeoutAt)
    ↓
-4. TaskService updates task (Status: InStage, StageTimeoutAt set)
+4. ScheduleAsync() called to schedule escalation timeout event
    ↓
-5. StageEscalationMonitorService detects timeout
+5. TaskService updates task (Status: InStage, StageTimeoutAt set)
    ↓
-6. TaskStageEscalationTriggeredEvent published
+6. EventBridge Scheduler fires at timeout
    ↓
-7. WorkflowService.HandleEscalationTimeoutAsync
+7. TaskStageEscalationTriggeredEvent published
    ↓
-8. If more stages: TaskStageStartedEvent → back to step 4
+8. WorkflowService.HandleEscalationTimeoutAsync
+   ↓
+9. If more stages: TaskStageStartedEvent → back to step 4
    If no more stages: TaskCompletedEvent → task completed
 ```
 
@@ -1085,13 +1286,22 @@ export interface Member {
 
 ### 9.5 API Service Configuration
 
-**Base URLs**:
-| Service | URL |
-|---------|-----|
-| WorkflowManagement API | `http://localhost:5000` |
-| SLA Configuration API | `http://localhost:5001` |
-| Priority Rules API | `http://localhost:5002` |
-| Workload API | `http://localhost:5003` |
+**All frontend services route through API Gateway**:
+
+| Frontend Service | Base URL | Proxied To |
+|------------------|----------|------------|
+| Main API (`api.ts`) | `http://localhost:5004/api` | WorkflowManagement.API:5000 |
+| SLA API (`slaApi.ts`) | `http://localhost:5004/api` | SLAConfiguration.API:5002 |
+| Priority Rules API (`priorityRulesApi.ts`) | `http://localhost:5004/api` | PriorityRuleEngine.API:5010 |
+| Workload API (`workloadService.ts`) | `http://localhost:5004/api` | Workload.API:5003 |
+
+**Backend Service Ports** (accessed via API Gateway):
+| Service | Port | Purpose |
+|--------|------|----------|
+| WorkflowManagement.API | 5000 | Core workflow CRUD |
+| SLAConfiguration.API | 5002 | SLA CRUD |
+| PriorityRuleEngine.API | 5010 | Priority rules CRUD |
+| Workload.API | 5003 | Workload queries |
 
 ---
 
@@ -1104,11 +1314,13 @@ export interface Member {
 │   Client    │
 └──────┬──────┘
        │ POST /api/tasks
+       │ (via API Gateway:5004)
        ▼
 ┌─────────────┐
 │ APIGateway  │ Generates TaskId, CorrelationId
 │  (Port 5004)│ Publishes TaskCreatedEvent
-└──────┬──────┘ Returns HTTP 202
+│  Controller │ Returns HTTP 202
+└──────┬──────┘
        │
        ▼
 ┌─────────────────────────────────────┐
@@ -1158,7 +1370,7 @@ export interface Member {
 
 ```
 ┌─────────────────────┐
-│ Stage 1 Completed   │ POST /api/tasks/{id}/complete-stage
+│ Stage 1 Completed   │ POST /api/task-service/complete-stage/{id}
 └──────────┬──────────┘
            │
            ▼ TaskStageCompletedEvent
@@ -1207,69 +1419,60 @@ export interface Member {
 
 ```
 ┌─────────────────────────┐
-│ StageEscalationMonitor  │ Background Service (every 60s)
-│       Service           │
+│ StageOrchestrationService│ When escalation stage starts
+│       ScheduleAsync()    │
 └───────────┬─────────────┘
             │
-            │ Query: Tasks WHERE StageTimeoutAt < NOW
+            │ Schedule event for StageTimeoutAt
             │
             ▼
-     ┌─────────────┐
-     │ Found       │
-     │ Timed Out?  │
-     └──┬──────┬───┘
-        │      │
-     Yes│      │No
-        │      │
-        ▼      └──────────────────────┐
-┌─────────────┐                       │
-│ Publish     │                       │
-│TaskStage    │                       │
-│Escalation   │                       │
-│TriggeredEvt │                       │
-└──────┬──────┘                       │
-       │                              │
-       ▼                              │
-┌─────────────────────┐               │
-│ WorkflowService     │               │
-│ HandleEscalation    │               │
-│ TimeoutAsync        │               │
-└──────────┬──────────┘               │
-           │                          │
-           ▼ TaskStageStartedEvent    │
-    (next stage or TaskCompletedEvent)│
-           │                          │
-           └──────────────────────────┘
+┌─────────────────────────┐
+│ EventBridge Scheduler   │ (or Azure/GCP equivalent)
+│    Scheduled Job        │
+└───────────┬─────────────┘
+            │
+            │ Fires at exact timeout time
+            │
+            ▼
+┌─────────────────────────┐
+│ TaskStageEscalation     │
+│ TriggeredEvent Published│
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────┐
+│ WorkflowService     │
+│ HandleEscalation    │
+│ TimeoutAsync        │
+└──────────┬──────────┘
+           │
+           ▼ TaskStageStartedEvent
+    (next stage or TaskCompletedEvent)
 ```
 
 ### 10.4 SLA Monitoring Flow
 
 ```
 ┌─────────────────────┐
-│ SLAMonitorService   │ Background Worker (every 60s)
-│ (Port 5007)         │
+│ SLAService          │ When SLA is configured
+│ ConfigureSLAAsync() │
 └──────────┬──────────┘
            │
-           │ Query: SLAAssignments WHERE SLADeadline < NOW AND IsOverdue = false
+           │ Schedule event for SLADeadline
            │
            ▼
-    ┌─────────────┐
-    │ Found       │
-    │ Overdue?    │
-    └──┬──────┬───┘
-       │      │
-    Yes│      │No
-       │      │
-       ▼      │
-┌─────────────┐│
-│ Mark as     ││
-│ Overdue     ││
-│ Publish     ││
-│TaskOverdue  ││
-│ Event       ││
-└──────┬──────┘│
-       │      │
-       └──────┘
+┌─────────────────────┐
+│ EventBridge Scheduler│ (or Azure/GCP equivalent)
+│    Scheduled Job     │
+└───────────┬──────────┘
+            │
+            │ Fires at exact deadline time
+            │
+            ▼
+┌─────────────────────┐
+│ TaskOverdueEvent    │
+│      Published      │
+└──────────┬──────────┘
            │
            ▼
     ┌─────────────┐
@@ -1301,7 +1504,7 @@ Lower score = More available = Higher priority for assignment
 - .NET 8 SDK
 - Node.js 16+ and npm
 - PostgreSQL 12+
-- RabbitMQ (Docker or installed)
+- AWS Account (for AWS EventBridge) OR Azure Subscription OR GCP Project
 
 ### 11.2 Database Setup
 
@@ -1352,27 +1555,88 @@ All services use connection strings in `appsettings.json`:
 }
 ```
 
-### 11.3 RabbitMQ Setup
+### 11.3 Event Bus Configuration
 
-#### Docker (Recommended)
-```bash
-docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+#### AWS EventBridge (Default)
+
+**Configuration** (`appsettings.json`):
+```json
+{
+  "EventBus": {
+    "Provider": "AWS",
+    "AWS": {
+      "Region": "us-east-1",
+      "EventBusName": "default",
+      "ServicePrefix": "task-manager",
+      "VisibilityTimeoutSeconds": 300,
+      "MaxReceiveCount": 3,
+      "SchedulerGroupName": "task-manager-schedules",
+      "SchedulerRoleArn": "arn:aws:iam::ACCOUNT_ID:role/EventBridgeSchedulerRole"
+    }
+  }
+}
 ```
 
-#### Access Management UI
-- URL: `http://localhost:15672`
-- Username: `guest`
-- Password: `guest`
+**Infrastructure Requirements**:
+1. AWS Account with EventBridge, SQS, SNS, and Scheduler access
+2. IAM Role for EventBridge Scheduler with `events:PutEvents` permission
+3. EventBridge Rules to route events to SQS queues (or auto-created)
+
+**Note**: SQS queues are auto-created by `AwsEventBus` on first use.
+
+#### Azure Service Bus (Optional)
+
+**Configuration**:
+```json
+{
+  "EventBus": {
+    "Provider": "Azure",
+    "Azure": {
+      "ServiceBusConnectionString": "Endpoint=sb://...",
+      "EventGridTopicEndpoint": "https://...",
+      "EventGridAccessKey": "...",
+      "ServicePrefix": "task-manager",
+      "MaxDeliveryCount": 3,
+      "LockDurationSeconds": 300,
+      "EventGridTopicName": "task-manager-events"
+    }
+  }
+}
+```
+
+#### GCP Pub/Sub (Optional)
+
+**Configuration**:
+```json
+{
+  "EventBus": {
+    "Provider": "GCP",
+    "GCP": {
+      "ProjectId": "your-project-id",
+      "CredentialsPath": "path/to/service-account-key.json",
+      "ServicePrefix": "task-manager",
+      "AckDeadlineSeconds": 300,
+      "MaxDeliveryAttempts": 3,
+      "SchedulerLocation": "us-central1",
+      "ServiceAccountEmail": "YOUR_SERVICE_ACCOUNT@YOUR_PROJECT.iam.gserviceaccount.com"
+    }
+  }
+}
+```
+
+#### Legacy RabbitMQ (Deprecated)
+
+RabbitMQ support has been removed. For RabbitMQ support, implement `RabbitMQEventBus` adapter.
 
 ### 11.4 Service Ports
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| WorkflowManagement.API | 5000 | Core workflow CRUD |
-| SLAConfiguration.API | 5001 | SLA CRUD |
-| PriorityRuleEngine.API | 5002 | Priority rules CRUD |
-| Workload.API | 5003 | Workload queries |
-| APIGateway | 5004 | Task orchestration entry |
+| **APIGateway** | **5004** | **Single entry point** - Reverse proxy + Task orchestration |
+| WorkflowManagement.API | 5000 | Core workflow CRUD (accessed via API Gateway) |
+| SLAConfiguration.API | 5002 | SLA CRUD (accessed via API Gateway) |
+| PriorityRuleEngine.API | 5010 | Priority rules CRUD (accessed via API Gateway) |
+| Workload.API | 5003 | Workload queries (accessed via API Gateway) |
 | TaskService | 5005 | Task lifecycle + Stage completion API |
 | WorkflowService | 5006 | Workflow selection + Stage orchestration |
 | SLAManagerService | 5007 | SLA management |
@@ -1403,7 +1667,44 @@ npm start
 ```
 
 ### 11.6 CORS Configuration
-All backend APIs are configured to allow requests from `http://localhost:3000`.
+API Gateway is configured to allow requests from `http://localhost:3000`. All CORS is handled at the gateway level.
+
+### 11.7 API Gateway Routing Configuration
+
+The API Gateway uses **YARP (Yet Another Reverse Proxy)** for routing. Configuration is in `appsettings.json`:
+
+```json
+{
+  "ReverseProxy": {
+    "Routes": {
+      "workflow-route": {
+        "ClusterId": "workflow-cluster",
+        "Match": { "Path": "/api/workflows/{**catch-all}" }
+      },
+      "task-crud-route": {
+        "ClusterId": "workflow-cluster",
+        "Match": {
+          "Path": "/api/tasks/{**catch-all}",
+          "Methods": [ "GET", "PUT", "DELETE" ]
+        }
+      },
+      // ... other routes
+    },
+    "Clusters": {
+      "workflow-cluster": {
+        "Destinations": {
+          "destination1": { "Address": "http://localhost:5000" }
+        }
+      }
+      // ... other clusters
+    }
+  }
+}
+```
+
+**Routing Behavior**:
+- `POST /api/tasks` → Handled by API Gateway controller (publishes to RabbitMQ)
+- All other requests → Proxied to appropriate backend service
 
 ---
 
@@ -1416,7 +1717,10 @@ All backend APIs are configured to allow requests from `http://localhost:3000`.
 | ASP.NET Core Web API | 8 | Web framework |
 | Entity Framework Core | 8 | ORM |
 | PostgreSQL | 12+ | Database |
-| RabbitMQ | 3.x | Message broker |
+| **AWS SDK** | **3.7.400.0** | **EventBridge, SQS, SNS, Scheduler** |
+| **Azure SDK** | **7.18.0** | **Service Bus, Event Grid** |
+| **GCP SDK** | **3.15.0** | **Pub/Sub, Cloud Scheduler** |
+| YARP (Yet Another Reverse Proxy) | 2.2.0 | API Gateway routing |
 | AutoMapper | 12+ | Object mapping |
 
 ### Frontend
@@ -1436,7 +1740,9 @@ All backend APIs are configured to allow requests from `http://localhost:3000`.
 | Technology | Purpose |
 |------------|---------|
 | PostgreSQL 12+ | Database |
-| RabbitMQ 3.x | Message broker |
+| **AWS EventBridge/SQS/SNS** | **Event bus (default)** |
+| **Azure Service Bus/Event Grid** | **Event bus (optional)** |
+| **GCP Pub/Sub** | **Event bus (optional)** |
 | Docker (optional) | Containerization |
 
 ---
@@ -1451,6 +1757,12 @@ All backend APIs are configured to allow requests from `http://localhost:3000`.
 | Team and member management | ✅ Complete |
 | Task assignment and tracking | ✅ Complete |
 | Event-driven orchestration | ✅ Complete |
+| **Multi-cloud event bus architecture** | ✅ Complete |
+| **AWS EventBridge implementation** | ✅ Complete |
+| **Azure Service Bus implementation** | ✅ Complete |
+| **GCP Pub/Sub implementation** | ✅ Complete |
+| **Factory pattern for provider abstraction** | ✅ Complete |
+| **EventBridge Scheduler for delayed events** | ✅ Complete |
 | Priority rule engine | ✅ Complete |
 | SLA configuration and monitoring | ✅ Complete |
 | Workload-based task assignment | ✅ Complete |
@@ -1491,17 +1803,347 @@ This system provides a complete **Generic Workflow Orchestration Platform** with
 
 ### Key Design Principles
 
-- ✅ **Fully event-driven** (RabbitMQ)
+- ✅ **Single entry point** (API Gateway routes all frontend requests)
+- ✅ **Fully event-driven** (Multi-cloud event bus for orchestration)
 - ✅ **No synchronous service chaining**
 - ✅ **Idempotent consumers**
 - ✅ **Separate databases per service**
 - ✅ **Configuration-driven** (not hardcoded)
 - ✅ **Supports both Process and Escalation workflows**
 - ✅ **Automatic team handoffs** via reassignment
+- ✅ **Reverse proxy routing** (YARP) for centralized request handling
+- ✅ **Multi-cloud support** (AWS/Azure/GCP via factory pattern)
+- ✅ **Scheduled events** (no polling required)
 
 ---
 
-**Document Version**: 2.0  
+## 14. Multi-Cloud Event Bus Architecture
+
+### 14.1 Overview
+
+The system implements a **provider-agnostic event bus architecture** using the Factory Pattern, allowing seamless switching between cloud providers (AWS, Azure, GCP) via configuration changes only.
+
+### 14.2 Architecture Components
+
+#### Abstraction Layer
+
+**`IEventBus` Interface**:
+```csharp
+public interface IEventBus
+{
+    Task PublishAsync<T>(T eventData, string source, string detailType, Guid correlationId);
+    Task ScheduleAsync<T>(T eventData, string source, string detailType, Guid correlationId, DateTime scheduledTime);
+    Task ScheduleAsync<T>(T eventData, string source, string detailType, Guid correlationId, TimeSpan delay);
+    void StartConsuming<T>(string queueName, Func<T, Guid, Task> handler);
+    void StopConsuming();
+}
+```
+
+**Factory Pattern**:
+- `IEventBusFactory` - Factory interface
+- `EventBusFactory` - Implementation that resolves provider from configuration
+- All providers registered in DI container
+- Runtime provider selection based on `EventBus:Provider` config
+
+#### Provider Implementations
+
+| Provider | Event Bus | Queues | Scheduling | Status |
+|----------|-----------|--------|------------|--------|
+| **AWS** | EventBridge | SQS | EventBridge Scheduler | ✅ Implemented |
+| **Azure** | Event Grid / Service Bus | Service Bus | Service Bus Scheduled | ✅ Implemented |
+| **GCP** | Pub/Sub | Pub/Sub Subscriptions | Cloud Scheduler | ✅ Implemented |
+
+### 14.3 Provider-Specific Details
+
+#### AWS EventBridge Implementation
+
+**Components**:
+- **EventBridge**: Central event bus (default or custom event bus)
+- **SQS Queues**: One per service (auto-created with DLQ)
+- **SNS Topics**: Optional fan-out for multiple consumers
+- **EventBridge Scheduler**: One-time scheduled events
+
+**Event Flow**:
+```
+Application Code
+    ↓
+IEventBus.PublishAsync()
+    ↓
+AwsEventBus
+    ↓
+EventBridge.PutEvents()
+    ↓
+EventBridge Rules → SNS → SQS
+    ↓
+Service Queue (SQS)
+    ↓
+AwsEventBus.StartConsuming()
+    ↓
+Event Handler
+```
+
+**Scheduled Events**:
+- SLA deadlines: `ScheduleAsync()` creates EventBridge Scheduler job
+- Escalation timeouts: `ScheduleAsync()` creates EventBridge Scheduler job
+- Jobs execute at scheduled time and publish to EventBridge
+
+#### Azure Implementation
+
+**Components**:
+- **Azure Service Bus**: Topics and queues
+- **Azure Event Grid**: Optional event routing
+- **Service Bus Scheduled Messages**: Delayed delivery
+
+**Event Flow**:
+```
+Application Code
+    ↓
+IEventBus.PublishAsync()
+    ↓
+AzureEventBus
+    ↓
+Event Grid (if configured) OR Service Bus Topic
+    ↓
+Service Bus Queue/Subscription
+    ↓
+AzureEventBus.StartConsuming()
+    ↓
+Event Handler
+```
+
+#### GCP Implementation
+
+**Components**:
+- **Cloud Pub/Sub**: Topics and subscriptions
+- **Cloud Scheduler**: Cron-based scheduled jobs
+
+**Event Flow**:
+```
+Application Code
+    ↓
+IEventBus.PublishAsync()
+    ↓
+GcpEventBus
+    ↓
+Pub/Sub Topic
+    ↓
+Pub/Sub Subscription
+    ↓
+GcpEventBus.StartConsuming()
+    ↓
+Event Handler
+```
+
+### 14.4 Migration from RabbitMQ
+
+#### What Changed
+
+**Removed**:
+- ❌ RabbitMQ exchanges and routing keys
+- ❌ RabbitMQ delayed message exchange plugin
+- ❌ `SLAMonitorService` polling background service
+- ❌ `StageEscalationMonitorService` polling background service
+- ❌ `IRabbitMQPublisher` and `IRabbitMQConsumer` interfaces
+
+**Added**:
+- ✅ `IEventBus` abstraction interface
+- ✅ `EventBusFactory` for provider selection
+- ✅ `AwsEventBus`, `AzureEventBus`, `GcpEventBus` implementations
+- ✅ EventBridge Scheduler for delayed events
+- ✅ `EventBusConstants` (replaces `RabbitMQConstants`)
+
+**Preserved**:
+- ✅ All event contracts unchanged
+- ✅ All event handlers unchanged
+- ✅ Idempotency logic intact
+- ✅ Domain logic unchanged
+
+#### Configuration Migration
+
+**Before (RabbitMQ)**:
+```json
+{
+  "RabbitMQ": {
+    "HostName": "localhost",
+    "Port": 5672,
+    "UserName": "guest",
+    "Password": "guest"
+  }
+}
+```
+
+**After (AWS)**:
+```json
+{
+  "EventBus": {
+    "Provider": "AWS",
+    "AWS": {
+      "Region": "us-east-1",
+      "EventBusName": "default",
+      "ServicePrefix": "task-manager",
+      "SchedulerRoleArn": "arn:aws:iam::ACCOUNT_ID:role/EventBridgeSchedulerRole"
+    }
+  }
+}
+```
+
+### 14.5 Switching Providers
+
+To switch from AWS to Azure or GCP:
+
+1. **Update `appsettings.json`**:
+   ```json
+   {
+     "EventBus": {
+       "Provider": "Azure",  // Change only this!
+       "Azure": {
+         "ServiceBusConnectionString": "...",
+         ...
+       }
+     }
+   }
+   ```
+
+2. **Restart services** - No code changes required
+
+3. **Infrastructure Setup**:
+   - Azure: Create Service Bus namespace, Event Grid topic
+   - GCP: Enable Pub/Sub and Cloud Scheduler APIs, create service account
+
+### 14.6 Benefits
+
+1. **Zero Code Changes**: Switch providers via configuration
+2. **Cloud Native**: Leverages managed cloud services
+3. **No Infrastructure Management**: No RabbitMQ server to maintain
+4. **Better Scalability**: Cloud services auto-scale
+5. **Cost Optimization**: Choose provider based on requirements
+6. **Vendor Flexibility**: Easy migration between clouds
+7. **Scheduled Events**: Native scheduling (no polling needed)
+
+---
+
+## 15. Migration Guide: RabbitMQ to AWS EventBridge
+
+### 15.1 Overview
+
+This guide documents the migration from RabbitMQ to AWS EventBridge (and multi-cloud support) completed in January 2026.
+
+### 15.2 What Was Changed
+
+#### Code Changes
+
+**Abstraction Layer** (New):
+- `IEventBus` interface - Provider-agnostic event bus
+- `IEventBusFactory` interface - Factory for provider selection
+- `EventBusFactory` - Factory implementation
+- `EventBusOptions` base class
+- `AwsEventBusOptions`, `AzureEventBusOptions`, `GcpEventBusOptions`
+
+**Implementations** (New):
+- `AwsEventBus` - AWS EventBridge implementation
+- `AzureEventBus` - Azure Service Bus implementation
+- `GcpEventBus` - GCP Pub/Sub implementation
+
+**Constants** (Updated):
+- `EventBusConstants` - Replaces `RabbitMQConstants`
+  - Event sources (replaces exchanges)
+  - Detail types (replaces routing keys)
+  - Queue names (per service)
+
+**Service Updates**:
+- All services updated to use `IEventBus` instead of `IRabbitMQPublisher`/`IRabbitMQConsumer`
+- All `Program.cs` files updated with factory pattern registration
+- All `appsettings.json` files updated with EventBus configuration
+
+**Removed Services**:
+- `SLAMonitorService` - Replaced by EventBridge Scheduler
+- `StageEscalationMonitorService` - Replaced by EventBridge Scheduler
+
+#### Infrastructure Changes
+
+**Before**:
+- RabbitMQ server (Docker or installed)
+- RabbitMQ delayed message exchange plugin
+- Manual queue/exchange setup
+
+**After**:
+- AWS EventBridge (default event bus)
+- SQS queues (auto-created per service)
+- EventBridge Scheduler (for delayed events)
+- EventBridge Rules (route events to SQS)
+
+### 15.3 Migration Steps
+
+#### Step 1: Update Configuration
+
+Update all `appsettings.json` files:
+```json
+{
+  "EventBus": {
+    "Provider": "AWS",
+    "AWS": {
+      "Region": "us-east-1",
+      "EventBusName": "default",
+      "ServicePrefix": "task-manager",
+      "VisibilityTimeoutSeconds": 300,
+      "MaxReceiveCount": 3,
+      "SchedulerGroupName": "task-manager-schedules",
+      "SchedulerRoleArn": "arn:aws:iam::ACCOUNT_ID:role/EventBridgeSchedulerRole"
+    }
+  }
+}
+```
+
+#### Step 2: AWS Infrastructure Setup
+
+1. **EventBridge**: Use default event bus (or create custom)
+2. **IAM Role**: Create role for EventBridge Scheduler with permissions:
+   - `events:PutEvents` (to publish to EventBridge)
+   - `events:CreateSchedule`, `events:UpdateSchedule`, `events:DeleteSchedule`
+3. **EventBridge Rules**: Create rules to route events to SQS queues
+4. **SQS Queues**: Auto-created by `AwsEventBus` on first use
+
+#### Step 3: Deploy and Test
+
+1. Deploy updated services
+2. Verify events are published to EventBridge
+3. Verify events are consumed from SQS queues
+4. Verify scheduled events fire at correct times
+
+### 15.4 Backward Compatibility
+
+- ✅ All event contracts unchanged
+- ✅ All event handlers unchanged
+- ✅ All domain logic preserved
+- ✅ Idempotency logic intact
+- ✅ Default provider is AWS (if Provider not specified)
+
+### 15.5 Rollback Plan
+
+If issues occur, you can:
+1. Revert to RabbitMQ by implementing `RabbitMQEventBus` adapter
+2. Add RabbitMQ case to `EventBusFactory`
+3. Update configuration to `"Provider": "RabbitMQ"`
+
+### 15.6 Testing Checklist
+
+- [ ] All services start without errors
+- [ ] Events are published successfully
+- [ ] Events are consumed by handlers
+- [ ] Scheduled SLA deadline events fire correctly
+- [ ] Scheduled escalation timeout events fire correctly
+- [ ] Idempotency checks work correctly
+- [ ] Event handlers process events correctly
+- [ ] No duplicate event processing
+- [ ] DLQ receives failed messages
+
+---
+
+**Document Version**: 3.0  
 **Last Updated**: January 2026  
 **Author**: System Documentation
 
+**Version History**:
+- **v3.0** (January 2026): Migrated from RabbitMQ to multi-cloud event bus architecture (AWS/Azure/GCP)
+- **v2.0** (January 2026): Added stage orchestration and automatic reassignment
+- **v1.0** (Initial): Core workflow management system

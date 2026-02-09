@@ -18,20 +18,20 @@ namespace TaskService.Application.Services;
 public class TaskService : ITaskService
 {
     private readonly ITaskRepository _repository;
-    private readonly IRabbitMQPublisher _publisher;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<TaskService> _logger;
     private readonly IConfiguration _configuration;
     private readonly HttpClient _httpClient;
 
     public TaskService(
         ITaskRepository repository,
-        IRabbitMQPublisher publisher,
+        IEventBus eventBus,
         ILogger<TaskService> logger,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory)
     {
         _repository = repository;
-        _publisher = publisher;
+        _eventBus = eventBus;
         _logger = logger;
         _configuration = configuration;
         _httpClient = httpClientFactory.CreateClient();
@@ -66,10 +66,10 @@ public class TaskService : ITaskService
             CorrelationId = correlationId
         };
 
-        await _publisher.PublishAsync(
+        await _eventBus.PublishAsync(
             taskCreatedEvent,
-            RabbitMQConstants.TaskExchange,
-            RabbitMQConstants.TaskCreated,
+            EventBusConstants.TaskSource,
+            EventBusConstants.TaskCreated,
             correlationId);
 
         _logger.LogInformation(
@@ -111,10 +111,10 @@ public class TaskService : ITaskService
             CorrelationId = correlationId
         };
 
-        await _publisher.PublishAsync(
+        await _eventBus.PublishAsync(
             statusUpdatedEvent,
-            RabbitMQConstants.TaskExchange,
-            RabbitMQConstants.TaskStatusUpdated,
+            EventBusConstants.TaskSource,
+            EventBusConstants.TaskStatusUpdated,
             correlationId);
 
         _logger.LogInformation(
@@ -141,7 +141,7 @@ public class TaskService : ITaskService
             }
 
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Map status to WorkflowManagement.API format (string)
             // WorkloadService expects "In Progress" (with space), not "InProgress"
@@ -150,6 +150,7 @@ public class TaskService : ITaskService
             {
                 statusString = "In Progress";
             }
+            // Removed: Map Assigned to Pending - WorkloadService handles both statuses
 
             // Get all tasks for this workflow to find the matching task
             var tasksResponse = await _httpClient.GetAsync(
@@ -195,7 +196,7 @@ public class TaskService : ITaskService
                         Status = statusString,
                         Priority = task.Priority,
                         DueDate = task.SLADeadline,
-                        StageId = (int?)null,
+                        StageId = task.CurrentStageId, // Preserve current stage instead of null
                         AssignedToMemberId = task.MemberId.Value
                     };
 
@@ -353,7 +354,7 @@ public class TaskService : ITaskService
             }
 
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Get all tasks for this workflow to find the matching task
             var tasksResponse = await _httpClient.GetAsync(
@@ -444,7 +445,7 @@ public class TaskService : ITaskService
                 taskServiceTaskNamesSet.Count);
 
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
-                ?? "http://localhost:5000/api";
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Get all tasks from WorkflowManagement.API
             var tasksResponse = await _httpClient.GetAsync($"{workflowManagementApiUrl}/tasks");
@@ -602,10 +603,10 @@ public class TaskService : ITaskService
             CorrelationId = correlationId
         };
 
-        await _publisher.PublishAsync(
+        await _eventBus.PublishAsync(
             stageCompletedEvent,
-            RabbitMQConstants.WorkflowExchange,
-            RabbitMQConstants.TaskStageCompleted,
+            EventBusConstants.WorkflowSource,
+            EventBusConstants.TaskStageCompleted,
             correlationId);
 
         _logger.LogInformation(
