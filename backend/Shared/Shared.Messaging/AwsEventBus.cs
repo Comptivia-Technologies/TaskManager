@@ -2,8 +2,6 @@ using Amazon.EventBridge;
 using Amazon.EventBridge.Model;
 using Amazon.SQS;
 using Amazon.SQS.Model;
-using Amazon.SNS;
-using Amazon.SNS.Model;
 using Amazon.Scheduler;
 using Amazon.Scheduler.Model;
 using System.Text.Json;
@@ -18,7 +16,6 @@ public class AwsEventBus : IEventBus, IDisposable
     private readonly ILogger<AwsEventBus> _logger;
     private readonly IAmazonEventBridge _eventBridge;
     private readonly IAmazonSQS _sqs;
-    private readonly IAmazonSNS _sns;
     private readonly IAmazonScheduler _scheduler;
     private readonly Dictionary<string, CancellationTokenSource> _consumers = new();
     private readonly object _lock = new object();
@@ -34,9 +31,6 @@ public class AwsEventBus : IEventBus, IDisposable
         
         var sqsConfig = new AmazonSQSConfig { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) };
         _sqs = new AmazonSQSClient(_options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken, sqsConfig);
-        
-        var snsConfig = new AmazonSNSConfig { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) };
-        _sns = new AmazonSNSClient(_options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken, snsConfig);
         
         var schedulerConfig = new AmazonSchedulerConfig { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) };
         _scheduler = new AmazonSchedulerClient(_options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken, schedulerConfig);
@@ -133,7 +127,7 @@ public class AwsEventBus : IEventBus, IDisposable
             var accountId = await GetAccountIdAsync();
             
             // Target: Publish to EventBridge
-            var target = new Target
+            var target = new Amazon.Scheduler.Model.Target
             {
                 Arn = $"arn:aws:events:{_options.Region}:{accountId}:event-bus/{_options.EventBusName}",
                 RoleArn = _options.SchedulerRoleArn ?? throw new InvalidOperationException("SchedulerRoleArn must be configured in AwsEventBusOptions"),
@@ -207,7 +201,7 @@ public class AwsEventBus : IEventBus, IDisposable
                     MaxNumberOfMessages = 10,
                     WaitTimeSeconds = 20, // Long polling
                     MessageAttributeNames = new List<string> { "All" },
-                    AttributeNames = new List<string> { "All" }
+                    MessageSystemAttributeNames = new List<string> { "All" }
                 };
 
                 var response = await _sqs.ReceiveMessageAsync(receiveRequest, cancellationToken);
@@ -393,7 +387,7 @@ public class AwsEventBus : IEventBus, IDisposable
                 Name = _options.SchedulerGroupName
             });
         }
-        catch (ResourceNotFoundException)
+        catch (Amazon.Scheduler.Model.ResourceNotFoundException)
         {
             await _scheduler.CreateScheduleGroupAsync(new CreateScheduleGroupRequest
             {
@@ -408,7 +402,6 @@ public class AwsEventBus : IEventBus, IDisposable
         StopConsuming();
         _eventBridge?.Dispose();
         _sqs?.Dispose();
-        _sns?.Dispose();
         _scheduler?.Dispose();
     }
 

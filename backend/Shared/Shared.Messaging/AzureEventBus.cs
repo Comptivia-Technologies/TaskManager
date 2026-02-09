@@ -233,6 +233,7 @@ public class AzureEventBus : IEventBus, IDisposable
     {
         StopConsuming();
         _serviceBusClient?.DisposeAsync().GetAwaiter().GetResult();
-        _eventGridClient?.Dispose();
+        // EventGridPublisherClient doesn't implement IDisposable - it's managed by the SDK
+        // No explicit disposal needed
     }
 }

@@ -126,19 +126,24 @@ using (var scope = app.Services.CreateScope())
         var dbConnectionString = configuration.GetConnectionString("DefaultConnection");
         if (string.IsNullOrEmpty(dbConnectionString))
         {
-            var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
-            var dbPort = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
-            var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "PriorityRuleEngine";
-            var dbUser = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
-            var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD")
+            var dbHost2 = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+            var dbPort2 = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+            var dbName2 = Environment.GetEnvironmentVariable("DB_NAME") ?? "PriorityRuleEngine";
+            var dbUser2 = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
+            var dbPassword2 = Environment.GetEnvironmentVariable("DB_PASSWORD")
                 ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
             
-            dbConnectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword}";
+            dbConnectionString = $"Host={dbHost2};Port={dbPort2};Database={dbName2};Username={dbUser2};Password={dbPassword2}";
         }
         
         // Extract database name from connection string
-        var dbName = "PriorityRuleEngine";
-        var postgresConnectionString = dbConnectionString.Replace($"Database={dbName}", "Database=postgres");
+        var targetDbName = "PriorityRuleEngine";
+        var dbNameMatch = System.Text.RegularExpressions.Regex.Match(dbConnectionString, @"Database=([^;]+)");
+        if (dbNameMatch.Success)
+        {
+            targetDbName = dbNameMatch.Groups[1].Value;
+        }
+        var postgresConnectionString = dbConnectionString.Replace($"Database={targetDbName}", "Database=postgres");
         
         // Connect to postgres database to create the target database if needed
         using (var tempConnection = new NpgsqlConnection(postgresConnectionString))
@@ -148,23 +153,23 @@ using (var scope = app.Services.CreateScope())
             // Check if database exists
             using var checkDbCommand = tempConnection.CreateCommand();
             checkDbCommand.CommandText = $@"
-                SELECT 1 FROM pg_database WHERE datname = '{dbName}'
+                SELECT 1 FROM pg_database WHERE datname = '{targetDbName}'
             ";
             var dbExists = await checkDbCommand.ExecuteScalarAsync() != null;
             
             if (!dbExists)
             {
-                scopeLogger.LogInformation($"Database '{dbName}' does not exist. Creating...");
+                scopeLogger.LogInformation($"Database '{targetDbName}' does not exist. Creating...");
                 using var createDbCommand = tempConnection.CreateCommand();
                 createDbCommand.CommandText = $@"
-                    CREATE DATABASE ""{dbName}""
+                    CREATE DATABASE ""{targetDbName}""
                 ";
                 await createDbCommand.ExecuteNonQueryAsync();
-                scopeLogger.LogInformation($"Database '{dbName}' created successfully.");
+                scopeLogger.LogInformation($"Database '{targetDbName}' created successfully.");
             }
             else
             {
-                scopeLogger.LogInformation($"Database '{dbName}' already exists.");
+                scopeLogger.LogInformation($"Database '{targetDbName}' already exists.");
             }
         }
         

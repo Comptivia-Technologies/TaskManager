@@ -44,8 +44,6 @@ builder.Services.AddScoped<IWorkloadRepository, WorkloadRepository>();
 builder.Services.AddScoped<IWorkloadService, WorkloadService>();
 
 // CORS
-builder.Services.AddCors(options =>
-// CORS
 var allowedOrigin = builder.Configuration["Cors:AllowedOrigin"] 
     ?? throw new InvalidOperationException("Cors:AllowedOrigin configuration is required");
 builder.Services.AddCors(options =>

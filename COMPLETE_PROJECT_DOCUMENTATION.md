@@ -72,7 +72,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 #### **Tier 2: Event-Driven Microservices (Orchestration)**
 - **APIGateway** (Port 5004) - **Single entry point** for all frontend requests + Task creation orchestration
   - Reverse proxy routing (YARP) to all backend services
-  - Task creation publishes to RabbitMQ
+  - Task creation publishes to Event Bus (AWS/Azure/GCP)
 - **TaskService** (Port 5005) - Task lifecycle management + Stage completion API
 - **WorkflowService** (Port 5006) - Automated workflow selection + Stage orchestration
 - **SLAManagerService** (Port 5007) - SLA configuration and monitoring
@@ -286,14 +286,16 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 - `WorkflowSelectionService` - Workflow selection logic
 - `StageOrchestrationService` - Stage transition logic
 
-**Background Services**: None (replaced by scheduled events)
+**Background Services**: 
+- Primary: Scheduled events via EventBridge Scheduler (no polling)
+- Fallback: `StageEscalationMonitorService` - Polls every 60 seconds as backup (if scheduled events fail)
 
 **Publishes**: `WorkflowSelectedEvent`, `TaskStageStartedEvent`, `TaskCompletedEvent`
 
 #### 3.2.4 SLAManagerService (Port 5007)
 **Purpose**: SLA configuration and deadline monitoring
 
-**Database**: `SLAConfiguration` (read), SLAAssignments (write)
+**Database**: `WorkflowManagement` (read and write)
 
 **Tables**:
 - Reads: SLAConfigurations
@@ -306,7 +308,9 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 **Services**:
 - `SLAService` - SLA configuration logic
 
-**Background Services**: None (replaced by scheduled events via EventBridge Scheduler)
+**Background Services**: 
+- Primary: Scheduled events via EventBridge Scheduler (no polling)
+- Fallback: `SLAMonitorService` - Polls every 1 minute as backup (if scheduled events fail)
 
 **Publishes**: `SLAConfiguredEvent`, `TaskOverdueEvent`
 
@@ -677,7 +681,29 @@ CREATE TABLE "PriorityRules" (
 | DELETE | `/api/task-service/{id}` | Delete task |
 | POST | `/api/task-service/complete-stage/{id}` | Complete current stage and transition to next |
 | POST | `/api/task-service/sync-overdue` | Sync all overdue tasks to WorkflowManagement.API |
-| POST | `/api/tasks/cleanup-orphaned` | Cleanup orphaned tasks from WorkflowManagement.API |
+| POST | `/api/task-service/cleanup-orphaned` | Cleanup orphaned tasks from WorkflowManagement.API |
+
+### 5.7 Error Handling
+
+All services implement consistent error handling via `ExceptionHandlingMiddleware`:
+
+**Error Response Format**:
+```json
+{
+  "error": "Error message"
+}
+```
+
+**HTTP Status Codes**:
+- `400 Bad Request` - Invalid input (ArgumentException)
+- `404 Not Found` - Resource not found (KeyNotFoundException)
+- `500 Internal Server Error` - Server errors
+
+**Services with ExceptionHandlingMiddleware**:
+- WorkflowManagement.API
+- SLAConfiguration.API
+- Workload.API
+- TaskService (via try-catch in controllers)
 
 ---
 
@@ -807,6 +833,8 @@ Configure in `appsettings.json`:
 6. **Cost Optimization**: Choose provider based on cost/requirements
 
 ### 6.2 Event Contracts
+
+**Note**: `TaskCreatedForPriority` is defined in EventBusConstants but is currently unused (reserved for future priority-first workflow selection).
 
 #### TaskCreatedEvent
 ```csharp

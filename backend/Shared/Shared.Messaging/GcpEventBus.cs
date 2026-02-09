@@ -1,5 +1,6 @@
 using Google.Cloud.PubSub.V1;
 using Google.Cloud.Scheduler.V1;
+using Google.Api.Gax.ResourceNames;
 using Google.Protobuf.WellKnownTypes;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -15,7 +16,7 @@ public class GcpEventBus : IEventBus, IDisposable
     private readonly PublisherServiceApiClient _publisherClient;
     private readonly SubscriberServiceApiClient _subscriberClient;
     private readonly CloudSchedulerClient? _schedulerClient;
-    private readonly Dictionary<string, SubscriberClient> _subscribers = new();
+    private readonly Dictionary<string, (SubscriberClient Client, CancellationTokenSource Cts)> _subscribers = new();
     private readonly object _lock = new object();
 
     public GcpEventBus(IOptions<GcpEventBusOptions> options, ILogger<GcpEventBus> logger)
@@ -43,7 +44,7 @@ public class GcpEventBus : IEventBus, IDisposable
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             });
 
-            var topicName = TopicName.FromProjectTopic(_options.ProjectId, $"{_options.ServicePrefix}-{detailType.ToLower()}");
+            var topicName = Google.Cloud.PubSub.V1.TopicName.FromProjectTopic(_options.ProjectId, $"{_options.ServicePrefix}-{detailType.ToLower()}");
             
             // Ensure topic exists
             try
@@ -120,7 +121,7 @@ public class GcpEventBus : IEventBus, IDisposable
 
             var scheduleName = $"projects/{_options.ProjectId}/locations/{_options.SchedulerLocation}/jobs/{_options.ServicePrefix}-{detailType.ToLower()}-{correlationId:N}";
             
-            var topicName = TopicName.FromProjectTopic(_options.ProjectId, $"{_options.ServicePrefix}-{detailType.ToLower()}");
+            var topicName = Google.Cloud.PubSub.V1.TopicName.FromProjectTopic(_options.ProjectId, $"{_options.ServicePrefix}-{detailType.ToLower()}");
             var topicPath = $"projects/{_options.ProjectId}/topics/{topicName.TopicId}";
 
             var job = new Job
@@ -144,18 +145,24 @@ public class GcpEventBus : IEventBus, IDisposable
 
             if (!string.IsNullOrEmpty(_options.ServiceAccountEmail))
             {
-                job.PubsubTarget.ServiceAccountEmail = _options.ServiceAccountEmail;
+                // ServiceAccountEmail is set via IAM policy, not directly on PubsubTarget
+                // This is handled at the job level or via IAM bindings
             }
 
+            var parent = LocationName.FromProjectLocation(_options.ProjectId, _options.SchedulerLocation);
+            
             try
             {
-                await _schedulerClient.CreateJobAsync(new LocationName(_options.ProjectId, _options.SchedulerLocation), job);
+                await _schedulerClient.CreateJobAsync(parent, job);
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.AlreadyExists)
             {
                 // Job already exists, update it
-                job.Name = scheduleName;
-                await _schedulerClient.UpdateJobAsync(job);
+                var updateRequest = new UpdateJobRequest
+                {
+                    Job = job
+                };
+                await _schedulerClient.UpdateJobAsync(updateRequest);
             }
 
             _logger.LogInformation(
@@ -180,8 +187,8 @@ public class GcpEventBus : IEventBus, IDisposable
                 return;
             }
 
-            var subscriptionName = SubscriptionName.FromProjectSubscription(_options.ProjectId, $"{_options.ServicePrefix}-{queueName}");
-            var topicName = TopicName.FromProjectTopic(_options.ProjectId, $"{_options.ServicePrefix}-{queueName}");
+            var subscriptionName = Google.Cloud.PubSub.V1.SubscriptionName.FromProjectSubscription(_options.ProjectId, $"{_options.ServicePrefix}-{queueName}");
+            var topicName = Google.Cloud.PubSub.V1.TopicName.FromProjectTopic(_options.ProjectId, $"{_options.ServicePrefix}-{queueName}");
 
             // Ensure subscription exists
             try
@@ -204,44 +211,41 @@ public class GcpEventBus : IEventBus, IDisposable
             }
 
             var subscriber = SubscriberClient.Create(subscriptionName);
+            var cts = new CancellationTokenSource();
             
-            _ = Task.Run(async () =>
+            // Start subscriber with message handler
+            _ = subscriber.StartAsync(async (message, cancellationToken) =>
             {
-                await foreach (var message in subscriber.StartAsync())
+                try
                 {
-                    try
+                    var correlationId = Guid.Parse(
+                        message.Attributes.GetValueOrDefault("CorrelationId") ?? message.MessageId ?? Guid.NewGuid().ToString());
+
+                    var json = message.Data.ToStringUtf8();
+                    var eventData = JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions
                     {
-                        var correlationId = Guid.Parse(
-                            message.Attributes.GetValueOrDefault("CorrelationId") ?? message.MessageId ?? Guid.NewGuid().ToString());
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    });
 
-                        var json = message.Data.ToStringUtf8();
-                        var eventData = JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions
-                        {
-                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                        });
-
-                        if (eventData == null)
-                        {
-                            _logger.LogWarning("Failed to deserialize event data from subscription {QueueName}. MessageId: {MessageId}",
-                                queueName, message.MessageId);
-                            subscriber.Ack(message);
-                            continue;
-                        }
-
-                        await handler(eventData, correlationId);
-                        subscriber.Ack(message);
-
-                        _logger.LogDebug("Processed message {MessageId} from subscription {QueueName}", message.MessageId, queueName);
-                    }
-                    catch (Exception ex)
+                    if (eventData == null)
                     {
-                        _logger.LogError(ex, "Error processing message {MessageId} from subscription {QueueName}", message.MessageId, queueName);
-                        subscriber.Nack(message);
+                        _logger.LogWarning("Failed to deserialize event data from subscription {QueueName}. MessageId: {MessageId}",
+                            queueName, message.MessageId);
+                        return SubscriberClient.Reply.Ack;
                     }
+
+                    await handler(eventData, correlationId);
+                    _logger.LogDebug("Processed message {MessageId} from subscription {QueueName}", message.MessageId, queueName);
+                    return SubscriberClient.Reply.Ack;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing message {MessageId} from subscription {QueueName}", message.MessageId, queueName);
+                    return SubscriberClient.Reply.Nack;
                 }
             });
 
-            _subscribers[queueName] = subscriber;
+            _subscribers[queueName] = (subscriber, cts);
             _logger.LogInformation("Started consuming from subscription {QueueName} for event type {EventType}", queueName, typeof(T).Name);
         }
     }
@@ -250,9 +254,11 @@ public class GcpEventBus : IEventBus, IDisposable
     {
         lock (_lock)
         {
-            foreach (var subscriber in _subscribers.Values)
+            foreach (var (subscriber, cts) in _subscribers.Values)
             {
+                cts.Cancel();
                 subscriber.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+                cts.Dispose();
             }
             _subscribers.Clear();
             _logger.LogInformation("Stopped all consumers");
@@ -262,8 +268,7 @@ public class GcpEventBus : IEventBus, IDisposable
     public void Dispose()
     {
         StopConsuming();
-        _publisherClient?.Dispose();
-        _subscriberClient?.Dispose();
-        _schedulerClient?.Dispose();
+        // Google Cloud clients don't require explicit disposal - they're managed by the SDK
+        // The clients will be garbage collected when no longer referenced
     }
 }
