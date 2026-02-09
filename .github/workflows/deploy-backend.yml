@@ -1,0 +1,159 @@
+name: Deploy Backend to ECS
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REGISTRY: 798277642170.dkr.ecr.ap-south-1.amazonaws.com
+  ECS_CLUSTER: workflow-automation-cluster
+  TASK_EXECUTION_ROLE: arn:aws:iam::798277642170:role/workflow-automation-ecsTaskExecutionRole
+  TASK_ROLE: arn:aws:iam::798277642170:role/workflow-automation-eventBridgeSchedulerRole
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push images
+        working-directory: ./backend
+        run: |
+          SERVICES=(
+            "APIGateway:task-manager-api-gateway:5004"
+            "TaskService:task-manager-task-service:5005"
+            "WorkflowService:task-manager-workflow-service:5006"
+            "SLAManagerService:task-manager-sla-manager-service:5007"
+            "WorkloadService:task-manager-workload-service:5008"
+            "PriorityRuleEngine.API:task-manager-priority-rule-engine-api:5010"
+            "WorkflowManagement.API:task-manager-workflow-management-api:5000"
+            "SLAConfiguration.API:task-manager-sla-configuration-api:5002"
+            "Workload.API:task-manager-workload-api:5003"
+          )
+          
+          for service in "${SERVICES[@]}"; do
+            IFS=':' read -r service_dir image_name port <<< "$service"
+            echo "Building $service_dir..."
+            docker build -f $service_dir/Dockerfile -t $image_name .
+            docker tag $image_name:latest $ECR_REGISTRY/$image_name:latest
+            docker push $ECR_REGISTRY/$image_name:latest
+          done
+
+      - name: Deploy to ECS
+        working-directory: ./backend
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          # Deploy each service
+          SERVICES=(
+            "APIGateway:task-manager-api-gateway:api-gateway:5004:"
+            "TaskService:task-manager-task-service:task-service:5005:TaskService"
+            "WorkflowService:task-manager-workflow-service:workflow-service:5006:WorkflowManagement"
+            "SLAManagerService:task-manager-sla-manager-service:sla-manager-service:5007:WorkflowManagement"
+            "WorkloadService:task-manager-workload-service:workload-service:5008:WorkflowManagement"
+            "PriorityRuleEngine.API:task-manager-priority-rule-engine-api:priority-api:5010:PriorityRuleEngine"
+            "WorkflowManagement.API:task-manager-workflow-management-api:workflow-api:5000:WorkflowManagement"
+            "SLAConfiguration.API:task-manager-sla-configuration-api:sla-api:5002:WorkflowManagement"
+            "Workload.API:task-manager-workload-api:workload-api:5003:WorkflowManagement"
+          )
+          
+          for service in "${SERVICES[@]}"; do
+            IFS=':' read -r service_dir family_name container_name port db_name <<< "$service"
+            
+            # Set default DB name if empty
+            if [ -z "$db_name" ]; then
+              db_name="WorkflowManagement"
+            fi
+            
+            # Create task definition JSON
+            cat > task-def-$family_name.json <<EOF
+          {
+            "family": "$family_name",
+            "networkMode": "awsvpc",
+            "requiresCompatibilities": ["FARGATE"],
+            "cpu": "256",
+            "memory": "512",
+            "executionRoleArn": "$TASK_EXECUTION_ROLE",
+            "taskRoleArn": "$TASK_ROLE",
+            "containerDefinitions": [
+              {
+                "name": "$container_name",
+                "image": "$ECR_REGISTRY/$family_name:latest",
+                "essential": true,
+                "portMappings": [
+                  {
+                    "containerPort": 80,
+                    "protocol": "tcp"
+                  }
+                ],
+                "environment": [
+                  {"name": "EVENTBUS_PROVIDER", "value": "AWS"},
+                  {"name": "EventBus__AWS__Region", "value": "ap-south-1"},
+                  {"name": "EventBus__AWS__EventBusName", "value": "work-flow-bus"},
+                  {"name": "EventBus__AWS__ServicePrefix", "value": "task-manager"},
+                  {"name": "EventBus__AWS__VisibilityTimeoutSeconds", "value": "300"},
+                  {"name": "EventBus__AWS__MaxReceiveCount", "value": "3"},
+                  {"name": "EventBus__AWS__SchedulerGroupName", "value": "task-manager-schedules"},
+                  {"name": "EventBus__AWS__SchedulerRoleArn", "value": "$TASK_ROLE"},
+                  {"name": "Cors__AllowedOrigin", "value": "https://dev.workflowautomation.enginuo.com"},
+                  {"name": "DB_HOST", "value": "workflow-automation-db.czj02dhursas.ap-south-1.rds.amazonaws.com"},
+                  {"name": "DB_PORT", "value": "5432"},
+                  {"name": "DB_USER", "value": "postgres"},
+                  {"name": "DB_PASSWORD", "value": "$DB_PASSWORD"},
+                  {"name": "DB_NAME", "value": "$db_name"}
+                ],
+                "logConfiguration": {
+                  "logDriver": "awslogs",
+                  "options": {
+                    "awslogs-group": "/ecs/$family_name",
+                    "awslogs-region": "$AWS_REGION",
+                    "awslogs-stream-prefix": "ecs"
+                  }
+                }
+              }
+            ]
+          }
+          EOF
+            
+            # Register task definition
+            echo "Registering task definition: $family_name"
+            aws ecs register-task-definition --cli-input-json file://task-def-$family_name.json --region $AWS_REGION
+            
+            # Check if service exists
+            SERVICE_EXISTS=$(aws ecs describe-services \
+              --cluster $ECS_CLUSTER \
+              --services $family_name-service \
+              --region $AWS_REGION \
+              --query 'services[0].status' \
+              --output text 2>/dev/null || echo "MISSING")
+            
+            if [ "$SERVICE_EXISTS" = "ACTIVE" ]; then
+              echo "Updating service $family_name-service..."
+              aws ecs update-service \
+                --cluster $ECS_CLUSTER \
+                --service $family_name-service \
+                --task-definition $family_name \
+                --region $AWS_REGION \
+                --force-new-deployment
+            else
+              echo "Service $family_name-service does not exist. Please create it manually in ECS console first, or provide VPC/subnet IDs to create automatically."
+            fi
+          done
