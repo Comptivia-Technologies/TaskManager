@@ -67,7 +67,6 @@ const Members = () => {
     
     try {
       if (isEditMode && selectedMember) {
-        // For edit mode, always use the existing teamId (don't allow changing team from Members page)
         await memberService.update(selectedMember.memberId, {
           ...formData,
           teamId: selectedMember.teamId // Keep original teamId
