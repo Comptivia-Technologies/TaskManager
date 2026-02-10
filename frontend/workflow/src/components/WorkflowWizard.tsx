@@ -6,11 +6,11 @@ import { memberService } from '../services/memberService';
 import { workflowService } from '../services/workflowService';
 import { stageService } from '../services/stageService';
 import { toast } from 'react-toastify';
-import { FiChevronLeft, FiChevronRight, FiX, FiCheck, FiPlus, FiEdit2, FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings, FiShield } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiX, FiPlus, FiEdit2, FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings, FiShield } from 'react-icons/fi';
 import Select from 'react-select';
 import SLAConfigure from './SLAConfigure';
 import ConditionBuilder from './ConditionBuilder';
-import { Member, PriorityRuleCreate } from '../types';
+import { PriorityRuleCreate } from '../types';
 import { priorityRulesService } from '../services/priorityRulesService';
 
 interface WorkflowWizardProps {
@@ -49,7 +49,6 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const totalSteps = 6;
 
-  const stepLabels = ['Get Started', 'Add Members', 'Create Team', 'Create Workflow', 'Configure SLA', 'Create Rules'];
   const stepIcons = [FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings, FiShield];
 
   // Step 1: Get Started (intro)

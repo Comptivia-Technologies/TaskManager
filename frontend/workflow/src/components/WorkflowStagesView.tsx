@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Workflow, Stage } from '../types';
+import { useState, useEffect, useMemo } from 'react';
+import { Workflow } from '../types';
 import { FiUsers, FiArrowRight, FiCheckCircle, FiClock } from 'react-icons/fi';
 
 interface WorkflowStagesViewProps {
@@ -8,7 +8,7 @@ interface WorkflowStagesViewProps {
 
 const WorkflowStagesView = ({ workflow }: WorkflowStagesViewProps) => {
   const [visibleStages, setVisibleStages] = useState<number[]>([]);
-  const sortedStages = [...(workflow.stages || [])].sort((a, b) => a.stageOrder - b.stageOrder);
+  const sortedStages = useMemo(() => [...(workflow.stages || [])].sort((a, b) => a.stageOrder - b.stageOrder), [workflow.stages]);
 
   useEffect(() => {
     // Animate stages appearing one by one
@@ -20,7 +20,7 @@ const WorkflowStagesView = ({ workflow }: WorkflowStagesViewProps) => {
       });
     }, 100);
     return () => clearTimeout(timer);
-  }, [workflow.workflowId]);
+  }, [workflow.workflowId, sortedStages]);
 
   return (
     <div className="space-y-4 font-sans">

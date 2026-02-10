@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useMembers } from '../hooks/useMembers';
 import { useTeams } from '../hooks/useTeams';
 import { memberService } from '../services/memberService';
-import { Member, MemberCreate } from '../types';
+import { Member } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { FiEdit, FiTrash2, FiFilter, FiSearch, FiPlus } from 'react-icons/fi';
 import { toast } from 'react-toastify';

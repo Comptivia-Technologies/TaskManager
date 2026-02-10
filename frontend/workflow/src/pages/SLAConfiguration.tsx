@@ -7,7 +7,7 @@ import { FiClock, FiSettings, FiAlertCircle } from 'react-icons/fi';
 import SLAConfigure from '../components/SLAConfigure';
 
 const SLAConfigurationPage = () => {
-  const { workflows, loading: workflowsLoading, refetch: refetchWorkflows } = useWorkflows();
+  const { workflows, loading: workflowsLoading } = useWorkflows();
   const [slaConfigs, setSlaConfigs] = useState<Map<number, SLAConfiguration>>(new Map());
   const [loading, setLoading] = useState(true);
   const [isConfigureMode, setIsConfigureMode] = useState(false);
