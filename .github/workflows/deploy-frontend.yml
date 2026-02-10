@@ -12,7 +12,7 @@ env:
   AWS_REGION: ap-south-1
   S3_BUCKET: dev.workflowautomation.enginuo.com
   CLOUDFRONT_DISTRIBUTION_ID: E19R7TCMM53H0R
-  API_URL: https://workflow-automation-alb-1600866014.ap-south-1.elb.amazonaws.com
+  API_URL: https://api.workflowautomation.enginuo.com
 
 jobs:
   deploy:
