@@ -27,13 +27,24 @@ public class AwsEventBus : IEventBus, IDisposable
         _logger = logger;
 
         var awsConfig = new AmazonEventBridgeConfig { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) };
-        _eventBridge = new AmazonEventBridgeClient(_options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken, awsConfig);
-        
         var sqsConfig = new AmazonSQSConfig { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) };
-        _sqs = new AmazonSQSClient(_options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken, sqsConfig);
-        
         var schedulerConfig = new AmazonSchedulerConfig { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) };
-        _scheduler = new AmazonSchedulerClient(_options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken, schedulerConfig);
+
+        // Use IAM role if credentials are not provided
+        if (string.IsNullOrEmpty(_options.AccessKeyId))
+        {
+            _logger.LogInformation("Using IAM role for AWS credentials (no explicit AccessKeyId provided)");
+            _eventBridge = new AmazonEventBridgeClient(awsConfig);
+            _sqs = new AmazonSQSClient(sqsConfig);
+            _scheduler = new AmazonSchedulerClient(schedulerConfig);
+        }
+        else
+        {
+            _logger.LogInformation("Using explicit AWS credentials from configuration");
+            _eventBridge = new AmazonEventBridgeClient(_options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken, awsConfig);
+            _sqs = new AmazonSQSClient(_options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken, sqsConfig);
+            _scheduler = new AmazonSchedulerClient(_options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken, schedulerConfig);
+        }
     }
 
     public async Task PublishAsync<T>(T eventData, string source, string detailType, Guid correlationId) where T : class
@@ -357,12 +368,26 @@ public class AwsEventBus : IEventBus, IDisposable
         try
         {
             // Try to get account ID from STS
-            var stsClient = new Amazon.SecurityToken.AmazonSecurityTokenServiceClient(
-                _options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken,
-                new Amazon.SecurityToken.AmazonSecurityTokenServiceConfig 
-                { 
-                    RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) 
-                });
+            Amazon.SecurityToken.IAmazonSecurityTokenService stsClient;
+            if (string.IsNullOrEmpty(_options.AccessKeyId))
+            {
+                // Use IAM role
+                stsClient = new Amazon.SecurityToken.AmazonSecurityTokenServiceClient(
+                    new Amazon.SecurityToken.AmazonSecurityTokenServiceConfig 
+                    { 
+                        RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) 
+                    });
+            }
+            else
+            {
+                // Use explicit credentials
+                stsClient = new Amazon.SecurityToken.AmazonSecurityTokenServiceClient(
+                    _options.AccessKeyId, _options.SecretAccessKey, _options.SessionToken,
+                    new Amazon.SecurityToken.AmazonSecurityTokenServiceConfig 
+                    { 
+                        RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) 
+                    });
+            }
             
             var identity = await stsClient.GetCallerIdentityAsync(new Amazon.SecurityToken.Model.GetCallerIdentityRequest());
             _accountId = identity.Account;
