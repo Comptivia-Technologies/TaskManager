@@ -3,7 +3,7 @@ import { RuleCondition, RuleConditions } from '../types';
 import { FiPlus, FiX, FiEye, FiEyeOff } from 'react-icons/fi';
 
 interface ConditionBuilderProps {
-  value: string; // JSON string
+  value: string;
   onChange: (json: string) => void;
 }
 
