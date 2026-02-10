@@ -15,7 +15,6 @@ const Dashboard = () => {
     return <LoadingSpinner />;
   }
 
-  // Calculate statistics
   const totalStages = workflows.reduce((sum, w) => sum + (w.stages?.length || 0), 0);
   const avgStagesPerWorkflow = workflows.length > 0 ? Math.round(totalStages / workflows.length) : 0;
   
