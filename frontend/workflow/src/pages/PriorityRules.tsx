@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { priorityRulesService } from '../services/priorityRulesService';
-import { PriorityRule, PriorityRuleCreate, PriorityRuleUpdate, RuleConditions, Workflow } from '../types';
+import { PriorityRule, PriorityRuleCreate, RuleConditions } from '../types';
 import { useWorkflows } from '../hooks/useWorkflows';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ConditionBuilder from '../components/ConditionBuilder';
@@ -19,9 +19,22 @@ const PriorityRules = () => {
   // Group rules by workflow
   const [rulesByWorkflow, setRulesByWorkflow] = useState<Map<number | 'global', PriorityRule[]>>(new Map());
 
+  const loadRules = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await priorityRulesService.getAll(showActiveOnly);
+      setRules(data);
+    } catch (error: any) {
+      toast.error('Failed to load priority rules');
+      console.error('Error loading rules:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [showActiveOnly]);
+
   useEffect(() => {
     loadRules();
-  }, [showActiveOnly]);
+  }, [loadRules]);
 
   useEffect(() => {
     // Group rules by workflow
@@ -44,18 +57,6 @@ const PriorityRules = () => {
     setRulesByWorkflow(grouped);
   }, [rules, workflows]);
 
-  const loadRules = async () => {
-    try {
-      setLoading(true);
-      const data = await priorityRulesService.getAll(showActiveOnly);
-      setRules(data);
-    } catch (error: any) {
-      toast.error('Failed to load priority rules');
-      console.error('Error loading rules:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAddRule = (workflowId: number | 'global') => {
     setSelectedWorkflowId(workflowId);

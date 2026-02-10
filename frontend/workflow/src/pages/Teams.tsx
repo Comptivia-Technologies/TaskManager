@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTeams } from '../hooks/useTeams';
 import { useMembers } from '../hooks/useMembers';
 import { teamService } from '../services/teamService';

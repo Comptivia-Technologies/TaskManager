@@ -1,25 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useMembers } from '../hooks/useMembers';
 import { workloadService } from '../services/workloadService';
 import { WorkloadResponse } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiActivity, FiRefreshCw, FiSearch, FiCheckCircle, FiAlertCircle, FiXCircle, FiClock } from 'react-icons/fi';
+import { FiRefreshCw, FiSearch, FiCheckCircle, FiAlertCircle, FiXCircle, FiClock } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 const WorkloadConfiguration = () => {
-  const { members, loading: membersLoading, refetch: refetchMembers } = useMembers();
+  const { members, loading: membersLoading } = useMembers();
   const [workloads, setWorkloads] = useState<Map<number, WorkloadResponse>>(new Map());
   const [loadingWorkloads, setLoadingWorkloads] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    if (members.length > 0) {
-      loadAllWorkloads();
-    }
-  }, [members]);
-
-  const loadAllWorkloads = async () => {
+  const loadAllWorkloads = useCallback(async () => {
     setRefreshing(true);
     const newWorkloads = new Map<number, WorkloadResponse>();
     const loadingSet = new Set<number>();
@@ -40,7 +34,13 @@ const WorkloadConfiguration = () => {
     setWorkloads(newWorkloads);
     setLoadingWorkloads(loadingSet);
     setRefreshing(false);
-  };
+  }, [members]);
+
+  useEffect(() => {
+    if (members.length > 0) {
+      loadAllWorkloads();
+    }
+  }, [members, loadAllWorkloads]);
 
 
   const getStatusColor = (status: string) => {

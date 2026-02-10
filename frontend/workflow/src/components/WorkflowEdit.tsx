@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTeams } from '../hooks/useTeams';
 import { workflowService } from '../services/workflowService';
 import { stageService } from '../services/stageService';
-import { Workflow, WorkflowUpdate, Stage, StageCreate } from '../types';
+import { Workflow, WorkflowUpdate } from '../types';
 import { toast } from 'react-toastify';
 import { FiX, FiEdit2, FiPlus, FiTrash2 } from 'react-icons/fi';
 
