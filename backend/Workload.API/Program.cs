@@ -6,7 +6,7 @@ using Workload.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container for Workload.API API
+// Add services to the container for Workload.API 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -16,7 +16,7 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Database configuration
+// Database configuration for Workload.API
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrEmpty(connectionString))
 {
