@@ -3,31 +3,31 @@ import { Stage, StageCreate, StageUpdate } from '../types';
 
 export const stageService = {
   getAll: async (): Promise<Stage[]> => {
-    const response = await api.get<Stage[]>('/stages');
+    const response = await api.get<Stage[]>('/api/stages');
     return response.data;
   },
 
   getById: async (id: number): Promise<Stage> => {
-    const response = await api.get<Stage>(`/stages/${id}`);
+    const response = await api.get<Stage>(`/api/stages/${id}`);
     return response.data;
   },
 
   create: async (stage: StageCreate): Promise<Stage> => {
-    const response = await api.post<Stage>('/stages', stage);
+    const response = await api.post<Stage>('/api/stages', stage);
     return response.data;
   },
 
   update: async (id: number, stage: StageUpdate): Promise<Stage> => {
-    const response = await api.put<Stage>(`/stages/${id}`, stage);
+    const response = await api.put<Stage>(`/api/stages/${id}`, stage);
     return response.data;
   },
 
   delete: async (id: number): Promise<void> => {
-    await api.delete(`/stages/${id}`);
+    await api.delete(`/api/stages/${id}`);
   },
 
   getByWorkflow: async (workflowId: number): Promise<Stage[]> => {
-    const response = await api.get<Stage[]>(`/stages/workflow/${workflowId}`);
+    const response = await api.get<Stage[]>(`/api/stages/workflow/${workflowId}`);
     return response.data;
   },
 };
