@@ -84,70 +84,75 @@ jobs:
               db_name="WorkflowManagement"
             fi
             
-            # Create task definition JSON
-            cat > task-def-$family_name.json <<TASKDEF_EOF
-          {
-            "family": "$family_name",
-            "networkMode": "awsvpc",
-            "requiresCompatibilities": ["FARGATE"],
-            "cpu": "256",
-            "memory": "512",
-            "executionRoleArn": "$TASK_EXECUTION_ROLE",
-            "taskRoleArn": "$TASK_ROLE",
-            "containerDefinitions": [
-              {
-                "name": "$container_name",
-                "image": "$ECR_REGISTRY/$family_name:latest",
-                "essential": true,
-                "portMappings": [
-                  {
-                    "containerPort": 80,
-                    "protocol": "tcp"
-                  }
-                ],
-                "environment": [
-                  {"name": "ASPNETCORE_URLS", "value": "http://+:80"}
-TASKDEF_EOF
+            # Build environment variables JSON array using jq
+            ENV_JSON=$(jq -n '[{"name":"ASPNETCORE_URLS","value":"http://+:80"}]')
+            
             # Add ReverseProxy environment variables only for API Gateway
             if [ "$service_dir" = "APIGateway" ]; then
-              cat >> task-def-$family_name.json <<REVERSEPROXY_EOF
-,
-                  {"name": "ReverseProxy__Clusters__workflow-cluster__Destinations__destination1__Address", "value": "http://workflow-management-api-service.workflow-automation.local:80"},
-                  {"name": "ReverseProxy__Clusters__sla-cluster__Destinations__destination1__Address", "value": "http://sla-configuration-api-service.workflow-automation.local:80"},
-                  {"name": "ReverseProxy__Clusters__priority-cluster__Destinations__destination1__Address", "value": "http://priority-rule-engine-api-service.workflow-automation.local:80"},
-                  {"name": "ReverseProxy__Clusters__workload-cluster__Destinations__destination1__Address", "value": "http://workload-api-service.workflow-automation.local:80"},
-                  {"name": "ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address", "value": "http://task-service.workflow-automation.local:80"}
-REVERSEPROXY_EOF
+              ENV_JSON=$(echo "$ENV_JSON" | jq '. += [
+                {"name":"ReverseProxy__Clusters__workflow-cluster__Destinations__destination1__Address","value":"http://workflow-management-api-service.workflow-automation.local:80"},
+                {"name":"ReverseProxy__Clusters__sla-cluster__Destinations__destination1__Address","value":"http://sla-configuration-api-service.workflow-automation.local:80"},
+                {"name":"ReverseProxy__Clusters__priority-cluster__Destinations__destination1__Address","value":"http://priority-rule-engine-api-service.workflow-automation.local:80"},
+                {"name":"ReverseProxy__Clusters__workload-cluster__Destinations__destination1__Address","value":"http://workload-api-service.workflow-automation.local:80"},
+                {"name":"ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address","value":"http://task-service.workflow-automation.local:80"}
+              ]')
             fi
-            cat >> task-def-$family_name.json <<ENV_EOF
-,
-                  {"name": "EVENTBUS_PROVIDER", "value": "AWS"},
-                  {"name": "EventBus__AWS__Region", "value": "ap-south-1"},
-                  {"name": "EventBus__AWS__EventBusName", "value": "work-flow-bus"},
-                  {"name": "EventBus__AWS__ServicePrefix", "value": "task-manager"},
-                  {"name": "EventBus__AWS__VisibilityTimeoutSeconds", "value": "300"},
-                  {"name": "EventBus__AWS__MaxReceiveCount", "value": "3"},
-                  {"name": "EventBus__AWS__SchedulerGroupName", "value": "task-manager-schedules"},
-                  {"name": "EventBus__AWS__SchedulerRoleArn", "value": "$TASK_ROLE"},
-                  {"name": "Cors__AllowedOrigin", "value": "https://dev.workflowautomation.enginuo.com"},
-                  {"name": "DB_HOST", "value": "workflow-automation-db.czj02dhursas.ap-south-1.rds.amazonaws.com"},
-                  {"name": "DB_PORT", "value": "5432"},
-                  {"name": "DB_USER", "value": "postgres"},
-                  {"name": "DB_PASSWORD", "value": "$DB_PASSWORD"},
-                  {"name": "DB_NAME", "value": "$db_name"}
-                ],
-                "logConfiguration": {
-                  "logDriver": "awslogs",
-                  "options": {
-                    "awslogs-group": "/ecs/$family_name",
-                    "awslogs-region": "$AWS_REGION",
-                    "awslogs-stream-prefix": "ecs"
+            
+            # Add common environment variables
+            ENV_JSON=$(echo "$ENV_JSON" | jq ". += [
+              {\"name\":\"EVENTBUS_PROVIDER\",\"value\":\"AWS\"},
+              {\"name\":\"EventBus__AWS__Region\",\"value\":\"ap-south-1\"},
+              {\"name\":\"EventBus__AWS__EventBusName\",\"value\":\"work-flow-bus\"},
+              {\"name\":\"EventBus__AWS__ServicePrefix\",\"value\":\"task-manager\"},
+              {\"name\":\"EventBus__AWS__VisibilityTimeoutSeconds\",\"value\":\"300\"},
+              {\"name\":\"EventBus__AWS__MaxReceiveCount\",\"value\":\"3\"},
+              {\"name\":\"EventBus__AWS__SchedulerGroupName\",\"value\":\"task-manager-schedules\"},
+              {\"name\":\"EventBus__AWS__SchedulerRoleArn\",\"value\":\"$TASK_ROLE\"},
+              {\"name\":\"Cors__AllowedOrigin\",\"value\":\"https://dev.workflowautomation.enginuo.com\"},
+              {\"name\":\"DB_HOST\",\"value\":\"workflow-automation-db.czj02dhursas.ap-south-1.rds.amazonaws.com\"},
+              {\"name\":\"DB_PORT\",\"value\":\"5432\"},
+              {\"name\":\"DB_USER\",\"value\":\"postgres\"},
+              {\"name\":\"DB_PASSWORD\",\"value\":\"$DB_PASSWORD\"},
+              {\"name\":\"DB_NAME\",\"value\":\"$db_name\"}
+            ]")
+            
+            # Create task definition JSON using jq
+            jq -n \
+              --arg family "$family_name" \
+              --arg executionRole "$TASK_EXECUTION_ROLE" \
+              --arg taskRole "$TASK_ROLE" \
+              --arg containerName "$container_name" \
+              --arg image "$ECR_REGISTRY/$family_name:latest" \
+              --argjson envVars "$ENV_JSON" \
+              --arg logGroup "/ecs/$family_name" \
+              --arg logRegion "$AWS_REGION" \
+              '{
+                family: $family,
+                networkMode: "awsvpc",
+                requiresCompatibilities: ["FARGATE"],
+                cpu: "256",
+                memory: "512",
+                executionRoleArn: $executionRole,
+                taskRoleArn: $taskRole,
+                containerDefinitions: [{
+                  name: $containerName,
+                  image: $image,
+                  essential: true,
+                  portMappings: [{
+                    containerPort: 80,
+                    protocol: "tcp"
+                  }],
+                  environment: $envVars,
+                  logConfiguration: {
+                    logDriver: "awslogs",
+                    options: {
+                      "awslogs-group": $logGroup,
+                      "awslogs-region": $logRegion,
+                      "awslogs-stream-prefix": "ecs"
+                    }
                   }
-                }
-              }
-            ]
-          }
-ENV_EOF
+                }]
+              }' > task-def-$family_name.json
             
             # Validate JSON before registering
             echo "Validating JSON for $family_name..."
