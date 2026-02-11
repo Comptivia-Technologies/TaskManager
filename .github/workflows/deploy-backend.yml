@@ -107,7 +107,7 @@ jobs:
                 ],
                 "environment": [
                   {"name": "ASPNETCORE_URLS", "value": "http://+:80"}
-EOF
+            EOF
             # Add ReverseProxy environment variables only for API Gateway
             if [ "$service_dir" = "APIGateway" ]; then
               cat >> task-def-$family_name.json <<EOF
