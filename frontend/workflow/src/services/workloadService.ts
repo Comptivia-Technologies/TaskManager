@@ -14,7 +14,7 @@ const workloadApi = axios.create({
 
 export const workloadService = {
   getByMemberId: async (memberId: number): Promise<WorkloadResponse> => {
-    const response = await workloadApi.get<WorkloadResponse>(`/workload/${memberId}`);
+    const response = await workloadApi.get<WorkloadResponse>(`/api/workload/${memberId}`);
     return response.data;
   },
 };
