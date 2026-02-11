@@ -6,7 +6,7 @@ using Workload.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container for Workload.API
+// Add services to the container for Workload.API service
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {

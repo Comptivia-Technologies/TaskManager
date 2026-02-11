@@ -116,7 +116,7 @@ jobs:
                   ,{"name": "ReverseProxy__Clusters__priority-cluster__Destinations__destination1__Address", "value": "http://priority-rule-engine-api-service.workflow-automation.local:80"}
                   ,{"name": "ReverseProxy__Clusters__workload-cluster__Destinations__destination1__Address", "value": "http://workload-api-service.workflow-automation.local:80"}
                   ,{"name": "ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address", "value": "http://task-service.workflow-automation.local:80"}
-EOF
+              EOF
             fi
             cat >> task-def-$family_name.json <<EOF
                   ,{"name": "EVENTBUS_PROVIDER", "value": "AWS"}
