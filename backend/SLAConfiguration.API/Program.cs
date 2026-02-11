@@ -160,13 +160,42 @@ using (var scope = app.Services.CreateScope())
                 await connection.CloseAsync();
         }
 
-        // Ensure database schema is up to date
-        dbContext.Database.EnsureCreated();
-        logger.LogInformation("Database ensured/created successfully.");
+        // Verify table was created successfully
+        var verifyConnection = dbContext.Database.GetDbConnection();
+        var verifyWasOpen = verifyConnection.State == System.Data.ConnectionState.Open;
+        if (!verifyWasOpen)
+            await verifyConnection.OpenAsync();
+        
+        try
+        {
+            using var verifyCommand = verifyConnection.CreateCommand();
+            verifyCommand.CommandText = @"
+                SELECT COUNT(*) 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'SLAConfigurations'
+            ";
+            var tableExists = Convert.ToInt32(await verifyCommand.ExecuteScalarAsync()) > 0;
+            
+            if (!tableExists)
+            {
+                throw new InvalidOperationException(
+                    "CRITICAL: SLAConfigurations table was not created. " +
+                    "Please check database connection and user permissions.");
+            }
+            logger.LogInformation("Verified: SLAConfigurations table exists.");
+        }
+        finally
+        {
+            if (!verifyWasOpen)
+                await verifyConnection.CloseAsync();
+        }
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Error ensuring database is created. You may need to run migration scripts manually.");
+        logger.LogError(ex, "CRITICAL: Error ensuring database is created: {Message}", ex.Message);
+        // Re-throw to prevent app from starting with broken database
+        throw;
     }
 }
 

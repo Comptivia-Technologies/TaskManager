@@ -282,7 +282,114 @@ catch (Exception ex)
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<TaskDbContext>();
-    dbContext.Database.EnsureCreated();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    try
+    {
+        // Try EnsureCreated first
+        var created = dbContext.Database.EnsureCreated();
+        logger.LogInformation(created ? "Database and tables created successfully." : "Database already exists.");
+        
+        // CRITICAL: Verify Tasks table actually exists
+        var connection = dbContext.Database.GetDbConnection();
+        var wasOpen = connection.State == System.Data.ConnectionState.Open;
+        if (!wasOpen)
+            await connection.OpenAsync();
+        
+        try
+        {
+            // Check if Tasks table exists
+            using var verifyCommand = connection.CreateCommand();
+            verifyCommand.CommandText = @"
+                SELECT COUNT(*) 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'Tasks'
+            ";
+            var tableExists = Convert.ToInt32(await verifyCommand.ExecuteScalarAsync()) > 0;
+            
+            if (!tableExists)
+            {
+                logger.LogWarning("Tasks table does not exist. EnsureCreated() may have failed. Creating table manually...");
+                
+                // Create Tasks table using raw SQL
+                using var createCommand = connection.CreateCommand();
+                createCommand.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS ""Tasks"" (
+                        ""TaskId"" UUID PRIMARY KEY,
+                        ""TaskName"" VARCHAR(200) NOT NULL,
+                        ""Description"" TEXT,
+                        ""Priority"" VARCHAR(50) NOT NULL,
+                        ""TaskType"" VARCHAR(100) NOT NULL,
+                        ""Status"" INTEGER NOT NULL DEFAULT 0,
+                        ""WorkflowId"" INTEGER,
+                        ""MemberId"" INTEGER,
+                        ""SLAConfigurationId"" INTEGER,
+                        ""CurrentStageId"" INTEGER,
+                        ""CurrentStageStartedAt"" TIMESTAMP WITH TIME ZONE,
+                        ""StageTimeoutAt"" TIMESTAMP WITH TIME ZONE,
+                        ""SLADeadline"" TIMESTAMP,
+                        ""SLAStartTime"" TIMESTAMP,
+                        ""IsOverdue"" BOOLEAN NOT NULL DEFAULT FALSE,
+                        ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        ""WorkflowSelectedEventId"" UUID,
+                        ""SLAConfiguredEventId"" UUID,
+                        ""TaskAssignedEventId"" UUID,
+                        ""TaskOverdueEventId"" UUID,
+                        ""TaskStageStartedEventId"" UUID,
+                        ""TaskStageCompletedEventId"" UUID,
+                        ""TaskStageEscalationTriggeredEventId"" UUID,
+                        ""TaskCompletedEventId"" UUID
+                    );
+                    
+                    -- Create indexes
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_Status"" ON ""Tasks"" (""Status"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_WorkflowId"" ON ""Tasks"" (""WorkflowId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_MemberId"" ON ""Tasks"" (""MemberId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_CurrentStageId"" ON ""Tasks"" (""CurrentStageId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_SLADeadline"" ON ""Tasks"" (""SLADeadline"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_StageTimeoutAt"" ON ""Tasks"" (""StageTimeoutAt"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_IsOverdue"" ON ""Tasks"" (""IsOverdue"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_WorkflowSelectedEventId"" ON ""Tasks"" (""WorkflowSelectedEventId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_SLAConfiguredEventId"" ON ""Tasks"" (""SLAConfiguredEventId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskAssignedEventId"" ON ""Tasks"" (""TaskAssignedEventId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskStageStartedEventId"" ON ""Tasks"" (""TaskStageStartedEventId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskStageCompletedEventId"" ON ""Tasks"" (""TaskStageCompletedEventId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskStageEscalationTriggeredEventId"" ON ""Tasks"" (""TaskStageEscalationTriggeredEventId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskCompletedEventId"" ON ""Tasks"" (""TaskCompletedEventId"");
+                ";
+                
+                await createCommand.ExecuteNonQueryAsync();
+                logger.LogInformation("Tasks table created successfully using raw SQL.");
+                
+                // Verify again
+                tableExists = Convert.ToInt32(await verifyCommand.ExecuteScalarAsync()) > 0;
+                if (!tableExists)
+                {
+                    throw new InvalidOperationException(
+                        "CRITICAL: Failed to create Tasks table. " +
+                        "Please check database connection and user permissions.");
+                }
+                logger.LogInformation("Verified: Tasks table now exists.");
+            }
+            else
+            {
+                logger.LogInformation("Verified: Tasks table exists.");
+            }
+        }
+        finally
+        {
+            if (!wasOpen)
+                await connection.CloseAsync();
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "CRITICAL: Error ensuring database is created: {Message}", ex.Message);
+        // Re-throw to prevent app from starting with broken database
+        throw;
+    }
 }
 
 app.Run();
