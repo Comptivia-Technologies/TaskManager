@@ -63,20 +63,21 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           # Deploy each service
+          # Format: service_dir:family_name:container_name:port:db_name:actual_service_name
           SERVICES=(
-            "APIGateway:task-manager-api-gateway:api-gateway:5004:"
-            "TaskService:task-manager-task-service:task-service:5005:TaskService"
-            "WorkflowService:task-manager-workflow-service:workflow-service:5006:WorkflowManagement"
-            "SLAManagerService:task-manager-sla-manager-service:sla-manager-service:5007:WorkflowManagement"
-            "WorkloadService:task-manager-workload-service:workload-service:5008:WorkflowManagement"
-            "PriorityRuleEngine.API:task-manager-priority-rule-engine-api:priority-api:5010:PriorityRuleEngine"
-            "WorkflowManagement.API:task-manager-workflow-management-api:workflow-api:5000:WorkflowManagement"
-            "SLAConfiguration.API:task-manager-sla-configuration-api:sla-api:5002:WorkflowManagement"
-            "Workload.API:task-manager-workload-api:workload-api:5003:WorkflowManagement"
+            "APIGateway:task-manager-api-gateway:api-gateway:5004::api-gateway-service"
+            "TaskService:task-manager-task-service:task-service:5005:TaskService:task-manager-task-service-service-xf7qr4t0"
+            "WorkflowService:task-manager-workflow-service:workflow-service:5006:WorkflowManagement:workflow-service-service"
+            "SLAManagerService:task-manager-sla-manager-service:sla-manager-service:5007:WorkflowManagement:task-manager-sla-manager-service-service-6a82g2ff"
+            "WorkloadService:task-manager-workload-service:workload-service:5008:WorkflowManagement:workload-service-service"
+            "PriorityRuleEngine.API:task-manager-priority-rule-engine-api:priority-api:5010:PriorityRuleEngine:priority-rule-engine-api-service"
+            "WorkflowManagement.API:task-manager-workflow-management-api:workflow-api:5000:WorkflowManagement:workflow-management-api-service"
+            "SLAConfiguration.API:task-manager-sla-configuration-api:sla-api:5002:WorkflowManagement:task-manager-sla-configuration-api-service-3ukn5lqc"
+            "Workload.API:task-manager-workload-api:workload-api:5003:WorkflowManagement:workload-api-service"
           )
           
           for service in "${SERVICES[@]}"; do
-            IFS=':' read -r service_dir family_name container_name port db_name <<< "$service"
+            IFS=':' read -r service_dir family_name container_name port db_name actual_service_name <<< "$service"
             
             # Set default DB name if empty
             if [ -z "$db_name" ]; then
@@ -138,23 +139,28 @@ jobs:
             echo "Registering task definition: $family_name"
             aws ecs register-task-definition --cli-input-json file://task-def-$family_name.json --region $AWS_REGION
             
+            # Use actual service name if provided, otherwise fallback to family_name-service
+            if [ -z "$actual_service_name" ]; then
+              actual_service_name="$family_name-service"
+            fi
+            
             # Check if service exists
             SERVICE_EXISTS=$(aws ecs describe-services \
               --cluster $ECS_CLUSTER \
-              --services $family_name-service \
+              --services $actual_service_name \
               --region $AWS_REGION \
               --query 'services[0].status' \
               --output text 2>/dev/null || echo "MISSING")
             
             if [ "$SERVICE_EXISTS" = "ACTIVE" ]; then
-              echo "Updating service $family_name-service..."
+              echo "Updating service $actual_service_name..."
               aws ecs update-service \
                 --cluster $ECS_CLUSTER \
-                --service $family_name-service \
+                --service $actual_service_name \
                 --task-definition $family_name \
                 --region $AWS_REGION \
                 --force-new-deployment
             else
-              echo "Service $family_name-service does not exist. Please create it manually in ECS console first, or provide VPC/subnet IDs to create automatically."
+              echo "Service $actual_service_name does not exist. Please create it manually in ECS console first, or provide VPC/subnet IDs to create automatically."
             fi
           done
