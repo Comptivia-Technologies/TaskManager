@@ -7,7 +7,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Event Bus - Register all providers (factory pattern allows switching via config)
+// Event Bus - Register all providers (factory pattern allows switching via config) for EventBus
 builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
 builder.Services.AddSingleton<AwsEventBus>();
 
