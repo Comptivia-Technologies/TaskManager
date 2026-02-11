@@ -88,10 +88,11 @@ using (var scope = app.Services.CreateScope())
     
     try
     {
-        dbContext.Database.EnsureCreated();
-        logger.LogInformation("Database ensured/created successfully.");
+        // Try EnsureCreated first
+        var created = dbContext.Database.EnsureCreated();
+        logger.LogInformation(created ? "Database and tables created successfully." : "Database already exists.");
         
-        // Check and add SkillLevel column if it doesn't exist
+        // CRITICAL: Verify tables actually exist
         var connection = dbContext.Database.GetDbConnection();
         var wasOpen = connection.State == System.Data.ConnectionState.Open;
         if (!wasOpen)
@@ -99,6 +100,129 @@ using (var scope = app.Services.CreateScope())
         
         try
         {
+            // Check if all required tables exist
+            using var verifyCommand = connection.CreateCommand();
+            verifyCommand.CommandText = @"
+                SELECT COUNT(*) 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name IN ('Members', 'Teams', 'Workflows', 'Stages', 'Tasks')
+            ";
+            var tableCount = Convert.ToInt32(await verifyCommand.ExecuteScalarAsync());
+            
+            if (tableCount < 5)
+            {
+                logger.LogWarning($"Only {tableCount} out of 5 required tables exist. EnsureCreated() may have failed. Creating tables manually...");
+                
+                // Create tables using raw SQL (more reliable than EnsureCreated)
+                using var createCommand = connection.CreateCommand();
+                createCommand.CommandText = @"
+                    -- Create Teams table
+                    CREATE TABLE IF NOT EXISTS ""Teams"" (
+                        ""TeamId"" SERIAL PRIMARY KEY,
+                        ""TeamName"" VARCHAR(200) NOT NULL,
+                        ""Description"" VARCHAR(1000),
+                        ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                    
+                    -- Create Members table
+                    CREATE TABLE IF NOT EXISTS ""Members"" (
+                        ""MemberId"" SERIAL PRIMARY KEY,
+                        ""FirstName"" VARCHAR(100) NOT NULL,
+                        ""LastName"" VARCHAR(100) NOT NULL,
+                        ""Email"" VARCHAR(200) NOT NULL,
+                        ""Role"" VARCHAR(100) NOT NULL,
+                        ""SkillLevel"" INTEGER NOT NULL DEFAULT 3,
+                        ""TeamId"" INTEGER,
+                        ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT ""FK_Members_Teams_TeamId"" FOREIGN KEY (""TeamId"") 
+                            REFERENCES ""Teams""(""TeamId"") ON DELETE RESTRICT,
+                        CONSTRAINT ""CK_Members_SkillLevel_Range"" 
+                            CHECK (""SkillLevel"" >= 1 AND ""SkillLevel"" <= 5)
+                    );
+                    
+                    -- Create Workflows table
+                    CREATE TABLE IF NOT EXISTS ""Workflows"" (
+                        ""WorkflowId"" SERIAL PRIMARY KEY,
+                        ""WorkflowName"" VARCHAR(200) NOT NULL,
+                        ""Description"" VARCHAR(1000),
+                        ""TeamId"" INTEGER,
+                        ""WorkflowJson"" JSONB,
+                        ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT ""FK_Workflows_Teams_TeamId"" FOREIGN KEY (""TeamId"") 
+                            REFERENCES ""Teams""(""TeamId"") ON DELETE RESTRICT
+                    );
+                    
+                    -- Create Stages table
+                    CREATE TABLE IF NOT EXISTS ""Stages"" (
+                        ""StageId"" SERIAL PRIMARY KEY,
+                        ""StageName"" VARCHAR(200) NOT NULL,
+                        ""StageOrder"" INTEGER NOT NULL,
+                        ""WorkflowId"" INTEGER NOT NULL,
+                        ""TeamId"" INTEGER NOT NULL,
+                        ""StageType"" INTEGER NOT NULL DEFAULT 0,
+                        ""TransitionPolicy"" INTEGER NOT NULL DEFAULT 0,
+                        ""TimeoutMinutes"" INTEGER,
+                        ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT ""FK_Stages_Workflows_WorkflowId"" FOREIGN KEY (""WorkflowId"") 
+                            REFERENCES ""Workflows""(""WorkflowId"") ON DELETE CASCADE,
+                        CONSTRAINT ""FK_Stages_Teams_TeamId"" FOREIGN KEY (""TeamId"") 
+                            REFERENCES ""Teams""(""TeamId"") ON DELETE RESTRICT
+                    );
+                    
+                    -- Create Tasks table
+                    CREATE TABLE IF NOT EXISTS ""Tasks"" (
+                        ""TaskId"" SERIAL PRIMARY KEY,
+                        ""TaskName"" VARCHAR(200) NOT NULL,
+                        ""Description"" VARCHAR(1000),
+                        ""Status"" VARCHAR(50) NOT NULL,
+                        ""Priority"" VARCHAR(50) NOT NULL,
+                        ""WorkflowId"" INTEGER NOT NULL,
+                        ""StageId"" INTEGER,
+                        ""AssignedToMemberId"" INTEGER,
+                        ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT ""FK_Tasks_Workflows_WorkflowId"" FOREIGN KEY (""WorkflowId"") 
+                            REFERENCES ""Workflows""(""WorkflowId"") ON DELETE CASCADE,
+                        CONSTRAINT ""FK_Tasks_Stages_StageId"" FOREIGN KEY (""StageId"") 
+                            REFERENCES ""Stages""(""StageId"") ON DELETE SET NULL,
+                        CONSTRAINT ""FK_Tasks_Members_AssignedToMemberId"" FOREIGN KEY (""AssignedToMemberId"") 
+                            REFERENCES ""Members""(""MemberId"") ON DELETE SET NULL
+                    );
+                    
+                    -- Create indexes
+                    CREATE INDEX IF NOT EXISTS ""IX_Members_SkillLevel"" ON ""Members"" (""SkillLevel"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Members_TeamId"" ON ""Members"" (""TeamId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Workflows_TeamId"" ON ""Workflows"" (""TeamId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Stages_WorkflowId"" ON ""Stages"" (""WorkflowId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Stages_TeamId"" ON ""Stages"" (""TeamId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_WorkflowId"" ON ""Tasks"" (""WorkflowId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_StageId"" ON ""Tasks"" (""StageId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_AssignedToMemberId"" ON ""Tasks"" (""AssignedToMemberId"");
+                ";
+                
+                await createCommand.ExecuteNonQueryAsync();
+                logger.LogInformation("Tables created successfully using raw SQL.");
+                
+                // Verify again
+                tableCount = Convert.ToInt32(await verifyCommand.ExecuteScalarAsync());
+                if (tableCount < 5)
+                {
+                    throw new InvalidOperationException(
+                        $"CRITICAL: Failed to create all tables. Only {tableCount} tables exist. " +
+                        "Please check database connection and user permissions.");
+                }
+                logger.LogInformation($"Verified: All {tableCount} required tables now exist.");
+            }
+            else
+            {
+                logger.LogInformation($"Verified: All {tableCount} required tables exist.");
+            }
+            
+            // Check and add SkillLevel column if it doesn't exist (only if Members table exists)
             using var checkCommand = connection.CreateCommand();
             checkCommand.CommandText = @"
                 SELECT COUNT(*) 
@@ -114,43 +238,18 @@ using (var scope = app.Services.CreateScope())
             {
                 logger.LogInformation("SkillLevel column not found. Adding it to Members table...");
                 
-                // Add column as nullable first
                 using var addColumnCommand = connection.CreateCommand();
                 addColumnCommand.CommandText = @"
-                    ALTER TABLE ""Members"" ADD COLUMN ""SkillLevel"" INTEGER;
-                ";
-                await addColumnCommand.ExecuteNonQueryAsync();
-                
-                // Set default value for existing records
-                using var updateCommand = connection.CreateCommand();
-                updateCommand.CommandText = @"
+                    ALTER TABLE ""Members"" ADD COLUMN IF NOT EXISTS ""SkillLevel"" INTEGER DEFAULT 3;
                     UPDATE ""Members"" SET ""SkillLevel"" = 3 WHERE ""SkillLevel"" IS NULL;
-                ";
-                await updateCommand.ExecuteNonQueryAsync();
-                
-                // Make column NOT NULL
-                using var alterCommand = connection.CreateCommand();
-                alterCommand.CommandText = @"
                     ALTER TABLE ""Members"" ALTER COLUMN ""SkillLevel"" SET NOT NULL;
-                ";
-                await alterCommand.ExecuteNonQueryAsync();
-                
-                // Add check constraint
-                using var constraintCommand = connection.CreateCommand();
-                constraintCommand.CommandText = @"
                     ALTER TABLE ""Members""
                     ADD CONSTRAINT ""CK_Members_SkillLevel_Range"" 
                     CHECK (""SkillLevel"" >= 1 AND ""SkillLevel"" <= 5);
-                ";
-                await constraintCommand.ExecuteNonQueryAsync();
-                
-                // Create index
-                using var indexCommand = connection.CreateCommand();
-                indexCommand.CommandText = @"
                     CREATE INDEX IF NOT EXISTS ""IX_Members_SkillLevel"" 
                     ON ""Members"" (""SkillLevel"");
                 ";
-                await indexCommand.ExecuteNonQueryAsync();
+                await addColumnCommand.ExecuteNonQueryAsync();
                 
                 logger.LogInformation("SkillLevel column added successfully to Members table.");
             }
@@ -167,7 +266,9 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Error ensuring database is created. You may need to run migration scripts manually.");
+        logger.LogError(ex, "CRITICAL: Error ensuring database is created: {Message}", ex.Message);
+        // Re-throw to prevent app from starting with broken database
+        throw;
     }
 }
 
