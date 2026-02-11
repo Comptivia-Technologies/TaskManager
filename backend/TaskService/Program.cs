@@ -282,7 +282,7 @@ catch (Exception ex)
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<TaskDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    // logger is already declared in outer scope (line 97), reuse it
     
     try
     {
