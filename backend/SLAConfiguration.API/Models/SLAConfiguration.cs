@@ -9,7 +9,7 @@ public class SLAConfiguration
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     
-    // JSONB field for storing priority levels with response times
+    // JSONB field for storing priority levels with response times in minutes
     // Structure: { "Critical": { "responseTime": 30 }, "High": { "responseTime": 60 }, ... }
     public string PriorityLevelsJson { get; set; } = "{}";
 }
