@@ -107,6 +107,18 @@ jobs:
                 ],
                 "environment": [
                   {"name": "ASPNETCORE_URLS", "value": "http://+:80"},
+EOF
+            # Add ReverseProxy environment variables only for API Gateway
+            if [ "$service_dir" = "APIGateway" ]; then
+              cat >> task-def-$family_name.json <<EOF
+                  {"name": "ReverseProxy__Clusters__workflow-cluster__Destinations__destination1__Address", "value": "http://workflow-management-api-service.workflow-automation.local:80"},
+                  {"name": "ReverseProxy__Clusters__sla-cluster__Destinations__destination1__Address", "value": "http://sla-configuration-api-service.workflow-automation.local:80"},
+                  {"name": "ReverseProxy__Clusters__priority-cluster__Destinations__destination1__Address", "value": "http://priority-rule-engine-api-service.workflow-automation.local:80"},
+                  {"name": "ReverseProxy__Clusters__workload-cluster__Destinations__destination1__Address", "value": "http://workload-api-service.workflow-automation.local:80"},
+                  {"name": "ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address", "value": "http://task-service.workflow-automation.local:80"},
+EOF
+            fi
+            cat >> task-def-$family_name.json <<EOF
                   {"name": "EVENTBUS_PROVIDER", "value": "AWS"},
                   {"name": "EventBus__AWS__Region", "value": "ap-south-1"},
                   {"name": "EventBus__AWS__EventBusName", "value": "work-flow-bus"},
