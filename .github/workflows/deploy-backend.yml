@@ -90,11 +90,11 @@ jobs:
             # Add ReverseProxy environment variables only for API Gateway
             if [ "$service_dir" = "APIGateway" ]; then
               ENV_JSON=$(echo "$ENV_JSON" | jq '. += [
-                {"name":"ReverseProxy__Clusters__workflow-cluster__Destinations__destination1__Address","value":"http://workflow-management-api-service.workflow-automation.local:80"},
-                {"name":"ReverseProxy__Clusters__sla-cluster__Destinations__destination1__Address","value":"http://sla-configuration-api-service.workflow-automation.local:80"},
-                {"name":"ReverseProxy__Clusters__priority-cluster__Destinations__destination1__Address","value":"http://priority-rule-engine-api-service.workflow-automation.local:80"},
-                {"name":"ReverseProxy__Clusters__workload-cluster__Destinations__destination1__Address","value":"http://workload-api-service.workflow-automation.local:80"},
-                {"name":"ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address","value":"http://task-service.workflow-automation.local:80"}
+                {"name":"ReverseProxy__Clusters__workflow-cluster__Destinations__destination1__Address","value":"http://workflow-management-api-service.workflow-automation:80"},
+                {"name":"ReverseProxy__Clusters__sla-cluster__Destinations__destination1__Address","value":"http://sla-configuration-api-service.workflow-automation:80"},
+                {"name":"ReverseProxy__Clusters__priority-cluster__Destinations__destination1__Address","value":"http://priority-rule-engine-api-service.workflow-automation:80"},
+                {"name":"ReverseProxy__Clusters__workload-cluster__Destinations__destination1__Address","value":"http://workload-api-service.workflow-automation:80"},
+                {"name":"ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address","value":"http://task-service.workflow-automation:80"}
               ]')
             fi
             

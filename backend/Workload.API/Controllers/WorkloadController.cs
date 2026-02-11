@@ -5,7 +5,7 @@ using Workload.API.Services;
 namespace Workload.API.Controllers;
 
 /// <summary>
-/// Controller for workload management and calculation
+/// Controller for workload management and calculation for Workload.API
 /// </summary>
 [ApiController]
 [Route("api/workload")]
