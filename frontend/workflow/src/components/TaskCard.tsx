@@ -3,6 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Task, TaskUpdate } from '../types';
 import { useState } from 'react';
 import { FiEdit2, FiX } from 'react-icons/fi';
+import { formatDateOnlyIST } from '../utils/dateUtils';
 
 interface TaskCardProps {
   task: Task;
@@ -121,7 +122,7 @@ const TaskCard = ({ task, onUpdate }: TaskCardProps) => {
           <div className="flex items-center text-xs text-black/70 font-sans">
             <span className="font-medium mr-1">Due:</span>
             <span className={new Date(task.dueDate) < new Date() ? 'text-red-600 font-semibold' : 'text-black'}>
-              {new Date(task.dueDate).toLocaleDateString()}
+              {formatDateOnlyIST(task.dueDate)}
             </span>
           </div>
         )}

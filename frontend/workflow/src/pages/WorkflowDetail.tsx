@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import WorkflowStagesView from '../components/WorkflowStagesView';
 import { toast } from 'react-toastify';
 import { FiArrowLeft, FiCode, FiEye } from 'react-icons/fi';
+import { formatDateOnlyIST } from '../utils/dateUtils';
 
 const WorkflowDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -84,7 +85,7 @@ const WorkflowDetail = () => {
                   <div className="flex items-center">
                     <span className="text-black/60 mr-2 font-sans">Created:</span>
                     <span className="font-semibold text-black font-sans">
-                      {new Date(workflow.createdAt).toLocaleDateString()}
+                      {formatDateOnlyIST(workflow.createdAt)}
                     </span>
                   </div>
                 </div>
