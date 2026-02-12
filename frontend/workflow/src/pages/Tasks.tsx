@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { taskService } from '../services/taskService';
 import { workflowService } from '../services/workflowService';
 import { Task, Workflow } from '../types';
@@ -14,18 +14,7 @@ const Tasks = () => {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    loadData();
-    
-    // Refresh tasks every 30 seconds to catch overdue updates
-    const interval = setInterval(() => {
-      loadData();
-    }, 30000);
-    
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -41,7 +30,44 @@ const Tasks = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Initial load on mount
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Refresh when window gains focus (user returns to tab)
+  useEffect(() => {
+    const handleFocus = () => {
+      loadData();
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadData]);
+
+  // Refresh when page becomes visible (user switches back to tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadData();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [loadData]);
+
+  // Refresh on network reconnect
+  useEffect(() => {
+    const handleOnline = () => {
+      loadData();
+    };
+    
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [loadData]);
 
   const getWorkflowName = (workflowId: number): string => {
     const workflow = workflows.find(w => w.workflowId === workflowId);
