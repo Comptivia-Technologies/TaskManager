@@ -94,7 +94,9 @@ jobs:
                 {"name":"ReverseProxy__Clusters__sla-cluster__Destinations__destination1__Address","value":"http://sla-configuration-api-service.workflow-automation:80"},
                 {"name":"ReverseProxy__Clusters__priority-cluster__Destinations__destination1__Address","value":"http://priority-rule-engine-api-service.workflow-automation:80"},
                 {"name":"ReverseProxy__Clusters__workload-cluster__Destinations__destination1__Address","value":"http://workload-api-service.workflow-automation:80"},
-                {"name":"ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address","value":"http://task-service.workflow-automation:80"}
+                {"name":"ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address","value":"http://task-service.workflow-automation:80"},
+                {"name":"TaskServiceApi__BaseUrl","value":"http://task-service.workflow-automation/api"},
+                {"name":"WorkflowManagementApi__BaseUrl","value":"http://workflow-management-api-service.workflow-automation/api"}
               ]')
             fi
             
@@ -115,6 +117,13 @@ jobs:
               {\"name\":\"DB_PASSWORD\",\"value\":\"$DB_PASSWORD\"},
               {\"name\":\"DB_NAME\",\"value\":\"$db_name\"}
             ]")
+            
+            # Add WorkflowManagementApi__BaseUrl for TaskService
+            if [ "$service_dir" = "TaskService" ]; then
+              ENV_JSON=$(echo "$ENV_JSON" | jq '. += [
+                {"name":"WorkflowManagementApi__BaseUrl","value":"http://workflow-management-api-service.workflow-automation/api"}
+              ]')
+            fi
             
             # Create task definition JSON using jq
             jq -n \
