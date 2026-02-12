@@ -12,6 +12,7 @@ public class Task
     public int? StageId { get; set; }
     public int? AssignedToMemberId { get; set; }
     public string? CompletedByMemberIds { get; set; }  // Comma-separated member IDs who completed stages on this task
+    public bool IsOverdue { get; set; } = false;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

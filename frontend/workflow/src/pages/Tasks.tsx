@@ -40,7 +40,10 @@ const Tasks = () => {
     return workflow?.workflowName || `Workflow #${workflowId}`;
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, isOverdue?: boolean) => {
+    if (isOverdue) {
+      return 'bg-red-100 text-red-800 border-red-200';
+    }
     const statusLower = status.toLowerCase();
     if (statusLower.includes('completed') || statusLower.includes('done')) {
       return 'bg-green-100 text-green-800 border-green-200';
@@ -76,12 +79,15 @@ const Tasks = () => {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const date = new Date(dateString);
+    // Handle UTC dates properly - if date string ends with Z or +00:00, it's UTC
+    return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: 'UTC'
     });
   };
 
@@ -147,7 +153,7 @@ const Tasks = () => {
                 <div>
                   <p className="text-xs text-black/60 font-sans uppercase tracking-wide">Overdue</p>
                   <p className="text-2xl font-semibold text-black font-sans mt-1">
-                    {tasks.filter(t => t.status.toLowerCase().includes('overdue')).length}
+                    {tasks.filter(t => t.isOverdue || t.status.toLowerCase().includes('overdue')).length}
                   </p>
                 </div>
                 <FiAlertCircle className="text-red-500 text-2xl" />
@@ -220,7 +226,8 @@ const Tasks = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center px-2.5 py-1 rounded-azure-sm text-xs font-medium border ${getStatusColor(
-                            task.status
+                            task.status,
+                            task.isOverdue
                           )} font-sans`}
                         >
                           {task.status}

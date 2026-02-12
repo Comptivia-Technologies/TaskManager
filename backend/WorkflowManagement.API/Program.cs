@@ -177,6 +177,7 @@ using (var scope = app.Services.CreateScope())
                     -- Create Tasks table
                     CREATE TABLE IF NOT EXISTS ""Tasks"" (
                         ""TaskId"" SERIAL PRIMARY KEY,
+                        ""IsOverdue"" BOOLEAN NOT NULL DEFAULT FALSE,
                         ""TaskName"" VARCHAR(200) NOT NULL,
                         ""Description"" VARCHAR(1000),
                         ""Status"" VARCHAR(50) NOT NULL,
@@ -186,6 +187,7 @@ using (var scope = app.Services.CreateScope())
                         ""StageId"" INTEGER,
                         ""AssignedToMemberId"" INTEGER,
                         ""CompletedByMemberIds"" TEXT,
+                        ""IsOverdue"" BOOLEAN NOT NULL DEFAULT FALSE,
                         ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         CONSTRAINT ""FK_Tasks_Workflows_WorkflowId"" FOREIGN KEY (""WorkflowId"") 
@@ -268,7 +270,7 @@ using (var scope = app.Services.CreateScope())
                 FROM information_schema.columns 
                 WHERE table_schema = 'public' 
                 AND table_name = 'Tasks' 
-                AND column_name IN ('DueDate', 'CompletedByMemberIds')
+                AND column_name IN ('DueDate', 'CompletedByMemberIds', 'IsOverdue')
             ";
             var existingColumns = new List<string>();
             using (var reader = await checkTasksCommand.ExecuteReaderAsync())
@@ -287,6 +289,10 @@ using (var scope = app.Services.CreateScope())
             if (!existingColumns.Contains("CompletedByMemberIds"))
             {
                 columnsToAdd.Add(@"""CompletedByMemberIds"" TEXT");
+            }
+            if (!existingColumns.Contains("IsOverdue"))
+            {
+                columnsToAdd.Add(@"""IsOverdue"" BOOLEAN NOT NULL DEFAULT FALSE");
             }
             
             if (columnsToAdd.Count > 0)

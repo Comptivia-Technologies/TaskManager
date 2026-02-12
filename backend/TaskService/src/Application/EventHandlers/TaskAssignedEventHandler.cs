@@ -207,7 +207,8 @@ public class TaskAssignedEventHandler
                     WorkflowId = task.WorkflowId.Value,
                     StageId = task.CurrentStageId,
                     AssignedToMemberId = task.MemberId.Value,
-                    CompletedByMemberIds = string.IsNullOrEmpty(completedByMemberIds) ? null : completedByMemberIds
+                    CompletedByMemberIds = string.IsNullOrEmpty(completedByMemberIds) ? null : completedByMemberIds,
+                    IsOverdue = task.IsOverdue
                 };
 
                 _logger.LogInformation(

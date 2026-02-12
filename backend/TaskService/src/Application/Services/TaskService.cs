@@ -197,7 +197,8 @@ public class TaskService : ITaskService
                         Priority = task.Priority,
                         DueDate = task.SLADeadline,
                         StageId = task.CurrentStageId, // Preserve current stage instead of null
-                        AssignedToMemberId = task.MemberId.Value
+                        AssignedToMemberId = task.MemberId.Value,
+                        IsOverdue = task.IsOverdue
                     };
 
                     var updateResponse = await _httpClient.PutAsJsonAsync(
