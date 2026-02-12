@@ -5,8 +5,11 @@ using Amazon.SQS.Model;
 using Amazon.Scheduler;
 using Amazon.Scheduler.Model;
 using System.Text.Json;
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Shared.Contracts.Constants;
+using Shared.Contracts.EventContracts;
 
 namespace Shared.Messaging;
 
@@ -17,7 +20,9 @@ public class AwsEventBus : IEventBus, IDisposable
     private readonly IAmazonEventBridge _eventBridge;
     private readonly IAmazonSQS _sqs;
     private readonly IAmazonScheduler _scheduler;
-    private readonly Dictionary<string, CancellationTokenSource> _consumers = new();
+    // Support multiple handlers per queue, keyed by detail-type
+    private readonly Dictionary<string, Dictionary<string, (Type EventType, Func<object, Guid, Task> Handler)>> _consumers = new();
+    private readonly Dictionary<string, (CancellationTokenSource Cts, Task Task)> _consumerTasks = new(); // Track consumer tasks and cancellation tokens per queue
     private readonly object _lock = new object();
     private string? _accountId;
 
@@ -183,22 +188,37 @@ public class AwsEventBus : IEventBus, IDisposable
     {
         lock (_lock)
         {
-            if (_consumers.ContainsKey(queueName))
+            var eventDetailType = GetDetailTypeFromEventType<T>();
+            
+            if (!_consumers.ContainsKey(queueName))
             {
-                _logger.LogWarning("Consumer for queue {QueueName} is already running", queueName);
+                _consumers[queueName] = new Dictionary<string, (Type, Func<object, Guid, Task>)>();
+            }
+            
+            if (_consumers[queueName].ContainsKey(eventDetailType))
+            {
+                _logger.LogWarning("Consumer for queue {QueueName} and event type {EventType} ({DetailType}) is already running", queueName, typeof(T).Name, eventDetailType);
                 return;
             }
 
-            var cts = new CancellationTokenSource();
-            _consumers[queueName] = cts;
+            var handlerWrapper = new Func<object, Guid, Task>((obj, corrId) => handler((T)obj, corrId));
+            
+            _consumers[queueName][eventDetailType] = (typeof(T), handlerWrapper);
 
-            _ = Task.Run(async () => await ConsumeMessagesAsync<T>(queueName, handler, cts.Token), cts.Token);
+            // Start consumer task only if this is the first handler for this queue
+            if (!_consumerTasks.ContainsKey(queueName))
+            {
+                var cts = new CancellationTokenSource();
+                var consumerTask = Task.Run(async () => await ConsumeMessagesAsync(queueName, cts.Token), cts.Token);
+                _consumerTasks[queueName] = (cts, consumerTask);
+                _logger.LogInformation("Started consuming from queue {QueueName}", queueName);
+            }
 
-            _logger.LogInformation("Started consuming from queue {QueueName} for event type {EventType}", queueName, typeof(T).Name);
+            _logger.LogInformation("Registered handler for queue {QueueName} and event type {EventType} ({DetailType})", queueName, typeof(T).Name, eventDetailType);
         }
     }
 
-    private async Task ConsumeMessagesAsync<T>(string queueName, Func<T, Guid, Task> handler, CancellationToken cancellationToken) where T : class
+    private async Task ConsumeMessagesAsync(string queueName, CancellationToken cancellationToken)
     {
         var queueUrl = await GetOrCreateQueueUrlAsync(queueName);
 
@@ -221,39 +241,55 @@ public class AwsEventBus : IEventBus, IDisposable
                 {
                     try
                     {
-                        // Extract correlation ID from message attributes or trace header
-                        var correlationId = Guid.NewGuid();
-                        if (message.MessageAttributes.TryGetValue("CorrelationId", out var attr))
-                        {
-                            correlationId = Guid.Parse(attr.StringValue);
-                        }
-                        else if (message.Attributes.TryGetValue("CorrelationId", out var attrValue))
-                        {
-                            correlationId = Guid.Parse(attrValue);
-                        }
-
-                        // Parse event from message body
-                        // EventBridge sends full event envelope when routing directly to SQS
-                        // Format: { "version": "0", "detail-type": "...", "source": "...", "detail": {...} }
+                        // Extract correlation ID and detail-type from EventBridge envelope
+                        Guid? correlationId = null;
+                        string? detailType = null;
                         string? detailJson = null;
 
-                        // First, try to parse as full EventBridge event format (detail is an object)
-                        if (message.Body.StartsWith("{") && message.Body.Contains("\"detail\""))
+                        // Try to extract correlation ID from message attributes first
+                        if (message.MessageAttributes != null && message.MessageAttributes.ContainsKey("CorrelationId"))
+                        {
+                            var attrValue = message.MessageAttributes["CorrelationId"].StringValue;
+                            if (!string.IsNullOrEmpty(attrValue) && Guid.TryParse(attrValue, out var attrCorrelationId))
+                            {
+                                correlationId = attrCorrelationId;
+                            }
+                        }
+
+                        // Parse EventBridge event envelope
+                        if (message.Body.StartsWith("{") && message.Body.Contains("\"detail-type\""))
                         {
                             try
                             {
                                 using var doc = JsonDocument.Parse(message.Body);
                                 var root = doc.RootElement;
                                 
+                                // Extract detail-type
+                                if (root.TryGetProperty("detail-type", out var detailTypeElement))
+                                {
+                                    detailType = detailTypeElement.GetString();
+                                }
+                                
+                                // Extract detail (event payload)
                                 if (root.TryGetProperty("detail", out var detailElement))
                                 {
-                                    // Extract detail object and serialize it back to JSON string
                                     detailJson = detailElement.GetRawText();
-                                    
-                                    // Extract correlation ID from trace-header if available
-                                    if (root.TryGetProperty("trace-header", out var traceHeader))
+                                }
+                                
+                                // Extract correlation ID from trace-header (try both kebab-case and camelCase)
+                                if (!correlationId.HasValue)
+                                {
+                                    if (root.TryGetProperty("trace-header", out var traceHeaderKebab))
                                     {
-                                        var traceHeaderValue = traceHeader.GetString();
+                                        var traceHeaderValue = traceHeaderKebab.GetString();
+                                        if (!string.IsNullOrEmpty(traceHeaderValue) && Guid.TryParse(traceHeaderValue, out var traceCorrelationId))
+                                        {
+                                            correlationId = traceCorrelationId;
+                                        }
+                                    }
+                                    else if (root.TryGetProperty("traceHeader", out var traceHeaderCamel))
+                                    {
+                                        var traceHeaderValue = traceHeaderCamel.GetString();
                                         if (!string.IsNullOrEmpty(traceHeaderValue) && Guid.TryParse(traceHeaderValue, out var traceCorrelationId))
                                         {
                                             correlationId = traceCorrelationId;
@@ -261,14 +297,14 @@ public class AwsEventBus : IEventBus, IDisposable
                                     }
                                 }
                             }
-                            catch (JsonException)
+                            catch (JsonException ex)
                             {
-                                // Fall through to other parsing methods
+                                _logger.LogWarning(ex, "Failed to parse EventBridge envelope. MessageId: {MessageId}", message.MessageId);
                             }
                         }
 
-                        // If not parsed yet, try EventBridgeEventDetail format (detail as string - SNS format)
-                        if (string.IsNullOrEmpty(detailJson))
+                        // Fallback: Try EventBridgeEventDetail format (detail as string - SNS format)
+                        if (string.IsNullOrEmpty(detailType) || string.IsNullOrEmpty(detailJson))
                         {
                             try
                             {
@@ -301,23 +337,113 @@ public class AwsEventBus : IEventBus, IDisposable
                             continue;
                         }
 
-                        var eventData = JsonSerializer.Deserialize<T>(detailJson, new JsonSerializerOptions
+                        // If detail-type is not found, try to infer from available handlers
+                        if (string.IsNullOrEmpty(detailType))
+                        {
+                            _logger.LogWarning("Message missing detail-type. Attempting to route to all handlers. MessageId: {MessageId}", message.MessageId);
+                            // Try each registered handler until one succeeds
+                            bool processed = false;
+                            lock (_lock)
+                            {
+                                if (_consumers.ContainsKey(queueName))
+                                {
+                                    foreach (var (dt, (eventType, handler)) in _consumers[queueName])
+                                    {
+                                        try
+                                        {
+                                            var eventData = JsonSerializer.Deserialize(detailJson, eventType, new JsonSerializerOptions
+                                            {
+                                                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                                            });
+
+                                            if (eventData != null)
+                                            {
+                                                // Extract correlation ID from event payload if not already found
+                                                Guid? inferredCorrelationId = correlationId;
+                                                if (!inferredCorrelationId.HasValue)
+                                                {
+                                                    var correlationIdProperty = eventType.GetProperty("CorrelationId");
+                                                    if (correlationIdProperty != null && correlationIdProperty.PropertyType == typeof(Guid))
+                                                    {
+                                                        var eventCorrelationId = correlationIdProperty.GetValue(eventData);
+                                                        if (eventCorrelationId is Guid guidValue && guidValue != Guid.Empty)
+                                                        {
+                                                            inferredCorrelationId = guidValue;
+                                                        }
+                                                    }
+                                                }
+                                                var finalCorrelationId = inferredCorrelationId ?? Guid.NewGuid();
+                                                await handler(eventData, finalCorrelationId);
+                                                await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
+                                                _logger.LogDebug("Processed message {MessageId} from queue {QueueName} for detail-type {DetailType} (inferred)", message.MessageId, queueName, dt);
+                                                processed = true;
+                                                break;
+                                            }
+                                        }
+                                        catch
+                                        {
+                                            // Try next handler
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (!processed)
+                            {
+                                _logger.LogWarning("Could not deserialize message to any registered event type. MessageId: {MessageId}, Queue: {QueueName}", message.MessageId, queueName);
+                                await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
+                            }
+                            continue;
+                        }
+
+                        // Find handler for this detail-type
+                        (Type eventType, Func<object, Guid, Task> handler) handlerInfo;
+                        lock (_lock)
+                        {
+                            if (!_consumers.ContainsKey(queueName) || !_consumers[queueName].ContainsKey(detailType))
+                            {
+                                _logger.LogWarning("No handler registered for detail-type {DetailType} on queue {QueueName}. MessageId: {MessageId}", detailType, queueName, message.MessageId);
+                                await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
+                                continue;
+                            }
+
+                            handlerInfo = _consumers[queueName][detailType];
+                        }
+                        
+                        // Deserialize to the correct event type
+                        var eventData = JsonSerializer.Deserialize(detailJson, handlerInfo.eventType, new JsonSerializerOptions
                         {
                             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                         });
 
                         if (eventData == null)
                         {
-                            _logger.LogWarning("Failed to deserialize event data from queue {QueueName}. MessageId: {MessageId}", queueName, message.MessageId);
+                            _logger.LogWarning("Failed to deserialize event data for detail-type {DetailType}. MessageId: {MessageId}", detailType, message.MessageId);
                             await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
                             continue;
                         }
 
-                        await handler(eventData, correlationId);
+                        // Extract correlation ID from event payload if not already found
+                        if (!correlationId.HasValue)
+                        {
+                            var correlationIdProperty = handlerInfo.eventType.GetProperty("CorrelationId");
+                            if (correlationIdProperty != null && correlationIdProperty.PropertyType == typeof(Guid))
+                            {
+                                var eventCorrelationId = correlationIdProperty.GetValue(eventData);
+                                if (eventCorrelationId is Guid guidValue && guidValue != Guid.Empty)
+                                {
+                                    correlationId = guidValue;
+                                }
+                            }
+                        }
 
+                        // Use extracted correlation ID or fall back to new GUID
+                        var finalCorrelationId = correlationId ?? Guid.NewGuid();
+                        await handlerInfo.handler(eventData, finalCorrelationId);
                         await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
 
-                        _logger.LogDebug("Processed message {MessageId} from queue {QueueName}", message.MessageId, queueName);
+                        _logger.LogDebug("Processed message {MessageId} from queue {QueueName} for detail-type {DetailType}", message.MessageId, queueName, detailType);
                     }
                     catch (Exception ex)
                     {
@@ -339,13 +465,36 @@ public class AwsEventBus : IEventBus, IDisposable
     {
         lock (_lock)
         {
-            foreach (var consumer in _consumers)
+            foreach (var (_, (cts, _)) in _consumerTasks.Values)
             {
-                consumer.Value.Cancel();
+                cts.Cancel();
             }
             _consumers.Clear();
+            _consumerTasks.Clear();
             _logger.LogInformation("Stopped all consumers");
         }
+    }
+
+    // Helper method to get detail-type from event type
+    private string GetDetailTypeFromEventType<T>() where T : class
+    {
+        var typeName = typeof(T).Name;
+        return typeName switch
+        {
+            nameof(TaskCreatedEvent) => EventBusConstants.TaskCreated,
+            nameof(WorkflowSelectedEvent) => EventBusConstants.WorkflowSelected,
+            nameof(PriorityAssignedEvent) => EventBusConstants.PriorityAssigned,
+            nameof(SLAConfiguredEvent) => EventBusConstants.SLAConfigured,
+            nameof(TaskAssignedEvent) => EventBusConstants.TaskAssigned,
+            nameof(TaskOverdueEvent) => EventBusConstants.TaskOverdue,
+            nameof(TaskStageStartedEvent) => EventBusConstants.TaskStageStarted,
+            nameof(TaskStageCompletedEvent) => EventBusConstants.TaskStageCompleted,
+            nameof(TaskStageEscalationTriggeredEvent) => EventBusConstants.TaskStageEscalationTriggered,
+            nameof(TaskCompletedEvent) => EventBusConstants.TaskCompleted,
+            nameof(TaskStatusUpdatedEvent) => EventBusConstants.TaskStatusUpdated,
+            nameof(TaskStageReassignmentNeededEvent) => EventBusConstants.TaskStageReassignmentNeeded,
+            _ => typeName.Replace("Event", "")
+        };
     }
 
     private async Task<string> GetOrCreateQueueUrlAsync(string queueName)
