@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace PriorityRuleEngine.API.EventHandlers;
 
 /// <summary>
-/// Event handler for WorkflowSelectedEvent - Evaluates workflow-specific priority rules and publishes PriorityAssignedEvent
+/// Event handler for WorkflowSelectedEvent - Evaluates workflow-specific priority rules and publishes PriorityAssignedEvent for PriorityRuleEngine.API
 /// </summary>
 public class WorkflowSelectedEventHandler
 {
