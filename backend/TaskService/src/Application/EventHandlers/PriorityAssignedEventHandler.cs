@@ -182,6 +182,14 @@ public class PriorityAssignedEventHandler
                         return null;
                     }
 
+                    // Ensure DueDate is UTC (PostgreSQL requires UTC for timestamp with time zone)
+                    DateTime? dueDateUtc = null;
+                    var dueDateOffset = GetDateTimeProperty("dueDate", "DueDate");
+                    if (dueDateOffset.HasValue)
+                    {
+                        dueDateUtc = dueDateOffset.Value.UtcDateTime;
+                    }
+
                     // Update only the priority field, preserve all other fields
                     var updateDto = new
                     {
@@ -189,7 +197,7 @@ public class PriorityAssignedEventHandler
                         Description = GetStringProperty("description", "Description"),
                         Status = GetStringProperty("status", "Status") ?? "Pending",
                         Priority = priority, // Update priority
-                        DueDate = GetDateTimeProperty("dueDate", "DueDate"),
+                        DueDate = dueDateUtc,
                         StageId = GetIntProperty("stageId", "StageId"),
                         AssignedToMemberId = GetIntProperty("assignedToMemberId", "AssignedToMemberId")
                     };

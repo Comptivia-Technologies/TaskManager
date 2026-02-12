@@ -197,13 +197,22 @@ public class TaskAssignedEventHandler
                         task.TaskId, previousMemberId, task.MemberId.Value, completedByMemberIds);
                 }
 
+                // Ensure DueDate is UTC (PostgreSQL requires UTC for timestamp with time zone)
+                DateTime? dueDateUtc = null;
+                if (task.SLADeadline.HasValue)
+                {
+                    dueDateUtc = task.SLADeadline.Value.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(task.SLADeadline.Value, DateTimeKind.Utc)
+                        : task.SLADeadline.Value.ToUniversalTime();
+                }
+
                 var taskUpdateDto = new
                 {
                     TaskName = task.TaskName,
                     Description = task.Description,
                     Status = statusString,
                     Priority = task.Priority,
-                    DueDate = task.SLADeadline,
+                    DueDate = dueDateUtc,
                     // WorkflowId removed - AutoMapper will preserve it from existing task
                     StageId = task.CurrentStageId,
                     AssignedToMemberId = task.MemberId.Value,
@@ -236,6 +245,15 @@ public class TaskAssignedEventHandler
             }
             else
             {
+                // Ensure DueDate is UTC (PostgreSQL requires UTC for timestamp with time zone)
+                DateTime? dueDateUtc = null;
+                if (task.SLADeadline.HasValue)
+                {
+                    dueDateUtc = task.SLADeadline.Value.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(task.SLADeadline.Value, DateTimeKind.Utc)
+                        : task.SLADeadline.Value.ToUniversalTime();
+                }
+
                 // CREATE new task
                 var taskCreateDto = new
                 {
@@ -243,7 +261,7 @@ public class TaskAssignedEventHandler
                     Description = task.Description,
                     Status = statusString,
                     Priority = task.Priority,
-                    DueDate = task.SLADeadline,
+                    DueDate = dueDateUtc,
                     WorkflowId = task.WorkflowId.Value,
                     StageId = task.CurrentStageId,
                     AssignedToMemberId = task.MemberId.Value

@@ -163,6 +163,15 @@ public class TaskOverdueEventHandler
 
                 if (matchingTaskId.HasValue)
                 {
+                    // Ensure DueDate is UTC (PostgreSQL requires UTC for timestamp with time zone)
+                    DateTime? dueDateUtc = null;
+                    if (task.SLADeadline.HasValue)
+                    {
+                        dueDateUtc = task.SLADeadline.Value.Kind == DateTimeKind.Unspecified
+                            ? DateTime.SpecifyKind(task.SLADeadline.Value, DateTimeKind.Utc)
+                            : task.SLADeadline.Value.ToUniversalTime();
+                    }
+
                     // Update the task status via WorkflowManagement.API
                     var updateDto = new
                     {
@@ -170,11 +179,15 @@ public class TaskOverdueEventHandler
                         Description = task.Description,
                         Status = statusString,
                         Priority = task.Priority,
-                        DueDate = task.SLADeadline,
+                        DueDate = dueDateUtc,
                         StageId = task.CurrentStageId,
                         AssignedToMemberId = task.MemberId.Value,
                         IsOverdue = task.IsOverdue
                     };
+
+                    _logger.LogInformation(
+                        "Attempting to sync overdue status. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, DueDate: {DueDate}, DueDateKind: {DueDateKind}",
+                        task.TaskId, matchingTaskId.Value, dueDateUtc, dueDateUtc?.Kind);
 
                     var updateResponse = await _httpClient.PutAsJsonAsync(
                         $"{workflowManagementApiUrl}/tasks/{matchingTaskId.Value}",
