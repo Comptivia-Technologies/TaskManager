@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 using WorkflowManagement.API.Data;
 using WorkflowManagement.API.Middleware;
 using WorkflowManagement.API.Repositories;
@@ -180,9 +181,11 @@ using (var scope = app.Services.CreateScope())
                         ""Description"" VARCHAR(1000),
                         ""Status"" VARCHAR(50) NOT NULL,
                         ""Priority"" VARCHAR(50) NOT NULL,
+                        ""DueDate"" TIMESTAMP,
                         ""WorkflowId"" INTEGER NOT NULL,
                         ""StageId"" INTEGER,
                         ""AssignedToMemberId"" INTEGER,
+                        ""CompletedByMemberIds"" TEXT,
                         ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         CONSTRAINT ""FK_Tasks_Workflows_WorkflowId"" FOREIGN KEY (""WorkflowId"") 
@@ -256,6 +259,51 @@ using (var scope = app.Services.CreateScope())
             else
             {
                 logger.LogInformation("SkillLevel column already exists in Members table.");
+            }
+            
+            // Check and add missing columns to Tasks table if they don't exist
+            using var checkTasksCommand = connection.CreateCommand();
+            checkTasksCommand.CommandText = @"
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                AND table_name = 'Tasks' 
+                AND column_name IN ('DueDate', 'CompletedByMemberIds')
+            ";
+            var existingColumns = new List<string>();
+            using (var reader = await checkTasksCommand.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    existingColumns.Add(reader.GetString(0));
+                }
+            }
+            
+            var columnsToAdd = new List<string>();
+            if (!existingColumns.Contains("DueDate"))
+            {
+                columnsToAdd.Add(@"""DueDate"" TIMESTAMP");
+            }
+            if (!existingColumns.Contains("CompletedByMemberIds"))
+            {
+                columnsToAdd.Add(@"""CompletedByMemberIds"" TEXT");
+            }
+            
+            if (columnsToAdd.Count > 0)
+            {
+                logger.LogInformation($"Adding missing columns to Tasks table: {string.Join(", ", columnsToAdd)}");
+                // Add each column separately (PostgreSQL doesn't support IF NOT EXISTS with multiple columns in one statement)
+                foreach (var column in columnsToAdd)
+                {
+                    using var addColumnCommand = connection.CreateCommand();
+                    addColumnCommand.CommandText = $@"ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS {column}";
+                    await addColumnCommand.ExecuteNonQueryAsync();
+                }
+                logger.LogInformation("Missing columns added successfully to Tasks table.");
+            }
+            else
+            {
+                logger.LogInformation("All required columns exist in Tasks table.");
             }
         }
         finally
