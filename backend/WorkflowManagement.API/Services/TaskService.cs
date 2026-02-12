@@ -82,6 +82,20 @@ public class TaskService : ITaskService
         if (taskCreateDto.AssignedToMemberId.HasValue && !await _memberRepository.ExistsAsync(taskCreateDto.AssignedToMemberId.Value))
             throw new ArgumentException("Member does not exist");
 
+        // Ensure DueDate is UTC before mapping
+        if (taskCreateDto.DueDate.HasValue)
+        {
+            var dueDate = taskCreateDto.DueDate.Value;
+            if (dueDate.Kind == DateTimeKind.Unspecified)
+            {
+                taskCreateDto.DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc);
+            }
+            else if (dueDate.Kind != DateTimeKind.Utc)
+            {
+                taskCreateDto.DueDate = dueDate.ToUniversalTime();
+            }
+        }
+
         var task = _mapper.Map<Models.Task>(taskCreateDto);
         task.CreatedAt = DateTime.UtcNow;
         task.UpdatedAt = DateTime.UtcNow;
@@ -114,8 +128,34 @@ public class TaskService : ITaskService
         if (taskUpdateDto.AssignedToMemberId.HasValue && !await _memberRepository.ExistsAsync(taskUpdateDto.AssignedToMemberId.Value))
             throw new ArgumentException("Member does not exist");
 
+        // Ensure DueDate is UTC before mapping
+        if (taskUpdateDto.DueDate.HasValue)
+        {
+            var dueDate = taskUpdateDto.DueDate.Value;
+            if (dueDate.Kind == DateTimeKind.Unspecified)
+            {
+                taskUpdateDto.DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc);
+            }
+            else if (dueDate.Kind != DateTimeKind.Utc)
+            {
+                taskUpdateDto.DueDate = dueDate.ToUniversalTime();
+            }
+        }
+
         _mapper.Map(taskUpdateDto, task);
+        
+        // Ensure UpdatedAt is UTC (PostgreSQL requires UTC for timestamp with time zone)
         task.UpdatedAt = DateTime.UtcNow;
+        
+        // Ensure CreatedAt is UTC if it was loaded with Unspecified kind
+        if (task.CreatedAt.Kind == DateTimeKind.Unspecified)
+        {
+            task.CreatedAt = DateTime.SpecifyKind(task.CreatedAt, DateTimeKind.Utc);
+        }
+        else if (task.CreatedAt.Kind != DateTimeKind.Utc)
+        {
+            task.CreatedAt = task.CreatedAt.ToUniversalTime();
+        }
 
         var updatedTask = await _taskRepository.UpdateAsync(task);
         var tasks = await _taskRepository.GetTasksWithDetailsAsync();
