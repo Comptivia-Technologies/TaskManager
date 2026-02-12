@@ -96,6 +96,15 @@ public class MemberService : IMemberService
         {
             member.TeamId = null;
         }
+        // Ensure CreatedAt is UTC (PostgreSQL requires UTC for timestamp with time zone)
+        if (member.CreatedAt.Kind == DateTimeKind.Unspecified)
+        {
+            member.CreatedAt = DateTime.SpecifyKind(member.CreatedAt, DateTimeKind.Utc);
+        }
+        else if (member.CreatedAt.Kind != DateTimeKind.Utc)
+        {
+            member.CreatedAt = member.CreatedAt.ToUniversalTime();
+        }
         member.UpdatedAt = DateTime.UtcNow;
 
         var updatedMember = await _memberRepository.UpdateAsync(member);

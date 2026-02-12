@@ -89,6 +89,15 @@ public class TeamService : ITeamService
             return null;
 
         _mapper.Map(teamUpdateDto, team);
+        // Ensure CreatedAt is UTC (PostgreSQL requires UTC for timestamp with time zone)
+        if (team.CreatedAt.Kind == DateTimeKind.Unspecified)
+        {
+            team.CreatedAt = DateTime.SpecifyKind(team.CreatedAt, DateTimeKind.Utc);
+        }
+        else if (team.CreatedAt.Kind != DateTimeKind.Utc)
+        {
+            team.CreatedAt = team.CreatedAt.ToUniversalTime();
+        }
         team.UpdatedAt = DateTime.UtcNow;
 
         var updatedTeam = await _teamRepository.UpdateAsync(team);
