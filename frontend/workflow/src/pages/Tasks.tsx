@@ -15,6 +15,13 @@ const Tasks = () => {
 
   useEffect(() => {
     loadData();
+    
+    // Refresh tasks every 30 seconds to catch overdue updates
+    const interval = setInterval(() => {
+      loadData();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadData = async () => {
@@ -80,14 +87,14 @@ const Tasks = () => {
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    // Handle UTC dates properly - if date string ends with Z or +00:00, it's UTC
+    // Convert UTC to local timezone (browser will automatically convert to IST for India)
     return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      timeZone: 'UTC'
+      // Removed timeZone: 'UTC' - browser will use local timezone (IST for India = UTC+5:30)
     });
   };
 
@@ -230,7 +237,7 @@ const Tasks = () => {
                             task.isOverdue
                           )} font-sans`}
                         >
-                          {task.status}
+                          {task.isOverdue ? 'Overdue' : task.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
