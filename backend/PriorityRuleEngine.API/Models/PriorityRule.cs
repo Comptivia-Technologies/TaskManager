@@ -11,7 +11,7 @@ public class PriorityRule
     public int Salience { get; set; } = 0;  // Rule priority (higher = evaluated first)
     public bool IsActive { get; set; } = true;
     
-    // Generic conditions - JSON structure for rule evaluation using JMESPath syntax
+    // Generic conditions - JSON structure for rule evaluation using JMESPath syntax for PriorityRuleEngine.API
     // Example: { "all": [{ "path": "$.taskType", "op": "equals", "value": "Bug" }] }
     public string ConditionsJson { get; set; } = string.Empty;
     
