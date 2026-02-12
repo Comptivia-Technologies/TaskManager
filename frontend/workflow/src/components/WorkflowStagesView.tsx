@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Workflow } from '../types';
 import { FiUsers, FiArrowRight, FiCheckCircle, FiClock } from 'react-icons/fi';
+import { formatDateOnlyIST } from '../utils/dateUtils';
 
 interface WorkflowStagesViewProps {
   workflow: Workflow;
@@ -33,7 +34,7 @@ const WorkflowStagesView = ({ workflow }: WorkflowStagesViewProps) => {
               <FiClock className="text-[#434E78] text-sm" />
               <span className="text-black/70 font-sans">Created:</span>
               <span className="text-black font-semibold font-sans">
-                {new Date(workflow.createdAt).toLocaleDateString()}
+                {formatDateOnlyIST(workflow.createdAt)}
               </span>
             </div>
           </div>

@@ -5,6 +5,7 @@ import { Task, Workflow } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { FiCheckCircle, FiClock, FiUser, FiLayers, FiCalendar, FiAlertCircle } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
+import { formatDateToIST } from '../utils/dateUtils';
 
 const Tasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -84,19 +85,7 @@ const Tasks = () => {
     return 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    // Convert UTC to local timezone (browser will automatically convert to IST for India)
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      // Removed timeZone: 'UTC' - browser will use local timezone (IST for India = UTC+5:30)
-    });
-  };
+  const formatDate = formatDateToIST;
 
   if (loading) {
     return <LoadingSpinner />;
