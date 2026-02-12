@@ -292,6 +292,7 @@ public class TaskStageStartedEventHandler
             }
 
             // Update the task with the stage
+            // Note: workflowId is removed - AutoMapper will preserve it from existing task
             var updatePayload = new
             {
                 taskName = workflowTask.TaskName,
@@ -299,9 +300,9 @@ public class TaskStageStartedEventHandler
                 status = workflowTask.Status,
                 priority = workflowTask.Priority,
                 dueDate = workflowTask.DueDate,
-                workflowId = workflowTask.WorkflowId,
                 stageId = @event.StageId,
-                assignedToMemberId = workflowTask.AssignedToMemberId
+                assignedToMemberId = workflowTask.AssignedToMemberId,
+                isOverdue = task.IsOverdue
             };
 
             var updateResponse = await _httpClient.PutAsJsonAsync(

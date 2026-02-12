@@ -189,6 +189,7 @@ public class TaskService : ITaskService
                 if (matchingTaskId.HasValue)
                 {
                     // Update the task status via WorkflowManagement.API
+                    // Note: WorkflowId removed - AutoMapper will preserve it from existing task
                     var updateDto = new
                     {
                         TaskName = task.TaskName,
