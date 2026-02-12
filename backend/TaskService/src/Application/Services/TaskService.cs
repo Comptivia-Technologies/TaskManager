@@ -649,6 +649,7 @@ public class TaskService : ITaskService
             Status = task.Status,
             WorkflowId = task.WorkflowId,
             MemberId = task.MemberId,
+            CurrentStageId = task.CurrentStageId,
             SLADeadline = task.SLADeadline,
             IsOverdue = task.IsOverdue,
             CreatedAt = task.CreatedAt,

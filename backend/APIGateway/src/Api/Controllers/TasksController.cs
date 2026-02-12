@@ -34,7 +34,7 @@ public class TasksController : ControllerBase
 
     /// <summary>
     /// Create a new task - Entry point for orchestration flow
-    /// Returns full task details (status, assignee, workflow name, etc.) after processing completes
+    /// Returns taskId immediately. Use GET /api/tasks/{taskId} to retrieve full details after processing.
     /// </summary>
     [HttpPost]
     public async Task<ActionResult> CreateTask([FromBody] CreateTaskRequestDto request)
@@ -67,15 +67,7 @@ public class TasksController : ControllerBase
                 "Task creation initiated via API Gateway. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
                 taskId, correlationId);
 
-            // Wait for task processing and get details using the GET endpoint logic
-            var taskDetails = await WaitForTaskAndGetDetailsAsync(taskId, maxRetries: 15, retryDelayMs: 500);
-
-            if (taskDetails != null)
-            {
-                return Ok(taskDetails);
-            }
-
-            // Fallback: return basic info if processing takes too long
+            // Return immediately with taskId only
             return Accepted(new
             {
                 taskId = taskId,
@@ -253,33 +245,25 @@ public class TasksController : ControllerBase
                 }
             }
 
-            // Step 4: Get stage name
+            // Step 4: Get stage name using CurrentStageId from TaskService
             string? stageName = null;
-            if (workflowId.HasValue)
+            var currentStageId = GetIntProperty(taskServiceRoot, "currentStageId", "CurrentStageId");
+            if (currentStageId.HasValue)
             {
                 try
                 {
-                    var tasksResponse = await httpClient.GetAsync($"{workflowManagementApiUrl}/tasks/workflow/{workflowId.Value}");
-                    if (tasksResponse.IsSuccessStatusCode)
+                    var stageResponse = await httpClient.GetAsync($"{workflowManagementApiUrl}/stages/{currentStageId.Value}");
+                    if (stageResponse.IsSuccessStatusCode)
                     {
-                        var tasksJson = await tasksResponse.Content.ReadAsStringAsync();
-                        using var tasksDoc = JsonDocument.Parse(tasksJson);
-                        var tasksArray = tasksDoc.RootElement.EnumerateArray();
-                        
-                        foreach (var taskElement in tasksArray)
-                        {
-                            var taskNameFromApi = GetStringProperty(taskElement, "taskName", "TaskName");
-                            if (taskNameFromApi?.Equals(taskName, StringComparison.OrdinalIgnoreCase) == true)
-                            {
-                                stageName = GetStringProperty(taskElement, "stageName", "StageName");
-                                break;
-                            }
-                        }
+                        var stageJson = await stageResponse.Content.ReadAsStringAsync();
+                        using var stageDoc = JsonDocument.Parse(stageJson);
+                        var stageRoot = stageDoc.RootElement;
+                        stageName = GetStringProperty(stageRoot, "stageName", "StageName");
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to get stage name. WorkflowId: {WorkflowId}", workflowId);
+                    _logger.LogWarning(ex, "Failed to get stage name. StageId: {StageId}", currentStageId.Value);
                 }
             }
 

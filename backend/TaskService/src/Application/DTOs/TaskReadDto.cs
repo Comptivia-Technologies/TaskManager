@@ -16,6 +16,7 @@ public class TaskReadDto
     public DomainTaskStatus Status { get; set; }
     public int? WorkflowId { get; set; }
     public int? MemberId { get; set; }
+    public int? CurrentStageId { get; set; }
     public DateTime? SLADeadline { get; set; }
     public bool IsOverdue { get; set; }
     public DateTime CreatedAt { get; set; }
