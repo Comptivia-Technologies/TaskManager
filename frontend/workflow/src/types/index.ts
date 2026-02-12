@@ -118,6 +118,7 @@ export interface Task {
   stageName?: string;
   assignedToMemberId?: number;
   assignedToMemberName?: string;
+  isOverdue?: boolean;
   createdAt: string;
   updatedAt: string;
 }

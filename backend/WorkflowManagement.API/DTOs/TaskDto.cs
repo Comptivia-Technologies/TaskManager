@@ -16,6 +16,7 @@ public class TaskReadDto
     public int? AssignedToMemberId { get; set; }
     public string? AssignedToMemberName { get; set; }
     public string? CompletedByMemberIds { get; set; }  // Comma-separated member IDs who completed stages
+    public bool IsOverdue { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -72,6 +73,8 @@ public class TaskUpdateDto
 
     [StringLength(500)]
     public string? CompletedByMemberIds { get; set; }  // Comma-separated member IDs who completed stages
+
+    public bool IsOverdue { get; set; }
 }
 
 
