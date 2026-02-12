@@ -343,48 +343,54 @@ public class AwsEventBus : IEventBus, IDisposable
                             _logger.LogWarning("Message missing detail-type. Attempting to route to all handlers. MessageId: {MessageId}", message.MessageId);
                             // Try each registered handler until one succeeds
                             bool processed = false;
+                            Dictionary<string, (Type EventType, Func<object, Guid, Task> Handler)>? handlersCopy = null;
                             lock (_lock)
                             {
                                 if (_consumers.ContainsKey(queueName))
                                 {
-                                    foreach (var (dt, (eventType, handler)) in _consumers[queueName])
-                                    {
-                                        try
-                                        {
-                                            var eventData = JsonSerializer.Deserialize(detailJson, eventType, new JsonSerializerOptions
-                                            {
-                                                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                                            });
+                                    handlersCopy = new Dictionary<string, (Type, Func<object, Guid, Task>)>(_consumers[queueName]);
+                                }
+                            }
 
-                                            if (eventData != null)
+                            if (handlersCopy != null)
+                            {
+                                foreach (var (dt, (eventType, handler)) in handlersCopy)
+                                {
+                                    try
+                                    {
+                                        var inferredEventData = JsonSerializer.Deserialize(detailJson, eventType, new JsonSerializerOptions
+                                        {
+                                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                                        });
+
+                                        if (inferredEventData != null)
+                                        {
+                                            // Extract correlation ID from event payload if not already found
+                                            Guid? inferredCorrelationId = correlationId;
+                                            if (!inferredCorrelationId.HasValue)
                                             {
-                                                // Extract correlation ID from event payload if not already found
-                                                Guid? inferredCorrelationId = correlationId;
-                                                if (!inferredCorrelationId.HasValue)
+                                                var correlationIdProperty = eventType.GetProperty("CorrelationId");
+                                                if (correlationIdProperty != null && correlationIdProperty.PropertyType == typeof(Guid))
                                                 {
-                                                    var correlationIdProperty = eventType.GetProperty("CorrelationId");
-                                                    if (correlationIdProperty != null && correlationIdProperty.PropertyType == typeof(Guid))
+                                                    var eventCorrelationId = correlationIdProperty.GetValue(inferredEventData);
+                                                    if (eventCorrelationId is Guid guidValue && guidValue != Guid.Empty)
                                                     {
-                                                        var eventCorrelationId = correlationIdProperty.GetValue(eventData);
-                                                        if (eventCorrelationId is Guid guidValue && guidValue != Guid.Empty)
-                                                        {
-                                                            inferredCorrelationId = guidValue;
-                                                        }
+                                                        inferredCorrelationId = guidValue;
                                                     }
                                                 }
-                                                var finalCorrelationId = inferredCorrelationId ?? Guid.NewGuid();
-                                                await handler(eventData, finalCorrelationId);
-                                                await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
-                                                _logger.LogDebug("Processed message {MessageId} from queue {QueueName} for detail-type {DetailType} (inferred)", message.MessageId, queueName, dt);
-                                                processed = true;
-                                                break;
                                             }
+                                            var inferredFinalCorrelationId = inferredCorrelationId ?? Guid.NewGuid();
+                                            await handler(inferredEventData, inferredFinalCorrelationId);
+                                            await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
+                                            _logger.LogDebug("Processed message {MessageId} from queue {QueueName} for detail-type {DetailType} (inferred)", message.MessageId, queueName, dt);
+                                            processed = true;
+                                            break;
                                         }
-                                        catch
-                                        {
-                                            // Try next handler
-                                            continue;
-                                        }
+                                    }
+                                    catch
+                                    {
+                                        // Try next handler
+                                        continue;
                                     }
                                 }
                             }
@@ -403,12 +409,19 @@ public class AwsEventBus : IEventBus, IDisposable
                         {
                             if (!_consumers.ContainsKey(queueName) || !_consumers[queueName].ContainsKey(detailType))
                             {
-                                _logger.LogWarning("No handler registered for detail-type {DetailType} on queue {QueueName}. MessageId: {MessageId}", detailType, queueName, message.MessageId);
-                                await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
-                                continue;
+                                handlerInfo = default;
                             }
+                            else
+                            {
+                                handlerInfo = _consumers[queueName][detailType];
+                            }
+                        }
 
-                            handlerInfo = _consumers[queueName][detailType];
+                        if (handlerInfo.handler == null)
+                        {
+                            _logger.LogWarning("No handler registered for detail-type {DetailType} on queue {QueueName}. MessageId: {MessageId}", detailType, queueName, message.MessageId);
+                            await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
+                            continue;
                         }
                         
                         // Deserialize to the correct event type
@@ -465,9 +478,9 @@ public class AwsEventBus : IEventBus, IDisposable
     {
         lock (_lock)
         {
-            foreach (var (_, (cts, _)) in _consumerTasks.Values)
+            foreach (var kvp in _consumerTasks)
             {
-                cts.Cancel();
+                kvp.Value.Cts.Cancel();
             }
             _consumers.Clear();
             _consumerTasks.Clear();
