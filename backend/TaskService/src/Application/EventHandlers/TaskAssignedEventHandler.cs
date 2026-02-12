@@ -204,7 +204,7 @@ public class TaskAssignedEventHandler
                     Status = statusString,
                     Priority = task.Priority,
                     DueDate = task.SLADeadline,
-                    WorkflowId = task.WorkflowId.Value,
+                    // WorkflowId removed - AutoMapper will preserve it from existing task
                     StageId = task.CurrentStageId,
                     AssignedToMemberId = task.MemberId.Value,
                     CompletedByMemberIds = string.IsNullOrEmpty(completedByMemberIds) ? null : completedByMemberIds,

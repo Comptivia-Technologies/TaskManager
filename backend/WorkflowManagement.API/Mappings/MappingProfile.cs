@@ -36,7 +36,10 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.StageName, opt => opt.Ignore())
             .ForMember(dest => dest.AssignedToMemberName, opt => opt.Ignore());
         CreateMap<TaskCreateDto, Models.Task>();
-        CreateMap<TaskUpdateDto, Models.Task>();
+        CreateMap<TaskUpdateDto, Models.Task>()
+            .ForMember(dest => dest.WorkflowId, opt => opt.Ignore())  // Preserve WorkflowId - not in update DTO
+            .ForMember(dest => dest.TaskId, opt => opt.Ignore())      // Preserve TaskId - not in update DTO
+            .ForMember(dest => dest.CreatedAt, opt => opt.Ignore());   // Preserve CreatedAt - not updatable
     }
 }
 
