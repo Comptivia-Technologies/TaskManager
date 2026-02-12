@@ -188,6 +188,15 @@ public class TaskService : ITaskService
 
                 if (matchingTaskId.HasValue)
                 {
+                    // Ensure DueDate is UTC (PostgreSQL requires UTC for timestamp with time zone)
+                    DateTime? dueDateUtc = null;
+                    if (task.SLADeadline.HasValue)
+                    {
+                        dueDateUtc = task.SLADeadline.Value.Kind == DateTimeKind.Unspecified
+                            ? DateTime.SpecifyKind(task.SLADeadline.Value, DateTimeKind.Utc)
+                            : task.SLADeadline.Value.ToUniversalTime();
+                    }
+
                     // Update the task status via WorkflowManagement.API
                     // Note: WorkflowId removed - AutoMapper will preserve it from existing task
                     var updateDto = new
@@ -196,7 +205,7 @@ public class TaskService : ITaskService
                         Description = task.Description,
                         Status = statusString,
                         Priority = task.Priority,
-                        DueDate = task.SLADeadline,
+                        DueDate = dueDateUtc,
                         StageId = task.CurrentStageId, // Preserve current stage instead of null
                         AssignedToMemberId = task.MemberId.Value,
                         IsOverdue = task.IsOverdue
