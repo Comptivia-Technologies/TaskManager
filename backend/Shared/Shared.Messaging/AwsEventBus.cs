@@ -233,30 +233,64 @@ public class AwsEventBus : IEventBus, IDisposable
                         }
 
                         // Parse event from message body
-                        // SQS message body contains the EventBridge event detail (when routed via SNS)
-                        // Or direct EventBridge event JSON
-                        var eventBridgeEvent = JsonSerializer.Deserialize<EventBridgeEventDetail>(message.Body, new JsonSerializerOptions
-                        {
-                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                        });
-
+                        // EventBridge sends full event envelope when routing directly to SQS
+                        // Format: { "version": "0", "detail-type": "...", "source": "...", "detail": {...} }
                         string? detailJson = null;
-                        if (eventBridgeEvent?.Detail != null)
+
+                        // First, try to parse as full EventBridge event format (detail is an object)
+                        if (message.Body.StartsWith("{") && message.Body.Contains("\"detail\""))
                         {
-                            detailJson = eventBridgeEvent.Detail;
-                        }
-                        else if (message.Body.StartsWith("{") && message.Body.Contains("\"detail\""))
-                        {
-                            // Direct EventBridge event format
-                            var fullEvent = JsonSerializer.Deserialize<EventBridgeFullEvent>(message.Body, new JsonSerializerOptions
+                            try
                             {
-                                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                            });
-                            detailJson = fullEvent?.Detail?.ToString();
+                                using var doc = JsonDocument.Parse(message.Body);
+                                var root = doc.RootElement;
+                                
+                                if (root.TryGetProperty("detail", out var detailElement))
+                                {
+                                    // Extract detail object and serialize it back to JSON string
+                                    detailJson = detailElement.GetRawText();
+                                    
+                                    // Extract correlation ID from trace-header if available
+                                    if (root.TryGetProperty("trace-header", out var traceHeader))
+                                    {
+                                        var traceHeaderValue = traceHeader.GetString();
+                                        if (!string.IsNullOrEmpty(traceHeaderValue) && Guid.TryParse(traceHeaderValue, out var traceCorrelationId))
+                                        {
+                                            correlationId = traceCorrelationId;
+                                        }
+                                    }
+                                }
+                            }
+                            catch (JsonException)
+                            {
+                                // Fall through to other parsing methods
+                            }
                         }
-                        else
+
+                        // If not parsed yet, try EventBridgeEventDetail format (detail as string - SNS format)
+                        if (string.IsNullOrEmpty(detailJson))
                         {
-                            // Assume message body is the event directly
+                            try
+                            {
+                                var eventBridgeEvent = JsonSerializer.Deserialize<EventBridgeEventDetail>(message.Body, new JsonSerializerOptions
+                                {
+                                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                                });
+                                
+                                if (eventBridgeEvent?.Detail != null)
+                                {
+                                    detailJson = eventBridgeEvent.Detail;
+                                }
+                            }
+                            catch (JsonException)
+                            {
+                                // Fall through
+                            }
+                        }
+
+                        // Last resort: assume message body is the event directly
+                        if (string.IsNullOrEmpty(detailJson))
+                        {
                             detailJson = message.Body;
                         }
 
