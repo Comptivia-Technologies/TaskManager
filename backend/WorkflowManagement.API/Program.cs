@@ -102,12 +102,14 @@ using (var scope = app.Services.CreateScope())
         try
         {
             // Check if all required tables exist
+            // Note: PostgreSQL stores quoted identifiers as-is, but information_schema.tables stores them in lowercase
+            // So we need to check for lowercase names using LOWER() function
             using var verifyCommand = connection.CreateCommand();
             verifyCommand.CommandText = @"
                 SELECT COUNT(*) 
                 FROM information_schema.tables 
                 WHERE table_schema = 'public' 
-                AND table_name IN ('Members', 'Teams', 'Workflows', 'Stages', 'Tasks')
+                AND LOWER(table_name) IN ('members', 'teams', 'workflows', 'stages', 'tasks')
             ";
             var tableCount = Convert.ToInt32(await verifyCommand.ExecuteScalarAsync());
             
@@ -233,7 +235,7 @@ using (var scope = app.Services.CreateScope())
                 SELECT COUNT(*) 
                 FROM information_schema.columns 
                 WHERE table_schema = 'public' 
-                AND table_name = 'Members' 
+                AND LOWER(table_name) = 'members' 
                 AND column_name = 'SkillLevel'
             ";
             var result = await checkCommand.ExecuteScalarAsync();
@@ -269,7 +271,7 @@ using (var scope = app.Services.CreateScope())
                 SELECT column_name 
                 FROM information_schema.columns 
                 WHERE table_schema = 'public' 
-                AND table_name = 'Tasks' 
+                AND LOWER(table_name) = 'tasks' 
                 AND column_name IN ('DueDate', 'CompletedByMemberIds', 'IsOverdue')
             ";
             var existingColumns = new List<string>();
