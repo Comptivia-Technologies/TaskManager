@@ -53,7 +53,8 @@ builder.Services.AddScoped<IWorkflowRepository, WorkflowRepository>();
 
 // Services
 builder.Services.AddScoped<IWorkflowSelectionService, WorkflowSelectionService>();
-builder.Services.AddScoped<IStageOrchestrationService, StageOrchestrationService>();
+// Add HttpClient for TaskService API calls
+builder.Services.AddHttpClient<IStageOrchestrationService, StageOrchestrationService>();
 
 // Event Handlers
 builder.Services.AddScoped<TaskCreatedEventHandler>();
