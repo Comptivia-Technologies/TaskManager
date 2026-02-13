@@ -62,8 +62,16 @@ public class StageOrchestrationService : IStageOrchestrationService
             if (!stagesList.Any())
             {
                 _logger.LogWarning(
-                    "No stages found for workflow. TaskId: {TaskId}, WorkflowId: {WorkflowId}, CorrelationId: {CorrelationId}",
+                    "No stages found for workflow. TaskId: {TaskId}, WorkflowId: {WorkflowId}, CorrelationId: {CorrelationId}. " +
+                    "Stage orchestration cannot start. Please add stages to the workflow.",
                     taskAssignedEvent.TaskId, workflowSelection.WorkflowId, taskAssignedEvent.CorrelationId);
+                
+                // Mark orchestration as started to prevent infinite retries
+                // Even though no stage was started, we mark it to avoid retrying when task is reassigned
+                workflowSelection.StageOrchestrationStarted = true;
+                workflowSelection.StageOrchestrationStartedAt = DateTime.UtcNow;
+                await _workflowRepository.UpdateAsync(workflowSelection);
+                
                 return;
             }
 
