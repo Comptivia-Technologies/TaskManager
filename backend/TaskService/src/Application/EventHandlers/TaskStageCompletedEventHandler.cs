@@ -49,7 +49,26 @@ public class TaskStageCompletedEventHandler
             }
 
             // Update task - clear current stage info (will be set by next TaskStageStartedEvent)
-            task.CurrentStageId = @event.NextStageId; // Will be updated when next stage starts
+            // Only clear CurrentStageId if NextStageId is NULL (last stage completed)
+            // Otherwise, keep CurrentStageId as-is until TaskStageStartedEvent sets it to avoid race conditions
+            if (@event.NextStageId.HasValue)
+            {
+                // Next stage exists - keep CurrentStageId as-is until TaskStageStartedEvent updates it
+                // This prevents race condition where CurrentStageId is set before stage actually starts
+                // The old stage ID will be replaced when TaskStageStartedEvent processes
+                _logger.LogInformation(
+                    "Stage completed, waiting for next stage to start. TaskId: {TaskId}, CompletedStageId: {CompletedStageId}, NextStageId: {NextStageId}, CurrentStageId: {CurrentStageId}",
+                    task.TaskId, @event.StageId, @event.NextStageId, task.CurrentStageId);
+            }
+            else
+            {
+                // Last stage completed - clear CurrentStageId
+                task.CurrentStageId = null;
+                _logger.LogInformation(
+                    "Last stage completed. TaskId: {TaskId}, CompletedStageId: {CompletedStageId}",
+                    task.TaskId, @event.StageId);
+            }
+            
             task.CurrentStageStartedAt = null; // Will be set when next stage starts
             task.StageTimeoutAt = null; // Will be set when next stage starts
             task.TaskStageCompletedEventId = correlationId; // Store CorrelationId for idempotency (unique per stage event)
