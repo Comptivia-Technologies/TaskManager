@@ -292,6 +292,23 @@ public class TaskStageStartedEventHandler
             }
 
             // Update the task with the stage
+            // Use task.SLADeadline instead of workflowTask.DueDate to ensure dueDate is preserved
+            // This matches the pattern used in TaskAssignedEventHandler
+            DateTime? dueDateUtc = null;
+            if (task.SLADeadline.HasValue)
+            {
+                dueDateUtc = task.SLADeadline.Value.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(task.SLADeadline.Value, DateTimeKind.Utc)
+                    : task.SLADeadline.Value.ToUniversalTime();
+            }
+            else if (workflowTask.DueDate.HasValue)
+            {
+                // Fallback to existing DueDate if SLADeadline not set yet (edge case)
+                dueDateUtc = workflowTask.DueDate.Value.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(workflowTask.DueDate.Value, DateTimeKind.Utc)
+                    : workflowTask.DueDate.Value.ToUniversalTime();
+            }
+
             // Note: workflowId is removed - AutoMapper will preserve it from existing task
             var updatePayload = new
             {
@@ -299,7 +316,7 @@ public class TaskStageStartedEventHandler
                 description = workflowTask.Description,
                 status = workflowTask.Status,
                 priority = workflowTask.Priority,
-                dueDate = workflowTask.DueDate,
+                dueDate = dueDateUtc,
                 stageId = @event.StageId,
                 assignedToMemberId = workflowTask.AssignedToMemberId,
                 isOverdue = task.IsOverdue
