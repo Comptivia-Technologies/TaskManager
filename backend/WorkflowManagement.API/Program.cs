@@ -179,7 +179,6 @@ using (var scope = app.Services.CreateScope())
                     -- Create Tasks table
                     CREATE TABLE IF NOT EXISTS ""Tasks"" (
                         ""TaskId"" SERIAL PRIMARY KEY,
-                        ""IsOverdue"" BOOLEAN NOT NULL DEFAULT FALSE,
                         ""TaskName"" VARCHAR(200) NOT NULL,
                         ""Description"" VARCHAR(1000),
                         ""Status"" VARCHAR(50) NOT NULL,
