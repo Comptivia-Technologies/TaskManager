@@ -125,6 +125,13 @@ jobs:
               ]')
             fi
             
+            # Add TaskServiceApi__BaseUrl for WorkflowService
+            if [ "$service_dir" = "WorkflowService" ]; then
+              ENV_JSON=$(echo "$ENV_JSON" | jq '. += [
+                {"name":"TaskServiceApi__BaseUrl","value":"http://task-service.workflow-automation/api"}
+              ]')
+            fi
+            
             # Create task definition JSON using jq
             jq -n \
               --arg family "$family_name" \

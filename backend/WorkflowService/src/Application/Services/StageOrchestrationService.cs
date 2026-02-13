@@ -3,6 +3,8 @@ using Shared.Contracts.Constants;
 using Shared.Messaging;
 using WorkflowService.Application.Interfaces;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 namespace WorkflowService.Application.Services;
 
@@ -14,15 +16,21 @@ public class StageOrchestrationService : IStageOrchestrationService
 {
     private readonly IWorkflowRepository _workflowRepository;
     private readonly IEventBus _eventBus;
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<StageOrchestrationService> _logger;
 
     public StageOrchestrationService(
         IWorkflowRepository workflowRepository,
         IEventBus eventBus,
+        HttpClient httpClient,
+        IConfiguration configuration,
         ILogger<StageOrchestrationService> logger)
     {
         _workflowRepository = workflowRepository;
         _eventBus = eventBus;
+        _httpClient = httpClient;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -45,19 +53,66 @@ public class StageOrchestrationService : IStageOrchestrationService
                 return;
             }
 
-            // Check if stage orchestration has already started for this task
-            // This prevents restarting from Stage 1 when a task is reassigned
-            if (workflowSelection.StageOrchestrationStarted)
-            {
-                _logger.LogInformation(
-                    "Stage orchestration already started for task, skipping. TaskId: {TaskId}, StartedAt: {StartedAt}, CorrelationId: {CorrelationId}",
-                    taskAssignedEvent.TaskId, workflowSelection.StageOrchestrationStartedAt, taskAssignedEvent.CorrelationId);
-                return;
-            }
-
-            // Get workflow stages ordered by StageOrder
+            // Get workflow stages ordered by StageOrder FIRST (before checking flag)
+            // This allows us to detect if stages were added after initial assignment
             var stages = await _workflowRepository.GetStagesByWorkflowIdAsync(workflowSelection.WorkflowId);
             var stagesList = stages.OrderBy(s => s.StageOrder).ToList();
+
+            // Check if stage orchestration has already started for this task
+            // BUT: If stages exist now, allow retry (stages may have been added after initial assignment)
+            if (workflowSelection.StageOrchestrationStarted)
+            {
+                if (!stagesList.Any())
+                {
+                    // No stages exist - skip (prevents infinite retries)
+                    _logger.LogInformation(
+                        "Stage orchestration already started for task, skipping (no stages exist). TaskId: {TaskId}, StartedAt: {StartedAt}, CorrelationId: {CorrelationId}",
+                        taskAssignedEvent.TaskId, workflowSelection.StageOrchestrationStartedAt, taskAssignedEvent.CorrelationId);
+                    return;
+                }
+                
+                // Stages exist now - check if task is already in a stage
+                // Only reset if CurrentStageId is NULL (task never entered any stage)
+                var taskServiceApiUrl = _configuration["TaskServiceApi:BaseUrl"] 
+                    ?? "http://task-service.workflow-automation/api";
+                
+                try
+                {
+                    var taskResponse = await _httpClient.GetAsync($"{taskServiceApiUrl}/task-service/{taskAssignedEvent.TaskId}");
+                    if (taskResponse.IsSuccessStatusCode)
+                    {
+                        var taskJson = await taskResponse.Content.ReadAsStringAsync();
+                        using var taskDoc = JsonDocument.Parse(taskJson);
+                        var currentStageId = taskDoc.RootElement.TryGetProperty("currentStageId", out var stageIdProp) 
+                            ? (stageIdProp.ValueKind == JsonValueKind.Null ? (int?)null : stageIdProp.GetInt32()) 
+                            : (int?)null;
+                        
+                        if (currentStageId.HasValue)
+                        {
+                            // Task is already in a stage - don't reset flag (reassignment scenario)
+                            _logger.LogInformation(
+                                "Stage orchestration already started and task is in stage. Skipping. TaskId: {TaskId}, CurrentStageId: {CurrentStageId}, CorrelationId: {CorrelationId}",
+                                taskAssignedEvent.TaskId, currentStageId.Value, taskAssignedEvent.CorrelationId);
+                            return;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, 
+                        "Failed to check task CurrentStageId from TaskService. TaskId: {TaskId}, CorrelationId: {CorrelationId}. Proceeding with reset.",
+                        taskAssignedEvent.TaskId, taskAssignedEvent.CorrelationId);
+                }
+                
+                // Stages exist but CurrentStageId is NULL - reset flag and proceed
+                _logger.LogInformation(
+                    "Stage orchestration was marked as started but stages now exist and task is not in any stage. Resetting flag and starting stage orchestration. TaskId: {TaskId}, WorkflowId: {WorkflowId}, StagesCount: {StagesCount}, CorrelationId: {CorrelationId}",
+                    taskAssignedEvent.TaskId, workflowSelection.WorkflowId, stagesList.Count, taskAssignedEvent.CorrelationId);
+                
+                workflowSelection.StageOrchestrationStarted = false;
+                workflowSelection.StageOrchestrationStartedAt = null;
+                await _workflowRepository.UpdateAsync(workflowSelection);
+            }
 
             if (!stagesList.Any())
             {
