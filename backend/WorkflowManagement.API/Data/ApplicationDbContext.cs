@@ -19,7 +19,7 @@ public class ApplicationDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Team configuration
+        // Team configuration for WorkflowManagement.API
         modelBuilder.Entity<Team>(entity =>
         {
             entity.HasKey(e => e.TeamId);
@@ -29,7 +29,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.UpdatedAt).IsRequired();
         });
 
-        // Member configuration
+        // Member configuration for WorkflowManagement.API
         modelBuilder.Entity<Member>(entity =>
         {
             entity.HasKey(e => e.MemberId);
