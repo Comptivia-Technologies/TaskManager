@@ -31,6 +31,9 @@ public class AwsEventBus : IEventBus, IDisposable
         _options = options.Value;
         _logger = logger;
 
+        _logger.LogInformation("AwsEventBus initialized with ServicePrefix: '{ServicePrefix}', EventBusName: '{EventBusName}', Region: '{Region}'", 
+            _options.ServicePrefix, _options.EventBusName, _options.Region);
+
         var awsConfig = new AmazonEventBridgeConfig { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) };
         var sqsConfig = new AmazonSQSConfig { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) };
         var schedulerConfig = new AmazonSchedulerConfig { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_options.Region) };
