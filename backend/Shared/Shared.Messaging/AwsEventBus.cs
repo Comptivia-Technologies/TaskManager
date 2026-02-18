@@ -390,6 +390,11 @@ public class AwsEventBus : IEventBus, IDisposable
                                             break;
                                         }
                                     }
+                                    catch (JsonException ex) when (ex.Message.Contains("Guid") || ex.Message.Contains("could not be converted"))
+                                    {
+                                        // Legacy message with integer ID - skip this handler and try next, or delete if all fail
+                                        continue;
+                                    }
                                     catch
                                     {
                                         // Try next handler
@@ -420,7 +425,7 @@ public class AwsEventBus : IEventBus, IDisposable
                             }
                         }
 
-                        if (handlerInfo.handler == null)
+                        if (handlerInfo.handler == null || handlerInfo.eventType == null)
                         {
                             _logger.LogWarning("No handler registered for detail-type {DetailType} on queue {QueueName}. MessageId: {MessageId}", detailType, queueName, message.MessageId);
                             await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
@@ -428,10 +433,20 @@ public class AwsEventBus : IEventBus, IDisposable
                         }
                         
                         // Deserialize to the correct event type
-                        var eventData = JsonSerializer.Deserialize(detailJson, handlerInfo.eventType, new JsonSerializerOptions
+                        object? eventData;
+                        try
                         {
-                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                        });
+                            eventData = JsonSerializer.Deserialize(detailJson, handlerInfo.eventType, new JsonSerializerOptions
+                            {
+                                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                            });
+                        }
+                        catch (JsonException ex) when (ex.Message.Contains("Guid") || ex.Message.Contains("could not be converted"))
+                        {
+                            _logger.LogWarning(ex, "Received legacy message with integer ID format (pre-Guid migration). Skipping and deleting message {MessageId}. DetailType: {DetailType}", message.MessageId, detailType);
+                            await _sqs.DeleteMessageAsync(queueUrl, message.ReceiptHandle, cancellationToken);
+                            continue;
+                        }
 
                         if (eventData == null)
                         {
