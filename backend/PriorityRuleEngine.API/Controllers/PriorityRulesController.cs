@@ -46,7 +46,7 @@ public class PriorityRulesController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<PriorityRuleDto>> GetRule(int id)
+    public async Task<ActionResult<PriorityRuleDto>> GetRule(Guid id)
     {
         var rule = await _repository.GetByIdAsync(id);
         if (rule == null) return NotFound();
@@ -118,7 +118,7 @@ public class PriorityRulesController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<ActionResult<PriorityRuleDto>> UpdateRule(int id, [FromBody] UpdatePriorityRuleRequest request)
+    public async Task<ActionResult<PriorityRuleDto>> UpdateRule(Guid id, [FromBody] UpdatePriorityRuleRequest request)
     {
         var rule = new PriorityRule
         {
@@ -154,7 +154,7 @@ public class PriorityRulesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteRule(int id)
+    public async Task<IActionResult> DeleteRule(Guid id)
     {
         var deleted = await _repository.DeleteAsync(id);
         if (!deleted) return NotFound();

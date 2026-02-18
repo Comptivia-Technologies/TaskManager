@@ -50,7 +50,7 @@ public class WorkflowService : IWorkflowService
             // Populate team names for stages
             foreach (var stageDto in workflowDto.Stages)
             {
-                if (string.IsNullOrEmpty(stageDto.TeamName) && stageDto.TeamId > 0)
+                if (string.IsNullOrEmpty(stageDto.TeamName) && stageDto.TeamId != Guid.Empty)
                 {
                     var team = await _teamRepository.GetByIdAsync(stageDto.TeamId);
                     if (team != null)
@@ -77,7 +77,7 @@ public class WorkflowService : IWorkflowService
         // Ensure all stages have team names populated
         foreach (var stageDto in workflowDto.Stages)
         {
-            if (string.IsNullOrEmpty(stageDto.TeamName) && stageDto.TeamId > 0)
+            if (string.IsNullOrEmpty(stageDto.TeamName) && stageDto.TeamId != Guid.Empty)
             {
                 var team = await _teamRepository.GetByIdAsync(stageDto.TeamId);
                 if (team != null)
@@ -90,8 +90,8 @@ public class WorkflowService : IWorkflowService
 
     public async System.Threading.Tasks.Task<WorkflowReadDto> CreateWorkflowAsync(WorkflowCreateDto workflowCreateDto)
     {
-        // Treat teamId 0 as null (workflows don't need teams, stages have teams)
-        if (workflowCreateDto.TeamId.HasValue && workflowCreateDto.TeamId.Value == 0)
+        // Treat teamId Guid.Empty as null (workflows don't need teams, stages have teams)
+        if (workflowCreateDto.TeamId.HasValue && workflowCreateDto.TeamId.Value == Guid.Empty)
         {
             workflowCreateDto.TeamId = null;
         }
@@ -205,7 +205,7 @@ public class WorkflowService : IWorkflowService
         // Ensure all stages have team names
         foreach (var stageDto in workflowDto.Stages)
         {
-            if (string.IsNullOrEmpty(stageDto.TeamName) && stageDto.TeamId > 0)
+            if (string.IsNullOrEmpty(stageDto.TeamName) && stageDto.TeamId != Guid.Empty)
             {
                 var team = await _teamRepository.GetByIdAsync(stageDto.TeamId);
                 if (team != null)

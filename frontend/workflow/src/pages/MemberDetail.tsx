@@ -4,8 +4,8 @@ import { memberService } from '../services/memberService';
 import { Member, Task } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { toast } from 'react-toastify';
-import { FiArrowLeft, FiUser, FiCheckCircle, FiClock, FiAlertCircle, FiCalendar, FiLayers } from 'react-icons/fi';
-import { formatDateToIST, formatDateOnlyIST } from '../utils/dateUtils';
+import { FiArrowLeft, FiUser, FiCheckCircle, FiClock, FiAlertCircle } from 'react-icons/fi';
+import { formatDateToIST } from '../utils/dateUtils';
 
 const MemberDetail = () => {
   const { id } = useParams<{ id: string }>();

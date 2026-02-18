@@ -126,7 +126,7 @@ public class TaskService : ITaskService
 
     /// <summary>
     /// Syncs task status to WorkflowManagement.API so WorkloadService can see the update
-    /// Since TaskService uses Guid TaskId and WorkflowManagement.API uses int TaskId,
+    /// Since TaskService uses Guid TaskId and WorkflowManagement.API uses Guid TaskId,
     /// we find the task by matching TaskName and update it.
     /// </summary>
     private async System.Threading.Tasks.Task SyncTaskStatusToWorkflowManagementAPIAsync(DomainTask task, DomainTaskStatus newStatus)
@@ -167,7 +167,7 @@ public class TaskService : ITaskService
                 using var jsonDoc = System.Text.Json.JsonDocument.Parse(tasksJson);
                 var tasksArray = jsonDoc.RootElement.EnumerateArray();
                 
-                int? matchingTaskId = null;
+                Guid? matchingTaskId = null;
                 foreach (var taskElement in tasksArray)
                 {
                     // Try both camelCase and PascalCase property names
@@ -182,7 +182,7 @@ public class TaskService : ITaskService
                         
                         if (taskIdProp.ValueKind != System.Text.Json.JsonValueKind.Undefined)
                         {
-                            matchingTaskId = taskIdProp.GetInt32();
+                            matchingTaskId = taskIdProp.GetGuid();
                             break;
                         }
                     }
@@ -350,7 +350,7 @@ public class TaskService : ITaskService
 
     /// <summary>
     /// Syncs task deletion to WorkflowManagement.API
-    /// Since TaskService uses Guid TaskId and WorkflowManagement.API uses int TaskId,
+    /// Since TaskService uses Guid TaskId and WorkflowManagement.API uses Guid TaskId,
     /// we find the task by matching TaskName and delete it.
     /// </summary>
     private async System.Threading.Tasks.Task SyncTaskDeletionToWorkflowManagementAPIAsync(DomainTask task)
@@ -381,7 +381,7 @@ public class TaskService : ITaskService
                 using var jsonDoc = System.Text.Json.JsonDocument.Parse(tasksJson);
                 var tasksArray = jsonDoc.RootElement.EnumerateArray();
                 
-                int? matchingTaskId = null;
+                Guid? matchingTaskId = null;
                 foreach (var taskElement in tasksArray)
                 {
                     // Try both camelCase and PascalCase property names
@@ -396,7 +396,7 @@ public class TaskService : ITaskService
                         
                         if (taskIdProp.ValueKind != System.Text.Json.JsonValueKind.Undefined)
                         {
-                            matchingTaskId = taskIdProp.GetInt32();
+                            matchingTaskId = taskIdProp.GetGuid();
                             break;
                         }
                     }
@@ -498,10 +498,10 @@ public class TaskService : ITaskService
                     }
 
                     var taskName = taskNameProp.GetString();
-                    var workflowTaskId = taskIdProp.GetInt32();
+                    var workflowTaskId = taskIdProp.GetGuid();
 
                     // Check if task exists in TaskService database
-                    if (taskServiceTaskNamesSet.Contains(taskName))
+                    if (taskName != null && taskServiceTaskNamesSet.Contains(taskName))
                     {
                         // Task exists in TaskService, skip
                         continue;
@@ -718,11 +718,11 @@ public class TaskService : ITaskService
     /// </summary>
     private class StageInfo
     {
-        public int StageId { get; set; }
+        public Guid StageId { get; set; }
         public string StageName { get; set; } = string.Empty;
         public int StageOrder { get; set; }
-        public int WorkflowId { get; set; }
-        public int TeamId { get; set; }
+        public Guid WorkflowId { get; set; }
+        public Guid TeamId { get; set; }
     }
 
     private TaskReadDto MapToDto(DomainTask task)

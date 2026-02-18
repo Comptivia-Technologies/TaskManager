@@ -37,7 +37,7 @@ public class SLAService : ISLAService
         return slaConfigsDto;
     }
 
-    public async System.Threading.Tasks.Task<SLAConfigurationReadDto?> GetSLAConfigurationByWorkflowIdAsync(int workflowId)
+    public async System.Threading.Tasks.Task<SLAConfigurationReadDto?> GetSLAConfigurationByWorkflowIdAsync(Guid workflowId)
     {
         var slaConfig = await _slaRepository.GetByWorkflowIdAsync(workflowId);
         if (slaConfig == null)
@@ -101,7 +101,7 @@ public class SLAService : ISLAService
         }
     }
 
-    public async System.Threading.Tasks.Task<SLAConfigurationReadDto?> UpdateSLAConfigurationAsync(int workflowId, SLAConfigurationUpdateDto slaUpdateDto)
+    public async System.Threading.Tasks.Task<SLAConfigurationReadDto?> UpdateSLAConfigurationAsync(Guid workflowId, SLAConfigurationUpdateDto slaUpdateDto)
     {
         var slaConfig = await _slaRepository.GetByWorkflowIdAsync(workflowId);
         if (slaConfig == null)
@@ -120,7 +120,7 @@ public class SLAService : ISLAService
         return await MapToReadDtoAsync(updatedSLA);
     }
 
-    public async System.Threading.Tasks.Task<bool> DeleteSLAConfigurationAsync(int workflowId)
+    public async System.Threading.Tasks.Task<bool> DeleteSLAConfigurationAsync(Guid workflowId)
     {
         var slaConfig = await _slaRepository.GetByWorkflowIdAsync(workflowId);
         if (slaConfig == null)

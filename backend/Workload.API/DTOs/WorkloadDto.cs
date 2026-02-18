@@ -5,7 +5,7 @@ namespace Workload.API.DTOs;
 /// </summary>
 public class WorkloadResponseDto
 {
-    public int MemberId { get; set; }
+    public Guid MemberId { get; set; }
     public string MemberName { get; set; } = string.Empty;
     public string MemberEmail { get; set; } = string.Empty;
     public double WorkloadScore { get; set; }

@@ -4,6 +4,7 @@ using TaskService.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using System.Net.Http.Json;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 using DomainTask = TaskService.Domain.Entities.Task;
 
 namespace TaskService.Application.EventHandlers;
@@ -116,7 +117,7 @@ public class PriorityAssignedEventHandler
             using var jsonDoc = System.Text.Json.JsonDocument.Parse(tasksJson);
             var tasksArray = jsonDoc.RootElement.EnumerateArray();
 
-            int? matchingTaskId = null;
+            Guid? matchingTaskId = null;
 
             foreach (var taskElement in tasksArray)
             {
@@ -132,7 +133,7 @@ public class PriorityAssignedEventHandler
                     
                     if (taskIdProp.ValueKind != System.Text.Json.JsonValueKind.Undefined)
                     {
-                        matchingTaskId = taskIdProp.GetInt32();
+                        matchingTaskId = taskIdProp.GetGuid();
                         break;
                     }
                 }
@@ -158,12 +159,26 @@ public class PriorityAssignedEventHandler
                         return null;
                     }
 
-                    int? GetIntProperty(string camelCase, string pascalCase)
+                    Guid? GetGuidProperty(string camelCase, string pascalCase)
                     {
-                        if (currentTask.TryGetProperty(camelCase, out var camelProp) && camelProp.ValueKind == System.Text.Json.JsonValueKind.Number)
-                            return camelProp.GetInt32();
-                        if (currentTask.TryGetProperty(pascalCase, out var pascalProp) && pascalProp.ValueKind == System.Text.Json.JsonValueKind.Number)
-                            return pascalProp.GetInt32();
+                        if (currentTask.TryGetProperty(camelCase, out var camelProp))
+                        {
+                            if (camelProp.ValueKind == JsonValueKind.Null)
+                                return null;
+                            if (camelProp.ValueKind == JsonValueKind.String && Guid.TryParse(camelProp.GetString(), out var guid))
+                                return guid;
+                            if (camelProp.ValueKind == JsonValueKind.String)
+                                return Guid.Parse(camelProp.GetString());
+                        }
+                        if (currentTask.TryGetProperty(pascalCase, out var pascalProp))
+                        {
+                            if (pascalProp.ValueKind == JsonValueKind.Null)
+                                return null;
+                            if (pascalProp.ValueKind == JsonValueKind.String && Guid.TryParse(pascalProp.GetString(), out var guid))
+                                return guid;
+                            if (pascalProp.ValueKind == JsonValueKind.String)
+                                return Guid.Parse(pascalProp.GetString());
+                        }
                         return null;
                     }
 
@@ -198,8 +213,8 @@ public class PriorityAssignedEventHandler
                         Status = GetStringProperty("status", "Status") ?? "Pending",
                         Priority = priority, // Update priority
                         DueDate = dueDateUtc,
-                        StageId = GetIntProperty("stageId", "StageId"),
-                        AssignedToMemberId = GetIntProperty("assignedToMemberId", "AssignedToMemberId")
+                        StageId = GetGuidProperty("stageId", "StageId"),
+                        AssignedToMemberId = GetGuidProperty("assignedToMemberId", "AssignedToMemberId")
                     };
 
                     var updateResponse = await _httpClient.PutAsJsonAsync(

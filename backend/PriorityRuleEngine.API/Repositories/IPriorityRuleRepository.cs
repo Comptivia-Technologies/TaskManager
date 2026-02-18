@@ -6,10 +6,10 @@ public interface IPriorityRuleRepository
 {
     Task<IEnumerable<PriorityRule>> GetAllRulesAsync();
     Task<IEnumerable<PriorityRule>> GetActiveRulesAsync();
-    Task<IEnumerable<PriorityRule>> GetActiveRulesByWorkflowIdAsync(int workflowId);
-    Task<PriorityRule?> GetByIdAsync(int ruleId);
+    Task<IEnumerable<PriorityRule>> GetActiveRulesByWorkflowIdAsync(Guid? workflowId);
+    Task<PriorityRule?> GetByIdAsync(Guid ruleId);
     Task<PriorityRule> CreateAsync(PriorityRule rule);
-    Task<PriorityRule?> UpdateAsync(int ruleId, PriorityRule rule);
-    Task<bool> DeleteAsync(int ruleId);
+    Task<PriorityRule?> UpdateAsync(Guid ruleId, PriorityRule rule);
+    Task<bool> DeleteAsync(Guid ruleId);
 }
 

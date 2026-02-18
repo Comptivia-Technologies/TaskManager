@@ -156,7 +156,7 @@ using (var scope = app.Services.CreateScope())
                 CREATE TABLE IF NOT EXISTS ""TaskAssignments"" (
                     ""AssignmentId"" UUID PRIMARY KEY,
                     ""TaskId"" UUID NOT NULL,
-                    ""MemberId"" INTEGER NOT NULL,
+                    ""MemberId"" UUID NOT NULL,
                     ""WorkloadScore"" DOUBLE PRECISION NOT NULL,
                     ""AssignmentReason"" VARCHAR(500),
                     ""AssignedAt"" TIMESTAMP NOT NULL,

@@ -84,8 +84,8 @@ public class StageOrchestrationService : IStageOrchestrationService
                         var taskJson = await taskResponse.Content.ReadAsStringAsync();
                         using var taskDoc = JsonDocument.Parse(taskJson);
                         var currentStageId = taskDoc.RootElement.TryGetProperty("currentStageId", out var stageIdProp) 
-                            ? (stageIdProp.ValueKind == JsonValueKind.Null ? (int?)null : stageIdProp.GetInt32()) 
-                            : (int?)null;
+                            ? (stageIdProp.ValueKind == JsonValueKind.Null ? (Guid?)null : stageIdProp.GetGuid()) 
+                            : (Guid?)null;
                         
                         if (currentStageId.HasValue)
                         {

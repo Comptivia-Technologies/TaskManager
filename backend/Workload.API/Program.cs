@@ -109,8 +109,8 @@ using (var scope = app.Services.CreateScope())
                 using var createCommand = connection.CreateCommand();
                 createCommand.CommandText = @"
                     CREATE TABLE ""Workloads"" (
-                        ""WorkloadId"" SERIAL PRIMARY KEY,
-                        ""MemberId"" INTEGER NOT NULL,
+                        ""WorkloadId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        ""MemberId"" UUID NOT NULL,
                         ""WorkloadScore"" DOUBLE PRECISION NOT NULL,
                         ""WorkloadStatus"" VARCHAR(50) NOT NULL,
                         ""Efficiency"" DOUBLE PRECISION NOT NULL,

@@ -66,7 +66,7 @@ public class TasksController : ControllerBase
                 var taskDetailsJson = System.Text.Json.JsonSerializer.Serialize(taskDetails);
                 using var doc = JsonDocument.Parse(taskDetailsJson);
                 var root = doc.RootElement;
-                var workflowId = GetIntProperty(root, "workflowId", "WorkflowId");
+                var workflowId = GetGuidProperty(root, "workflowId", "WorkflowId");
                 
                 // If workflow is selected, return details immediately
                 if (workflowId.HasValue)
@@ -136,9 +136,9 @@ public class TasksController : ControllerBase
             var taskServiceRoot = taskServiceDoc.RootElement;
 
             var priority = GetStringProperty(taskServiceRoot, "priority", "Priority") ?? "Medium";
-            var workflowId = GetIntProperty(taskServiceRoot, "workflowId", "WorkflowId");
+            var workflowId = GetGuidProperty(taskServiceRoot, "workflowId", "WorkflowId");
             var status = GetStatusProperty(taskServiceRoot) ?? "Created";
-            var memberId = GetIntProperty(taskServiceRoot, "memberId", "MemberId");
+            var memberId = GetGuidProperty(taskServiceRoot, "memberId", "MemberId");
             var taskName = GetStringProperty(taskServiceRoot, "taskName", "TaskName") ?? "";
             var description = GetStringProperty(taskServiceRoot, "description", "Description");
             var createdAt = GetStringProperty(taskServiceRoot, "createdAt", "CreatedAt");
@@ -191,7 +191,7 @@ public class TasksController : ControllerBase
 
             // Step 4: Get stage name using CurrentStageId from TaskService
             string? stageName = null;
-            var currentStageId = GetIntProperty(taskServiceRoot, "currentStageId", "CurrentStageId");
+            var currentStageId = GetGuidProperty(taskServiceRoot, "currentStageId", "CurrentStageId");
             if (currentStageId.HasValue)
             {
                 try
@@ -297,6 +297,25 @@ public class TasksController : ControllerBase
                     _ => statusValue.ToString()
                 };
             }
+        }
+        return null;
+    }
+
+    private Guid? GetGuidProperty(JsonElement element, string camelCase, string pascalCase)
+    {
+        if (element.TryGetProperty(camelCase, out var camelProp))
+        {
+            if (camelProp.ValueKind == JsonValueKind.Null)
+                return null;
+            if (camelProp.ValueKind == JsonValueKind.String && Guid.TryParse(camelProp.GetString(), out var guid))
+                return guid;
+        }
+        if (element.TryGetProperty(pascalCase, out var pascalProp))
+        {
+            if (pascalProp.ValueKind == JsonValueKind.Null)
+                return null;
+            if (pascalProp.ValueKind == JsonValueKind.String && Guid.TryParse(pascalProp.GetString(), out var guid))
+                return guid;
         }
         return null;
     }

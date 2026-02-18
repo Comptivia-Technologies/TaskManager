@@ -29,7 +29,7 @@ public class PriorityAssignedEventHandler
                 "=== PriorityAssignedEventHandler START === TaskId: {TaskId}, WorkflowId: {WorkflowId}, Priority: {Priority}, CorrelationId: {CorrelationId}",
                 @event.TaskId, @event.WorkflowId, @event.Priority, correlationId);
 
-            if (@event.WorkflowId <= 0)
+            if (@event.WorkflowId == Guid.Empty)
             {
                 _logger.LogError(
                     "❌ Invalid WorkflowId in PriorityAssignedEvent: {WorkflowId}, TaskId: {TaskId}",

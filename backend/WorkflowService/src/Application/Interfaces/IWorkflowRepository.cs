@@ -11,8 +11,8 @@ public interface IWorkflowRepository
     Task<WorkflowSelection> CreateAsync(WorkflowSelection selection);
     Task<WorkflowSelection> UpdateAsync(WorkflowSelection selection);
     Task<IEnumerable<Workflow>> GetAllWorkflowsAsync();
-    Task<Workflow?> GetWorkflowByIdAsync(int workflowId);
-    Task<IEnumerable<Stage>> GetStagesByWorkflowIdAsync(int workflowId);
+    Task<Workflow?> GetWorkflowByIdAsync(Guid workflowId);
+    Task<IEnumerable<Stage>> GetStagesByWorkflowIdAsync(Guid workflowId);
 }
 
 /// <summary>
@@ -20,9 +20,9 @@ public interface IWorkflowRepository
 /// </summary>
 public class Workflow
 {
-    public int WorkflowId { get; set; }
+    public Guid WorkflowId { get; set; }
     public string WorkflowName { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public int? TeamId { get; set; }
+    public Guid? TeamId { get; set; }
 }
 

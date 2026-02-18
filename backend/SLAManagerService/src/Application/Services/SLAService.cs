@@ -36,7 +36,7 @@ public class SLAService : ISLAService
                 priorityAssignedEvent.TaskId, priorityAssignedEvent.WorkflowId, priorityAssignedEvent.Priority, priorityAssignedEvent.CorrelationId);
 
             // Validate WorkflowId
-            if (priorityAssignedEvent.WorkflowId <= 0)
+            if (priorityAssignedEvent.WorkflowId == Guid.Empty)
             {
                 _logger.LogError(
                     "❌ INVALID WorkflowId: {WorkflowId}, TaskId: {TaskId}, CorrelationId: {CorrelationId}",
@@ -178,7 +178,7 @@ public class SLAService : ISLAService
                     var overdueEvent = new TaskOverdueEvent
                     {
                         TaskId = priorityAssignedEvent.TaskId,
-                        MemberId = 0, // Will be set by TaskService if task is assigned
+                        MemberId = Guid.Empty, // Will be set by TaskService if task is assigned
                         SLADeadline = slaDeadline,
                         BreachedAt = slaDeadline, // Will be set to actual breach time when delivered
                         MinutesOverdue = 0, // Will be calculated when delivered
@@ -216,7 +216,7 @@ public class SLAService : ISLAService
                 var overdueEvent = new TaskOverdueEvent
                 {
                         TaskId = priorityAssignedEvent.TaskId,
-                    MemberId = 0,
+                    MemberId = Guid.Empty,
                     SLADeadline = slaDeadline,
                     BreachedAt = DateTime.UtcNow,
                     MinutesOverdue = (int)(DateTime.UtcNow - slaDeadline).TotalMinutes,

@@ -101,7 +101,7 @@ public class SLAMonitorService : BackgroundService
                 var overdueEvent = new TaskOverdueEvent
                 {
                     TaskId = assignment.TaskId,
-                    MemberId = 0, // Will be set by Task Service if task is assigned
+                    MemberId = Guid.Empty, // Will be set by Task Service if task is assigned
                     SLADeadline = deadlineUtc, // Use UTC deadline
                     BreachedAt = now,
                     MinutesOverdue = minutesOverdue,

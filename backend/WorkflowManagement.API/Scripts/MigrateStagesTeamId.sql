@@ -21,7 +21,7 @@ BEGIN
 
         -- Step 3: Add TeamId column (nullable first to handle existing data)
         ALTER TABLE "Stages" 
-        ADD COLUMN "TeamId" INTEGER;
+        ADD COLUMN "TeamId" UUID;
 
         -- Step 4: Set default value for existing stages (if any)
         UPDATE "Stages" 

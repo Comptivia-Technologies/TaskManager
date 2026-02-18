@@ -38,7 +38,7 @@ public class WorkloadService : IWorkloadService
         _logger = logger;
     }
 
-    public async System.Threading.Tasks.Task<WorkloadResponseDto> GetWorkloadByMemberIdAsync(int memberId)
+    public async System.Threading.Tasks.Task<WorkloadResponseDto> GetWorkloadByMemberIdAsync(Guid memberId)
     {
         try
         {
@@ -294,7 +294,7 @@ public class WorkloadService : IWorkloadService
     /// Saves workload snapshot to database for history tracking
     /// </summary>
     private async System.Threading.Tasks.Task SaveWorkloadSnapshotAsync(
-        int memberId,
+        Guid memberId,
         double workloadScore,
         string workloadStatus,
         WorkloadMetricsDto metrics,

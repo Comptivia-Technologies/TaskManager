@@ -31,7 +31,7 @@ public class TaskStatusUpdatedEventHandler
                 @event.TaskId, @event.PreviousStatus, @event.NewStatus, correlationId);
 
             // Update task status in WorkflowManagement database
-            // Note: TaskService uses Guid TaskId, but WorkflowManagement.API uses int TaskId
+            // Note: TaskService uses Guid TaskId, and WorkflowManagement.API uses Guid TaskId
             // We need to find the task. Since we don't have a direct mapping, we'll use a different approach:
             // The task status will be updated via the sync in TaskService, so this handler mainly logs
             // and ensures the database is in sync if needed

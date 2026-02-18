@@ -111,8 +111,8 @@ using (var scope = app.Services.CreateScope())
                 using var createCommand = connection.CreateCommand();
                 createCommand.CommandText = @"
                     CREATE TABLE ""SLAConfigurations"" (
-                        ""SLAConfigurationId"" SERIAL PRIMARY KEY,
-                        ""WorkflowId"" INTEGER NOT NULL,
+                        ""SLAConfigurationId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        ""WorkflowId"" UUID NOT NULL,
                         ""PriorityLevelsJson"" JSONB NOT NULL DEFAULT '{}',
                         ""CreatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
                         ""UpdatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,

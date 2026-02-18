@@ -56,13 +56,13 @@ public class MemberService : IMemberService
 
     public async Task<MemberReadDto> CreateMemberAsync(MemberCreateDto memberCreateDto)
     {
-        // Only validate team if TeamId is provided and is greater than 0
-        if (memberCreateDto.TeamId.HasValue && memberCreateDto.TeamId.Value > 0 && !await _teamRepository.ExistsAsync(memberCreateDto.TeamId.Value))
+        // Only validate team if TeamId is provided and is not empty
+        if (memberCreateDto.TeamId.HasValue && memberCreateDto.TeamId.Value != Guid.Empty && !await _teamRepository.ExistsAsync(memberCreateDto.TeamId.Value))
             throw new ArgumentException("Team does not exist");
 
         var member = _mapper.Map<Member>(memberCreateDto);
-        // Ensure TeamId is null if it's 0 or invalid
-        if (member.TeamId.HasValue && member.TeamId.Value == 0)
+        // Ensure TeamId is null if it's empty
+        if (member.TeamId.HasValue && member.TeamId.Value == Guid.Empty)
         {
             member.TeamId = null;
         }
@@ -86,13 +86,13 @@ public class MemberService : IMemberService
         if (member == null)
             return null;
 
-        // Only validate team if TeamId is provided and is greater than 0
-        if (memberUpdateDto.TeamId.HasValue && memberUpdateDto.TeamId.Value > 0 && !await _teamRepository.ExistsAsync(memberUpdateDto.TeamId.Value))
+        // Only validate team if TeamId is provided and is not empty
+        if (memberUpdateDto.TeamId.HasValue && memberUpdateDto.TeamId.Value != Guid.Empty && !await _teamRepository.ExistsAsync(memberUpdateDto.TeamId.Value))
             throw new ArgumentException("Team does not exist");
 
         _mapper.Map(memberUpdateDto, member);
-        // Ensure TeamId is null if it's 0 or invalid
-        if (member.TeamId.HasValue && member.TeamId.Value == 0)
+        // Ensure TeamId is null if it's empty
+        if (member.TeamId.HasValue && member.TeamId.Value == Guid.Empty)
         {
             member.TeamId = null;
         }
