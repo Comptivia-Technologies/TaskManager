@@ -70,10 +70,10 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 - **PriorityRuleEngine.API** (Port 5010) - Priority rules management
 
 #### **Tier 2: Event-Driven Microservices (Orchestration)**
-- **APIGateway** (Port 5004) - **Single entry point** for all frontend requests + Task creation orchestration
+- **APIGateway** (Port 5004) - **Single entry point** for all frontend requests
   - Reverse proxy routing (YARP) to all backend services
-  - Task creation publishes to Event Bus (AWS/Azure/GCP)
-- **TaskService** (Port 5005) - Task lifecycle management + Stage completion API
+  - Pure routing layer (no business logic, no event publishing)
+- **TaskService** (Port 5005) - Task lifecycle management + Task creation orchestration + Stage completion API
 - **WorkflowService** (Port 5006) - Automated workflow selection + Stage orchestration
 - **SLAManagerService** (Port 5007) - SLA configuration and monitoring
 - **WorkloadService** (Port 5008) - Automated task assignment + Stage reassignment
@@ -81,7 +81,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 ### Communication Patterns
 - **Frontend → API Gateway**: All HTTP requests route through API Gateway (Port 5004)
 - **API Gateway → Backend Services**: Reverse proxy routing using YARP
-- **Task Creation**: API Gateway → Event Bus (event-driven)
+- **Task Creation**: API Gateway → TaskService → Event Bus (event-driven)
 - **Other CRUD**: API Gateway → Direct proxy to respective services
 - **Microservices**: Event Bus (AWS/Azure/GCP) for event-driven communication
 - **Databases**: PostgreSQL (multiple databases)
@@ -214,10 +214,10 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 ### 3.2 Event-Driven Microservices
 
 #### 3.2.1 APIGateway (Port 5004)
-**Purpose**: Single entry point for all frontend requests + Task creation orchestration
+**Purpose**: Single entry point for all frontend requests (pure routing layer)
 
 **Controllers**:
-- `TasksController` - Receives task creation requests (publishes to Event Bus)
+- `TasksController` - Task details retrieval (GET endpoints only)
 
 **Reverse Proxy Configuration** (YARP):
 - Routes all frontend requests to backend services:
@@ -226,17 +226,15 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
   - `/api/members/*` → WorkflowManagement.API (5000)
   - `/api/stages/*` → WorkflowManagement.API (5000)
   - `/api/tasks/*` (GET/PUT/DELETE) → WorkflowManagement.API (5000)
-  - `/api/task-service/*` → TaskService (5005)
+  - `/api/task-service/*` (POST/GET/PUT/DELETE) → TaskService (5005)
   - `/api/sla-configurations/*` → SLAConfiguration.API (5002)
   - `/api/priority-rules/*` → PriorityRuleEngine.API (5010)
   - `/api/workload/*` → Workload.API (5003)
 
 **Responsibilities**:
-- **Reverse Proxy**: Routes all CRUD requests to appropriate backend services
-- **Task Creation**: Receives HTTP POST `/api/tasks` requests
-  - Generates TaskId and CorrelationId
-  - Publishes `TaskCreatedEvent` to Event Bus
-  - Returns HTTP 202 (Accepted) immediately
+- **Reverse Proxy**: Routes all requests to appropriate backend services
+- **No Business Logic**: Gateway is a thin routing layer only
+- **No Event Publishing**: All orchestration handled by microservices
 - **Single Entry Point**: All frontend services point to API Gateway (port 5004)
 
 **Database**: None (stateless)
@@ -244,7 +242,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 **Technology**: YARP (Yet Another Reverse Proxy) for routing
 
 #### 3.2.2 TaskService (Port 5005)
-**Purpose**: Task lifecycle management via events + Stage completion API
+**Purpose**: Task lifecycle management via events + Task creation orchestration + Stage completion API
 
 **Database**: `TaskService`
 **Tables**: Tasks
@@ -259,13 +257,19 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 - `TaskStageStartedEventHandler` - Updates task with stage info, triggers reassignment if team changes
 - `TaskStageCompletedEventHandler` - Updates task when stage completed
 - `TaskStageEscalationTriggeredEventHandler` - Updates task when escalation triggered
+- `TaskStageEscalatedEventHandler` - Updates task when manually escalated
 - `TaskCompletedEventHandler` - Marks task as fully completed
 
 **Services**:
-- `TaskService` - Task business logic, stage completion API
+- `TaskService` - Task business logic, task creation orchestration, stage completion API
+
+**Event Publishing**:
+- `TaskCreatedEvent` - Published when task is created (entry point for orchestration flow)
 
 **API Endpoints**:
+- `POST /api/task-service` - Create task (orchestrates task creation, returns taskId only)
 - `POST /api/task-service/complete-stage/{id}` - Complete current stage and transition to next
+- `POST /api/task-service/escalate-stage/{id}` - Manually escalate task to next stage
 
 #### 3.2.3 WorkflowService (Port 5006)
 **Purpose**: Automated workflow selection + Stage orchestration
@@ -655,19 +659,20 @@ CREATE TABLE "PriorityRules" (
 **Direct Endpoints**:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/tasks` | Create task (publishes to RabbitMQ, returns 202 Accepted) |
-| GET | `/api/tasks/health` | Health check endpoint |
+| GET | `/api/tasks/{id}` | Get task details (proxied to WorkflowManagement.API) |
 
-**Reverse Proxy Routes** (All other requests are proxied to backend services):
+**Reverse Proxy Routes** (All requests are proxied to backend services):
 - `/api/workflows/*` → WorkflowManagement.API:5000
 - `/api/teams/*` → WorkflowManagement.API:5000
 - `/api/members/*` → WorkflowManagement.API:5000
 - `/api/stages/*` → WorkflowManagement.API:5000
 - `/api/tasks/*` (GET/PUT/DELETE) → WorkflowManagement.API:5000
-- `/api/task-service/*` → TaskService:5005
+- `/api/task-service/*` (POST/GET/PUT/DELETE) → TaskService:5005
 - `/api/sla-configurations/*` → SLAConfiguration.API:5002
 - `/api/priority-rules/*` → PriorityRuleEngine.API:5010
 - `/api/workload/*` → Workload.API:5003
+
+**Note**: Gateway is a pure routing layer. All business logic and orchestration handled by microservices.
 
 ### 5.6 TaskService (Port 5005)
 
@@ -676,10 +681,11 @@ CREATE TABLE "PriorityRules" (
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/task-service/{id}` | Get task by ID |
-| POST | `/api/task-service` | Create task (entry point for orchestration flow) |
+| POST | `/api/task-service` | Create task (entry point for orchestration flow, returns taskId only) |
 | PUT | `/api/task-service/{id}/status` | Update task status |
 | DELETE | `/api/task-service/{id}` | Delete task |
 | POST | `/api/task-service/complete-stage/{id}` | Complete current stage and transition to next |
+| POST | `/api/task-service/escalate-stage/{id}` | Manually escalate task to next stage |
 | POST | `/api/task-service/sync-overdue` | Sync all overdue tasks to WorkflowManagement.API |
 | POST | `/api/task-service/cleanup-orphaned` | Cleanup orphaned tasks from WorkflowManagement.API |
 
@@ -1313,27 +1319,35 @@ export interface Member {
 ┌─────────────┐
 │   Client    │
 └──────┬──────┘
-       │ POST /api/tasks
+       │ POST /api/task-service
        │ (via API Gateway:5004)
        ▼
 ┌─────────────┐
-│ APIGateway  │ Generates TaskId, CorrelationId
-│  (Port 5004)│ Publishes TaskCreatedEvent
-│  Controller │ Returns HTTP 202
+│ APIGateway  │ Routes request to TaskService
+│  (Port 5004)│ (Pure routing, no business logic)
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│TaskService  │ Generates TaskId, CorrelationId
+│  (Port 5005)│ Creates task in database
+│  Controller │ Publishes TaskCreatedEvent
+│             │ Returns HTTP 202 (taskId only)
 └──────┬──────┘
        │
        ▼
 ┌─────────────────────────────────────┐
-│         RabbitMQ                     │
-│    task.exchange / task.created      │
+│         Event Bus                    │
+│    (AWS EventBridge/SQS)             │
+│    TaskCreatedEvent                   │
 └──────┬──────────────────┬────────────┘
        │                  │
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
 │TaskService  │    │WorkflowSvc  │
 │ Creates Task│    │ Selects WF  │
-└─────────────┘    └──────┬──────┘
-                          │
+│ (idempotent)│    └──────┬──────┘
+└─────────────┘           │
                           ▼ WorkflowSelectedEvent
                    ┌─────────────┐
                    │PriorityRule │
@@ -1632,12 +1646,12 @@ RabbitMQ support has been removed. For RabbitMQ support, implement `RabbitMQEven
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| **APIGateway** | **5004** | **Single entry point** - Reverse proxy + Task orchestration |
+| **APIGateway** | **5004** | **Single entry point** - Reverse proxy routing only (no business logic) |
 | WorkflowManagement.API | 5000 | Core workflow CRUD (accessed via API Gateway) |
 | SLAConfiguration.API | 5002 | SLA CRUD (accessed via API Gateway) |
 | PriorityRuleEngine.API | 5010 | Priority rules CRUD (accessed via API Gateway) |
 | Workload.API | 5003 | Workload queries (accessed via API Gateway) |
-| TaskService | 5005 | Task lifecycle + Stage completion API |
+| TaskService | 5005 | Task lifecycle + Task creation orchestration + Stage completion API |
 | WorkflowService | 5006 | Workflow selection + Stage orchestration |
 | SLAManagerService | 5007 | SLA management |
 | WorkloadService | 5008 | Task assignment + Stage reassignment |
@@ -1703,8 +1717,9 @@ The API Gateway uses **YARP (Yet Another Reverse Proxy)** for routing. Configura
 ```
 
 **Routing Behavior**:
-- `POST /api/tasks` → Handled by API Gateway controller (publishes to RabbitMQ)
+- `POST /api/task-service` → Proxied to TaskService (handles orchestration)
 - All other requests → Proxied to appropriate backend service
+- Gateway is a pure routing layer (no business logic, no event publishing)
 
 ---
 

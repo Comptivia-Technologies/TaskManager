@@ -62,6 +62,8 @@ public class TaskService : ITaskService
             Description = createdTask.Description,
             Priority = createdTask.Priority,
             TaskType = createdTask.TaskType,
+            TaskData = createDto.TaskData,
+            PriorityAssigned = false,
             CreatedAt = createdTask.CreatedAt,
             CorrelationId = correlationId
         };

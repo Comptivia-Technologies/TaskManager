@@ -22,14 +22,19 @@ public class TasksController : ControllerBase
 
     /// <summary>
     /// Create a new task - entry point for orchestration flow
+    /// Returns taskId immediately. Use GET /api/task-service/{id} to retrieve full details after processing.
     /// </summary>
     [HttpPost]
-    public async Task<ActionResult<TaskReadDto>> CreateTask([FromBody] TaskCreateDto createDto)
+    public async Task<ActionResult> CreateTask([FromBody] TaskCreateDto createDto)
     {
         try
         {
             var task = await _taskService.CreateTaskAsync(createDto);
-            return CreatedAtAction(nameof(GetTask), new { id = task.TaskId }, task);
+            return Accepted(new
+            {
+                taskId = task.TaskId,
+                message = "Task creation initiated. Processing asynchronously. Use GET /api/task-service/{taskId} to retrieve full details."
+            });
         }
         catch (Exception ex)
         {
