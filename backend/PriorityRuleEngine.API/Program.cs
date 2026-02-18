@@ -194,7 +194,7 @@ using (var scope = app.Services.CreateScope())
             // Create table manually using raw SQL
             var createTableSql = @"
                 CREATE TABLE IF NOT EXISTS ""PriorityRules"" (
-                    ""RuleId"" SERIAL PRIMARY KEY,
+                    ""RuleId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     ""RuleName"" VARCHAR(200) NOT NULL,
                     ""Priority"" VARCHAR(50) NOT NULL,
                     ""Salience"" INTEGER NOT NULL DEFAULT 0,
@@ -202,7 +202,7 @@ using (var scope = app.Services.CreateScope())
                     ""ConditionsJson"" TEXT NOT NULL,
                     ""MaxWorkloadScore"" INTEGER,
                     ""TeamName"" VARCHAR(200),
-                    ""WorkflowId"" INTEGER,
+                    ""WorkflowId"" UUID,
                     ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )";
@@ -240,7 +240,7 @@ using (var scope = app.Services.CreateScope())
                     scopeLogger.LogInformation("WorkflowId column does not exist. Adding...");
                     await dbContext.Database.ExecuteSqlRawAsync(@"
                         ALTER TABLE ""PriorityRules"" 
-                        ADD COLUMN ""WorkflowId"" INTEGER");
+                        ADD COLUMN ""WorkflowId"" UUID");
                     
                     // Create index for WorkflowId
                     await dbContext.Database.ExecuteSqlRawAsync(@"

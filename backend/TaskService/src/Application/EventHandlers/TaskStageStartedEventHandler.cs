@@ -181,7 +181,7 @@ public class TaskStageStartedEventHandler
     /// <summary>
     /// Gets the team ID for a member from WorkflowManagement.API
     /// </summary>
-    private async Task<int?> GetMemberTeamIdAsync(int? memberId)
+    private async Task<Guid?> GetMemberTeamIdAsync(Guid? memberId)
     {
         if (!memberId.HasValue)
             return null;
@@ -218,8 +218,8 @@ public class TaskStageStartedEventHandler
 
     private class MemberInfo
     {
-        public int MemberId { get; set; }
-        public int? TeamId { get; set; }
+        public Guid MemberId { get; set; }
+        public Guid? TeamId { get; set; }
     }
 
     /// <summary>
@@ -351,14 +351,14 @@ public class TaskStageStartedEventHandler
 
     private class WorkflowTaskInfo
     {
-        public int TaskId { get; set; }
+        public Guid TaskId { get; set; }
         public string TaskName { get; set; } = string.Empty;
         public string? Description { get; set; }
         public string Status { get; set; } = string.Empty;
         public string Priority { get; set; } = string.Empty;
         public DateTime? DueDate { get; set; }
-        public int WorkflowId { get; set; }
-        public int? StageId { get; set; }
-        public int? AssignedToMemberId { get; set; }
+        public Guid WorkflowId { get; set; }
+        public Guid? StageId { get; set; }
+        public Guid? AssignedToMemberId { get; set; }
     }
 }

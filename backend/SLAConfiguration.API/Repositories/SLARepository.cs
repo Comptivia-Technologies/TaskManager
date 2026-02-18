@@ -10,13 +10,13 @@ public class SLARepository : Repository<Models.SLAConfiguration>, ISLARepository
     {
     }
 
-    public async Task<Models.SLAConfiguration?> GetByWorkflowIdAsync(int workflowId)
+    public async Task<Models.SLAConfiguration?> GetByWorkflowIdAsync(Guid workflowId)
     {
         return await _context.SLAConfigurations
             .FirstOrDefaultAsync(s => s.WorkflowId == workflowId);
     }
 
-    public async Task<bool> ExistsForWorkflowAsync(int workflowId)
+    public async Task<bool> ExistsForWorkflowAsync(Guid workflowId)
     {
         return await _context.SLAConfigurations
             .AnyAsync(s => s.WorkflowId == workflowId);

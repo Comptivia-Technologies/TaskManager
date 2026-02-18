@@ -2,7 +2,7 @@ namespace PriorityRuleEngine.API.DTOs;
 
 public class PriorityRuleDto
 {
-    public int RuleId { get; set; }
+    public Guid RuleId { get; set; }
     public string RuleName { get; set; } = string.Empty;
     public string Priority { get; set; } = string.Empty;
     public int Salience { get; set; }
@@ -10,7 +10,7 @@ public class PriorityRuleDto
     public string ConditionsJson { get; set; } = string.Empty;
     public int? MaxWorkloadScore { get; set; }
     public string? TeamName { get; set; }
-    public int? WorkflowId { get; set; }
+    public Guid? WorkflowId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -24,7 +24,7 @@ public class CreatePriorityRuleRequest
     public string ConditionsJson { get; set; } = string.Empty;
     public int? MaxWorkloadScore { get; set; }
     public string? TeamName { get; set; }
-    public int? WorkflowId { get; set; }
+    public Guid? WorkflowId { get; set; }
 }
 
 public class UpdatePriorityRuleRequest
@@ -36,6 +36,6 @@ public class UpdatePriorityRuleRequest
     public string ConditionsJson { get; set; } = string.Empty;
     public int? MaxWorkloadScore { get; set; }
     public string? TeamName { get; set; }
-    public int? WorkflowId { get; set; }
+    public Guid? WorkflowId { get; set; }
 }
 

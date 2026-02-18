@@ -86,13 +86,13 @@ public class WorkflowRepository : IWorkflowRepository
         return await _context.Workflows.ToListAsync();
     }
 
-    public async Task<Workflow?> GetWorkflowByIdAsync(int workflowId)
+    public async Task<Workflow?> GetWorkflowByIdAsync(Guid workflowId)
     {
         return await _context.Workflows
             .FirstOrDefaultAsync(w => w.WorkflowId == workflowId);
     }
 
-    public async Task<IEnumerable<Stage>> GetStagesByWorkflowIdAsync(int workflowId)
+    public async Task<IEnumerable<Stage>> GetStagesByWorkflowIdAsync(Guid workflowId)
     {
         // Read from database using StageDbEntity (which has int properties)
         var stagesFromDb = await _context.Stages

@@ -7,6 +7,6 @@ namespace Workload.API.Services;
 /// </summary>
 public interface IWorkloadService
 {
-    System.Threading.Tasks.Task<WorkloadResponseDto> GetWorkloadByMemberIdAsync(int memberId);
+    System.Threading.Tasks.Task<WorkloadResponseDto> GetWorkloadByMemberIdAsync(Guid memberId);
 }
 

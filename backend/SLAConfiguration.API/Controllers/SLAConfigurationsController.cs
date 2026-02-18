@@ -33,7 +33,7 @@ public class SLAConfigurationsController : ControllerBase
     }
 
     [HttpGet("workflow/{workflowId}")]
-    public async Task<ActionResult<SLAConfigurationReadDto>> GetSLAConfigurationByWorkflowId(int workflowId)
+    public async Task<ActionResult<SLAConfigurationReadDto>> GetSLAConfigurationByWorkflowId(Guid workflowId)
     {
         try
         {
@@ -78,7 +78,7 @@ public class SLAConfigurationsController : ControllerBase
     }
 
     [HttpPut("workflow/{workflowId}")]
-    public async Task<ActionResult<SLAConfigurationReadDto>> UpdateSLAConfiguration(int workflowId, [FromBody] SLAConfigurationUpdateDto slaUpdateDto)
+    public async Task<ActionResult<SLAConfigurationReadDto>> UpdateSLAConfiguration(Guid workflowId, [FromBody] SLAConfigurationUpdateDto slaUpdateDto)
     {
         try
         {
@@ -99,7 +99,7 @@ public class SLAConfigurationsController : ControllerBase
     }
 
     [HttpDelete("workflow/{workflowId}")]
-    public async Task<IActionResult> DeleteSLAConfiguration(int workflowId)
+    public async Task<IActionResult> DeleteSLAConfiguration(Guid workflowId)
     {
         try
         {

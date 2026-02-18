@@ -58,14 +58,20 @@ class Program
 
             // Get first team ID
             using var getTeamCmd = new NpgsqlCommand("SELECT \"TeamId\" FROM \"Teams\" LIMIT 1", connection);
-            var defaultTeamId = Convert.ToInt32(getTeamCmd.ExecuteScalar());
+            var defaultTeamIdObj = getTeamCmd.ExecuteScalar();
+            if (defaultTeamIdObj == null || defaultTeamIdObj == DBNull.Value)
+            {
+                Console.WriteLine("ERROR: No teams found in database. Please create a team first.");
+                return;
+            }
+            var defaultTeamId = defaultTeamIdObj.ToString();
             Console.WriteLine($"Using Team ID: {defaultTeamId}");
 
             // Add TeamId column (nullable first)
             Console.WriteLine("Adding TeamId column...");
-            using var addColumnCmd = new NpgsqlCommand($@"
+            using var addColumnCmd = new NpgsqlCommand(@"
                 ALTER TABLE ""Stages"" 
-                ADD COLUMN ""TeamId"" INTEGER", connection);
+                ADD COLUMN ""TeamId"" UUID", connection);
             addColumnCmd.ExecuteNonQuery();
             Console.WriteLine("✓ Column added.");
 
@@ -73,7 +79,7 @@ class Program
             Console.WriteLine("Setting default values for existing stages...");
             using var updateCmd = new NpgsqlCommand($@"
                 UPDATE ""Stages"" 
-                SET ""TeamId"" = {defaultTeamId} 
+                SET ""TeamId"" = '{defaultTeamId}'::UUID 
                 WHERE ""TeamId"" IS NULL", connection);
             var updatedRows = updateCmd.ExecuteNonQuery();
             Console.WriteLine($"✓ Updated {updatedRows} existing stage(s).");
@@ -89,7 +95,7 @@ class Program
             // Add default value
             using var defaultCmd = new NpgsqlCommand($@"
                 ALTER TABLE ""Stages"" 
-                ALTER COLUMN ""TeamId"" SET DEFAULT {defaultTeamId}", connection);
+                ALTER COLUMN ""TeamId"" SET DEFAULT '{defaultTeamId}'::UUID", connection);
             defaultCmd.ExecuteNonQuery();
             Console.WriteLine("✓ Default value set.");
 

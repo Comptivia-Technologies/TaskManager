@@ -202,7 +202,7 @@ using (var scope = app.Services.CreateScope())
                 CREATE TABLE IF NOT EXISTS ""WorkflowSelections"" (
                     ""SelectionId"" UUID PRIMARY KEY,
                     ""TaskId"" UUID NOT NULL,
-                    ""WorkflowId"" INTEGER NOT NULL,
+                    ""WorkflowId"" UUID NOT NULL,
                     ""WorkflowName"" VARCHAR(200) NOT NULL,
                     ""SelectionReason"" VARCHAR(500),
                     ""SelectedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,

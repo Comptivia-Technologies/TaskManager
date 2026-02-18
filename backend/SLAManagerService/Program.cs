@@ -124,7 +124,7 @@ using (var scope = app.Services.CreateScope())
                 CREATE TABLE IF NOT EXISTS ""SLAAssignments"" (
                     ""SLAAssignmentId"" UUID PRIMARY KEY,
                     ""TaskId"" UUID NOT NULL,
-                    ""WorkflowId"" INTEGER NOT NULL,
+                    ""WorkflowId"" UUID NOT NULL,
                     ""Priority"" VARCHAR(50) NOT NULL,
                     ""ResponseTimeMinutes"" INTEGER NOT NULL,
                     ""SLAStartTime"" TIMESTAMP WITH TIME ZONE NOT NULL,

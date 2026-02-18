@@ -14,9 +14,9 @@ public class TaskReadDto
     public string Priority { get; set; } = string.Empty;
     public string TaskType { get; set; } = string.Empty;
     public DomainTaskStatus Status { get; set; }
-    public int? WorkflowId { get; set; }
-    public int? MemberId { get; set; }
-    public int? CurrentStageId { get; set; }
+    public Guid? WorkflowId { get; set; }
+    public Guid? MemberId { get; set; }
+    public Guid? CurrentStageId { get; set; }
     public DateTime? SLADeadline { get; set; }
     public bool IsOverdue { get; set; }
     public DateTime CreatedAt { get; set; }

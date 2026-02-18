@@ -10,7 +10,7 @@ public class WorkloadRepository : Repository<Models.Workload>, IWorkloadReposito
     {
     }
 
-    public async System.Threading.Tasks.Task<Models.Workload?> GetLatestByMemberIdAsync(int memberId)
+    public async System.Threading.Tasks.Task<Models.Workload?> GetLatestByMemberIdAsync(Guid memberId)
     {
         return await _context.Workloads
             .Where(w => w.MemberId == memberId)
@@ -18,7 +18,7 @@ public class WorkloadRepository : Repository<Models.Workload>, IWorkloadReposito
             .FirstOrDefaultAsync();
     }
 
-    public async System.Threading.Tasks.Task<IEnumerable<Models.Workload>> GetWorkloadHistoryByMemberIdAsync(int memberId, int days = 30)
+    public async System.Threading.Tasks.Task<IEnumerable<Models.Workload>> GetWorkloadHistoryByMemberIdAsync(Guid memberId, int days = 30)
     {
         var cutoffDate = DateTime.UtcNow.AddDays(-days);
         return await _context.Workloads

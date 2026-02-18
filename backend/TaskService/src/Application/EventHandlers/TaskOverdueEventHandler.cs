@@ -100,7 +100,7 @@ public class TaskOverdueEventHandler
 
     /// <summary>
     /// Syncs task status to WorkflowManagement.API so frontend can see the update
-    /// Since TaskService uses Guid TaskId and WorkflowManagement.API uses int TaskId,
+    /// Since TaskService uses Guid TaskId and WorkflowManagement.API uses Guid TaskId,
     /// we find the task by matching TaskName and update it.
     /// </summary>
     private async System.Threading.Tasks.Task SyncTaskStatusToWorkflowManagementAPIAsync(DomainTask task, DomainTaskStatus newStatus)
@@ -140,7 +140,7 @@ public class TaskOverdueEventHandler
                 using var jsonDoc = System.Text.Json.JsonDocument.Parse(tasksJson);
                 var tasksArray = jsonDoc.RootElement.EnumerateArray();
                 
-                int? matchingTaskId = null;
+                Guid? matchingTaskId = null;
                 foreach (var taskElement in tasksArray)
                 {
                     // Try both camelCase and PascalCase property names
@@ -155,7 +155,7 @@ public class TaskOverdueEventHandler
                         
                         if (taskIdProp.ValueKind != System.Text.Json.JsonValueKind.Undefined)
                         {
-                            matchingTaskId = taskIdProp.GetInt32();
+                            matchingTaskId = taskIdProp.GetGuid();
                             break;
                         }
                     }

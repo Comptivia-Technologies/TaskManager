@@ -26,7 +26,7 @@ public class WorkloadController : ControllerBase
     /// <param name="memberId">The ID of the member</param>
     /// <returns>Workload response with score, status, and metrics</returns>
     [HttpGet("{memberId}")]
-    public async System.Threading.Tasks.Task<ActionResult<WorkloadResponseDto>> GetWorkloadByMemberId(int memberId)
+    public async System.Threading.Tasks.Task<ActionResult<WorkloadResponseDto>> GetWorkloadByMemberId(Guid memberId)
     {
         try
         {

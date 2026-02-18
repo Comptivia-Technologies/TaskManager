@@ -19,7 +19,7 @@ public class Repository<T> : IRepository<T> where T : class
         return await _dbSet.ToListAsync();
     }
 
-    public virtual async System.Threading.Tasks.Task<T?> GetByIdAsync(int id)
+    public virtual async System.Threading.Tasks.Task<T?> GetByIdAsync(Guid id)
     {
         return await _dbSet.FindAsync(id);
     }
@@ -38,7 +38,7 @@ public class Repository<T> : IRepository<T> where T : class
         return entity;
     }
 
-    public virtual async System.Threading.Tasks.Task<bool> DeleteAsync(int id)
+    public virtual async System.Threading.Tasks.Task<bool> DeleteAsync(Guid id)
     {
         var entity = await GetByIdAsync(id);
         if (entity == null)

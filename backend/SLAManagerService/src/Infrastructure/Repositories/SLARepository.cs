@@ -81,7 +81,7 @@ public class SLARepository : ISLARepository
         return assignment;
     }
 
-    public async Task<SLAConfiguration?> GetSLAConfigurationByWorkflowIdAsync(int workflowId)
+    public async Task<SLAConfiguration?> GetSLAConfigurationByWorkflowIdAsync(Guid workflowId)
     {
         return await _context.SLAConfigurations
             .FirstOrDefaultAsync(s => s.WorkflowId == workflowId);

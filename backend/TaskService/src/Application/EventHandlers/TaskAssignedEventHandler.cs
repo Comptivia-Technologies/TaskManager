@@ -302,10 +302,10 @@ public class TaskAssignedEventHandler
 
     private class WorkflowTaskInfo
     {
-        public int TaskId { get; set; }
+        public Guid TaskId { get; set; }
         public string TaskName { get; set; } = string.Empty;
         public string? Description { get; set; }
-        public int? AssignedToMemberId { get; set; }
+        public Guid? AssignedToMemberId { get; set; }
         public string? CompletedByMemberIds { get; set; }
     }
 }

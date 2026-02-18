@@ -7,10 +7,10 @@ namespace SLAConfiguration.API.DTOs;
 public class SLAConfigurationReadDto
 {
     [JsonPropertyName("slaConfigurationId")]
-    public int SLAConfigurationId { get; set; }
+    public Guid SLAConfigurationId { get; set; }
     
     [JsonPropertyName("workflowId")]
-    public int WorkflowId { get; set; }
+    public Guid WorkflowId { get; set; }
     
     [JsonPropertyName("workflowName")]
     public string WorkflowName { get; set; } = string.Empty;
@@ -35,7 +35,7 @@ public class SLAConfigurationCreateDto
 {
     [Required]
     [JsonPropertyName("workflowId")]
-    public int WorkflowId { get; set; }
+    public Guid WorkflowId { get; set; }
 
     [Required]
     [JsonPropertyName("priorityLevels")]

@@ -24,14 +24,14 @@ public class WorkloadRepository : IWorkloadRepository
         return await _context.Members.ToListAsync();
     }
 
-    public async System.Threading.Tasks.Task<IEnumerable<Member>> GetMembersByTeamIdAsync(int teamId)
+    public async System.Threading.Tasks.Task<IEnumerable<Member>> GetMembersByTeamIdAsync(Guid teamId)
     {
         return await _context.Members
             .Where(m => m.TeamId == teamId)
             .ToListAsync();
     }
 
-    public async System.Threading.Tasks.Task<IEnumerable<DomainTask>> GetTasksByMemberIdAsync(int memberId)
+    public async System.Threading.Tasks.Task<IEnumerable<DomainTask>> GetTasksByMemberIdAsync(Guid memberId)
     {
         return await _context.Tasks
             .Where(t => t.AssignedToMemberId == memberId)
@@ -58,13 +58,13 @@ public class WorkloadRepository : IWorkloadRepository
         return assignment;
     }
 
-    public async System.Threading.Tasks.Task<Workflow?> GetWorkflowByIdAsync(int workflowId)
+    public async System.Threading.Tasks.Task<Workflow?> GetWorkflowByIdAsync(Guid workflowId)
     {
         return await _context.Workflows
             .FirstOrDefaultAsync(w => w.WorkflowId == workflowId);
     }
 
-    public async System.Threading.Tasks.Task<IEnumerable<DomainStage>> GetStagesByWorkflowIdAsync(int workflowId)
+    public async System.Threading.Tasks.Task<IEnumerable<DomainStage>> GetStagesByWorkflowIdAsync(Guid workflowId)
     {
         return await _context.Stages
             .Where(s => s.WorkflowId == workflowId)

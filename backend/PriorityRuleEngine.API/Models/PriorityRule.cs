@@ -5,7 +5,7 @@ namespace PriorityRuleEngine.API.Models;
 /// </summary>
 public class PriorityRule
 {
-    public int RuleId { get; set; }
+    public Guid RuleId { get; set; } = Guid.NewGuid();
     public string RuleName { get; set; } = string.Empty;
     public string Priority { get; set; } = string.Empty;  // "Critical", "High", "Medium", "Low"
     public int Salience { get; set; } = 0;  // Rule priority (higher = evaluated first)

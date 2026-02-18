@@ -9,7 +9,7 @@ public class TaskStageEscalatedEvent
     public Guid TaskId { get; set; }
     public Guid CurrentStageId { get; set; }
     public string CurrentStageName { get; set; } = string.Empty;
-    public int? NextStageId { get; set; } // Null if this is the last stage
+    public Guid? NextStageId { get; set; } // Null if this is the last stage
     public string? NextStageName { get; set; }
     public Guid WorkflowId { get; set; }
     public string EscalationReason { get; set; } = string.Empty;

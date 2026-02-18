@@ -31,7 +31,7 @@ public class PriorityRuleRepository : IPriorityRuleRepository
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<PriorityRule>> GetActiveRulesByWorkflowIdAsync(int workflowId)
+    public async Task<IEnumerable<PriorityRule>> GetActiveRulesByWorkflowIdAsync(Guid? workflowId)
     {
         // Get workflow-specific rules AND global rules (where WorkflowId is null)
         return await _db.PriorityRules
@@ -40,7 +40,7 @@ public class PriorityRuleRepository : IPriorityRuleRepository
             .ToListAsync();
     }
 
-    public async Task<PriorityRule?> GetByIdAsync(int ruleId)
+    public async Task<PriorityRule?> GetByIdAsync(Guid ruleId)
     {
         return await _db.PriorityRules.FindAsync(ruleId);
     }
@@ -71,7 +71,7 @@ public class PriorityRuleRepository : IPriorityRuleRepository
         return rule;
     }
 
-    public async Task<PriorityRule?> UpdateAsync(int ruleId, PriorityRule rule)
+    public async Task<PriorityRule?> UpdateAsync(Guid ruleId, PriorityRule rule)
     {
         var existing = await _db.PriorityRules.FindAsync(ruleId);
         if (existing == null) return null;
@@ -90,7 +90,7 @@ public class PriorityRuleRepository : IPriorityRuleRepository
         return existing;
     }
 
-    public async Task<bool> DeleteAsync(int ruleId)
+    public async Task<bool> DeleteAsync(Guid ruleId)
     {
         var rule = await _db.PriorityRules.FindAsync(ruleId);
         if (rule == null) return false;
