@@ -477,13 +477,13 @@ const Teams = () => {
                     isMulti
                     options={allMembers.map((member) => ({
                       value: member.memberId,
-                      label: `${member.firstName} ${member.lastName} (${member.email})${member.teamName ? ` - Current Team: ${member.teamName}` : ''}`,
+                      label: `${member.firstName} ${member.lastName}${member.teamName ? ` - Current Team: ${member.teamName}` : ''}`,
                     }))}
                     value={allMembers
                       .filter((member) => selectedMemberIds.includes(member.memberId))
                       .map((member) => ({
                         value: member.memberId,
-                        label: `${member.firstName} ${member.lastName} (${member.email})${member.teamName ? ` - Current Team: ${member.teamName}` : ''}`,
+                        label: `${member.firstName} ${member.lastName}${member.teamName ? ` - Current Team: ${member.teamName}` : ''}`,
                       }))}
                     onChange={(selectedOptions: any) => {
                       const ids = selectedOptions
