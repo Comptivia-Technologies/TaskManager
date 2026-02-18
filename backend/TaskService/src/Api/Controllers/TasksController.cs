@@ -171,5 +171,43 @@ public class TasksController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Escalate the current stage of a task to the next stage
+    /// Unlike CompleteStage, this does NOT increment the member's completion count
+    /// Used when a member cannot handle the task and needs to pass it to the next stage
+    /// </summary>
+    [HttpPost("escalate-stage/{id}")]
+    public async Task<ActionResult> EscalateStage(Guid id, [FromBody] EscalateStageRequest request)
+    {
+        try
+        {
+            await _taskService.EscalateStageAsync(id, request.Reason ?? "No reason provided");
+            return Ok(new { message = "Stage escalated successfully. Task will transition to the next stage." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Task not found: {TaskId}", id);
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Cannot escalate stage for task {TaskId}: {Message}", id, ex.Message);
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error escalating stage for task {TaskId}", id);
+            return StatusCode(500, new { error = "An error occurred while escalating the stage" });
+        }
+    }
+
+}
+
+/// <summary>
+/// Request DTO for escalating a stage
+/// </summary>
+public class EscalateStageRequest
+{
+    public string? Reason { get; set; }
 }
 

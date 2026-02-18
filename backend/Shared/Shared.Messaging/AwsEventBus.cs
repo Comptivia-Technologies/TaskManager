@@ -505,6 +505,7 @@ public class AwsEventBus : IEventBus, IDisposable
             nameof(TaskOverdueEvent) => EventBusConstants.TaskOverdue,
             nameof(TaskStageStartedEvent) => EventBusConstants.TaskStageStarted,
             nameof(TaskStageCompletedEvent) => EventBusConstants.TaskStageCompleted,
+            nameof(TaskStageEscalatedEvent) => EventBusConstants.TaskStageEscalated,
             nameof(TaskStageEscalationTriggeredEvent) => EventBusConstants.TaskStageEscalationTriggered,
             nameof(TaskCompletedEvent) => EventBusConstants.TaskCompleted,
             nameof(TaskStatusUpdatedEvent) => EventBusConstants.TaskStatusUpdated,

@@ -626,6 +626,92 @@ public class TaskService : ITaskService
     }
 
     /// <summary>
+    /// Escalates a task to the next stage without marking it as completed by the current member
+    /// Used when a member cannot handle the task and needs to pass it to the next stage
+    /// Unlike CompleteStageAsync, this does NOT increment the member's completion count
+    /// </summary>
+    public async System.Threading.Tasks.Task EscalateStageAsync(Guid taskId, string escalationReason)
+    {
+        var task = await _repository.GetByIdAsync(taskId);
+        if (task == null)
+        {
+            throw new KeyNotFoundException($"Task {taskId} not found");
+        }
+
+        if (!task.CurrentStageId.HasValue)
+        {
+            throw new InvalidOperationException("Task is not in any stage");
+        }
+
+        if (!task.WorkflowId.HasValue)
+        {
+            throw new InvalidOperationException("Task has no workflow assigned");
+        }
+
+        // Get workflow stages from WorkflowManagement.API
+        var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
+            ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
+
+        var stagesResponse = await _httpClient.GetAsync(
+            $"{workflowManagementApiUrl}/stages/workflow/{task.WorkflowId.Value}");
+
+        if (!stagesResponse.IsSuccessStatusCode)
+        {
+            _logger.LogError(
+                "Failed to get stages for workflow. TaskId: {TaskId}, WorkflowId: {WorkflowId}, StatusCode: {StatusCode}",
+                taskId, task.WorkflowId.Value, stagesResponse.StatusCode);
+            throw new InvalidOperationException($"Failed to get workflow stages");
+        }
+
+        var stagesJson = await stagesResponse.Content.ReadAsStringAsync();
+        var stages = System.Text.Json.JsonSerializer.Deserialize<List<StageInfo>>(stagesJson, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        if (stages == null || !stages.Any())
+        {
+            throw new InvalidOperationException($"No stages found for workflow {task.WorkflowId.Value}");
+        }
+
+        // Find current stage and next stage
+        var orderedStages = stages.OrderBy(s => s.StageOrder).ToList();
+        var currentStage = orderedStages.FirstOrDefault(s => s.StageId == task.CurrentStageId.Value);
+        
+        if (currentStage == null)
+        {
+            throw new InvalidOperationException($"Current stage {task.CurrentStageId.Value} not found in workflow");
+        }
+
+        var nextStage = orderedStages.FirstOrDefault(s => s.StageOrder > currentStage.StageOrder);
+
+        // Publish TaskStageEscalatedEvent (does NOT update CompletedByMemberIds)
+        var correlationId = Guid.NewGuid();
+        var stageEscalatedEvent = new TaskStageEscalatedEvent
+        {
+            TaskId = taskId,
+            CurrentStageId = currentStage.StageId,
+            CurrentStageName = currentStage.StageName,
+            WorkflowId = task.WorkflowId.Value,
+            NextStageId = nextStage?.StageId,
+            NextStageName = nextStage?.StageName,
+            EscalationReason = escalationReason,
+            EscalatedAt = DateTime.UtcNow,
+            CorrelationId = correlationId
+        };
+
+        await _eventBus.PublishAsync(
+            stageEscalatedEvent,
+            EventBusConstants.WorkflowSource,
+            EventBusConstants.TaskStageEscalated,
+            correlationId);
+
+        _logger.LogInformation(
+            "Stage escalated for task. TaskId: {TaskId}, StageId: {StageId}, StageName: {StageName}, NextStageId: {NextStageId}, Reason: {Reason}, CorrelationId: {CorrelationId}",
+            taskId, currentStage.StageId, currentStage.StageName, nextStage?.StageId, escalationReason, correlationId);
+    }
+
+    /// <summary>
     /// Internal class for deserializing stage info from WorkflowManagement.API
     /// </summary>
     private class StageInfo

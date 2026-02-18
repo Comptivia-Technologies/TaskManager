@@ -64,6 +64,7 @@ builder.Services.AddScoped<TaskAssignedEventHandler>();
 builder.Services.AddScoped<TaskOverdueEventHandler>();
 builder.Services.AddScoped<TaskStageStartedEventHandler>();
 builder.Services.AddScoped<TaskStageCompletedEventHandler>();
+builder.Services.AddScoped<TaskStageEscalatedEventHandler>();
 builder.Services.AddScoped<TaskStageEscalationTriggeredEventHandler>();
 builder.Services.AddScoped<TaskCompletedEventHandler>();
 
@@ -244,6 +245,24 @@ catch (Exception ex)
 
 try
 {
+    logger.LogInformation("Starting TaskStageEscalatedEvent consumer...");
+    eventBus.StartConsuming<TaskStageEscalatedEvent>(
+        EventBusConstants.TaskServiceQueue,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskStageEscalatedEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskStageEscalatedEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskStageEscalatedEvent consumer");
+}
+
+try
+{
     logger.LogInformation("Starting TaskStageEscalationTriggeredEvent consumer...");
     eventBus.StartConsuming<TaskStageEscalationTriggeredEvent>(
         EventBusConstants.TaskServiceQueue,
@@ -339,6 +358,7 @@ using (var scope = app.Services.CreateScope())
                         ""TaskOverdueEventId"" UUID,
                         ""TaskStageStartedEventId"" UUID,
                         ""TaskStageCompletedEventId"" UUID,
+                        ""TaskStageEscalatedEventId"" UUID,
                         ""TaskStageEscalationTriggeredEventId"" UUID,
                         ""TaskCompletedEventId"" UUID
                     );
@@ -356,6 +376,7 @@ using (var scope = app.Services.CreateScope())
                     CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskAssignedEventId"" ON ""Tasks"" (""TaskAssignedEventId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskStageStartedEventId"" ON ""Tasks"" (""TaskStageStartedEventId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskStageCompletedEventId"" ON ""Tasks"" (""TaskStageCompletedEventId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskStageEscalatedEventId"" ON ""Tasks"" (""TaskStageEscalatedEventId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskStageEscalationTriggeredEventId"" ON ""Tasks"" (""TaskStageEscalationTriggeredEventId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Tasks_TaskCompletedEventId"" ON ""Tasks"" (""TaskCompletedEventId"");
                 ";

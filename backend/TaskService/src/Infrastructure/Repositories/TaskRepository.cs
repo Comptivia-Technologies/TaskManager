@@ -36,6 +36,8 @@ public class TaskRepository : ITaskRepository
                 .FirstOrDefaultAsync(t => t.TaskAssignedEventId == eventId),
             "TaskOverdueEvent" => await _context.Tasks
                 .FirstOrDefaultAsync(t => t.TaskOverdueEventId == eventId),
+            "TaskStageEscalatedEvent" => await _context.Tasks
+                .FirstOrDefaultAsync(t => t.TaskStageEscalatedEventId == eventId),
             _ => null
         };
     }

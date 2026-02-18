@@ -23,6 +23,7 @@ public static class EventBusConstants
     public const string TaskStatusUpdated = "TaskStatusUpdated";
     public const string TaskStageStarted = "TaskStageStarted";
     public const string TaskStageCompleted = "TaskStageCompleted";
+    public const string TaskStageEscalated = "TaskStageEscalated";
     public const string TaskStageEscalationTriggered = "TaskStageEscalationTriggered";
     public const string TaskStageReassignmentNeeded = "TaskStageReassignmentNeeded";
     public const string TaskCompleted = "TaskCompleted";

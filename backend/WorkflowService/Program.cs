@@ -60,6 +60,7 @@ builder.Services.AddHttpClient<IStageOrchestrationService, StageOrchestrationSer
 builder.Services.AddScoped<TaskCreatedEventHandler>();
 builder.Services.AddScoped<TaskAssignedEventHandler>();
 builder.Services.AddScoped<TaskStageCompletedEventHandler>();
+builder.Services.AddScoped<TaskStageEscalatedEventHandler>();
 builder.Services.AddScoped<TaskStageEscalationTriggeredEventHandler>();
 
 // Background Services
@@ -134,6 +135,24 @@ try
 catch (Exception ex)
 {
     logger.LogError(ex, "✗ Failed to start TaskStageCompletedEvent consumer");
+}
+
+try
+{
+    logger.LogInformation("Starting TaskStageEscalatedEvent consumer...");
+    eventBus.StartConsuming<TaskStageEscalatedEvent>(
+        EventBusConstants.WorkflowServiceQueue,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskStageEscalatedEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskStageEscalatedEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskStageEscalatedEvent consumer");
 }
 
 try
