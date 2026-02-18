@@ -51,7 +51,7 @@ public class TaskService : ITaskService
         return tasksList;
     }
 
-    public async Task<TaskReadDto?> GetTaskByIdAsync(int id)
+    public async Task<TaskReadDto?> GetTaskByIdAsync(Guid id)
     {
         var task = await _taskRepository.GetByIdAsync(id);
         if (task == null)
@@ -116,7 +116,7 @@ public class TaskService : ITaskService
         return taskDto;
     }
 
-    public async Task<TaskReadDto?> UpdateTaskAsync(int id, TaskUpdateDto taskUpdateDto)
+    public async Task<TaskReadDto?> UpdateTaskAsync(Guid id, TaskUpdateDto taskUpdateDto)
     {
         var task = await _taskRepository.GetByIdAsync(id);
         if (task == null)
@@ -183,7 +183,7 @@ public class TaskService : ITaskService
         return taskDto;
     }
 
-    public async Task<bool> DeleteTaskAsync(int id)
+    public async Task<bool> DeleteTaskAsync(Guid id)
     {
         var task = await _taskRepository.GetByIdAsync(id);
         if (task == null)
@@ -208,7 +208,7 @@ public class TaskService : ITaskService
         return deleted;
     }
 
-    public async Task<IEnumerable<TaskReadDto>> GetTasksByWorkflowAsync(int workflowId)
+    public async Task<IEnumerable<TaskReadDto>> GetTasksByWorkflowAsync(Guid workflowId)
     {
         var tasks = await _taskRepository.GetTasksByWorkflowAsync(workflowId);
         var tasksDto = _mapper.Map<IEnumerable<TaskReadDto>>(tasks);
@@ -229,7 +229,7 @@ public class TaskService : ITaskService
         return tasksList;
     }
 
-    public async Task<IEnumerable<TaskReadDto>> GetTasksByStageAsync(int stageId)
+    public async Task<IEnumerable<TaskReadDto>> GetTasksByStageAsync(Guid stageId)
     {
         var tasks = await _taskRepository.GetTasksByStageAsync(stageId);
         var tasksDto = _mapper.Map<IEnumerable<TaskReadDto>>(tasks);
@@ -250,7 +250,7 @@ public class TaskService : ITaskService
         return tasksList;
     }
 
-    public async Task<IEnumerable<TaskReadDto>> GetTasksByMemberAsync(int memberId)
+    public async Task<IEnumerable<TaskReadDto>> GetTasksByMemberAsync(Guid memberId)
     {
         var tasks = await _taskRepository.GetTasksByMemberAsync(memberId);
         var tasksDto = _mapper.Map<IEnumerable<TaskReadDto>>(tasks);

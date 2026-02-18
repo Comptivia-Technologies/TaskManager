@@ -7,7 +7,7 @@ export const teamService = {
     return response.data;
   },
 
-  getById: async (id: number): Promise<Team> => {
+  getById: async (id: string): Promise<Team> => {
     const response = await api.get<Team>(`/api/teams/${id}`);
     return response.data;
   },
@@ -17,21 +17,21 @@ export const teamService = {
     return response.data;
   },
 
-  update: async (id: number, team: TeamUpdate): Promise<Team> => {
+  update: async (id: string, team: TeamUpdate): Promise<Team> => {
     const response = await api.put<Team>(`/api/teams/${id}`, team);
     return response.data;
   },
 
-  delete: async (id: number): Promise<void> => {
+  delete: async (id: string): Promise<void> => {
     await api.delete(`/api/teams/${id}`);
   },
 
-  getMembers: async (teamId: number) => {
+  getMembers: async (teamId: string) => {
     const response = await api.get(`/api/teams/${teamId}/members`);
     return response.data;
   },
 
-  getWorkflows: async (teamId: number) => {
+  getWorkflows: async (teamId: string) => {
     const response = await api.get(`/api/teams/${teamId}/workflows`);
     return response.data;
   },

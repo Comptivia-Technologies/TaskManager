@@ -10,7 +10,7 @@ public class MemberRepository : Repository<Member>, IMemberRepository
     {
     }
 
-    public async Task<IEnumerable<Member>> GetMembersByTeamAsync(int teamId)
+    public async Task<IEnumerable<Member>> GetMembersByTeamAsync(Guid teamId)
     {
         return await _context.Members
             .Include(m => m.Team)

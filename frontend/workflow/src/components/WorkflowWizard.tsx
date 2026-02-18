@@ -14,7 +14,7 @@ import { PriorityRuleCreate } from '../types';
 import { priorityRulesService } from '../services/priorityRulesService';
 
 interface WorkflowWizardProps {
-  onSuccess: (workflowId: number) => void;
+  onSuccess: (workflowId: string) => void;
   onCancel: () => void;
 }
 
@@ -35,7 +35,7 @@ interface MemberForm {
 interface StageForm {
   stageName: string;
   stageOrder: number;
-  teamId: number;
+  teamId: string;
   tempId: number;
   stageType?: 'Process' | 'Escalation';
   transitionPolicy?: 'OnComplete' | 'OnTimeout' | 'Manual';
@@ -68,9 +68,9 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
     teamName: '',
     description: '',
   });
-  const [createdTeamId, setCreatedTeamId] = useState<number | null>(null);
+  const [createdTeamId, setCreatedTeamId] = useState<string | null>(null);
   const [skipTeamCreation, setSkipTeamCreation] = useState(false);
-  const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([]); // Selected existing members to assign
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]); // Selected existing members to assign
 
   // Step 4: Create Workflow
   const [workflowName, setWorkflowName] = useState('');
@@ -79,12 +79,12 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
   const [stageForm, setStageForm] = useState<StageForm>({
     stageName: '',
     stageOrder: 1,
-    teamId: 0,
+    teamId: '',
     tempId: 0,
   });
   const [nextTempId, setNextTempId] = useState(1);
   const [editingStageIndex, setEditingStageIndex] = useState<number | null>(null);
-  const [createdWorkflowId, setCreatedWorkflowId] = useState<number | null>(null);
+  const [createdWorkflowId, setCreatedWorkflowId] = useState<string | null>(null);
 
   // Step 6: Create Rules
   const [rules, setRules] = useState<PriorityRuleCreate[]>([]);
@@ -282,7 +282,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
         setStages([...stages, newStage]);
         setNextTempId(nextTempId + 1);
       }
-      const teamId = createdTeamId || (teams.length > 0 ? teams[0].teamId : 0);
+      const teamId = createdTeamId || (teams.length > 0 ? teams[0].teamId : '');
       setStageForm({ stageName: '', stageOrder: stages.length + 1, teamId, tempId: 0 });
     }
   };
@@ -760,11 +760,11 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                 <div>
                   <label className="block text-black text-sm font-semibold mb-2 font-sans">Assign Team *</label>
                   <select
-                    value={stageForm.teamId || 0}
-                    onChange={(e) => setStageForm({ ...stageForm, teamId: parseInt(e.target.value) || 0 })}
+                    value={stageForm.teamId || ''}
+                    onChange={(e) => setStageForm({ ...stageForm, teamId: e.target.value || '' })}
                     className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
                   >
-                    <option value={0}>Select Team</option>
+                    <option value="">Select Team</option>
                     {teams.map((team) => (
                       <option key={team.teamId} value={team.teamId}>
                         {team.teamName}
@@ -792,7 +792,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                     >
                       <span className="font-medium text-black font-sans">
                         {stage.stageOrder}. {stage.stageName}
-                        {stage.teamId > 0 && (
+                        {stage.teamId && (
                           <span className="text-xs text-black/60 ml-2 font-sans">
                             (Team: {teams.find(t => t.teamId === stage.teamId)?.teamName})
                           </span>

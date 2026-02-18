@@ -66,7 +66,7 @@ public class TeamService : ITeamService
         return teamDtos;
     }
 
-    public async Task<TeamReadDto?> GetTeamByIdAsync(int id)
+    public async Task<TeamReadDto?> GetTeamByIdAsync(Guid id)
     {
         var team = await _teamRepository.GetByIdAsync(id);
         return team == null ? null : _mapper.Map<TeamReadDto>(team);
@@ -82,7 +82,7 @@ public class TeamService : ITeamService
         return _mapper.Map<TeamReadDto>(createdTeam);
     }
 
-    public async Task<TeamReadDto?> UpdateTeamAsync(int id, TeamUpdateDto teamUpdateDto)
+    public async Task<TeamReadDto?> UpdateTeamAsync(Guid id, TeamUpdateDto teamUpdateDto)
     {
         var team = await _teamRepository.GetByIdAsync(id);
         if (team == null)
@@ -104,7 +104,7 @@ public class TeamService : ITeamService
         return _mapper.Map<TeamReadDto>(updatedTeam);
     }
 
-    public async System.Threading.Tasks.Task<bool> DeleteTeamAsync(int id)
+    public async System.Threading.Tasks.Task<bool> DeleteTeamAsync(Guid id)
     {
         var team = await _teamRepository.GetByIdAsync(id);
         if (team == null)
@@ -137,7 +137,7 @@ public class TeamService : ITeamService
         return await _teamRepository.DeleteAsync(id);
     }
 
-    public async Task<IEnumerable<MemberReadDto>> GetTeamMembersAsync(int teamId)
+    public async Task<IEnumerable<MemberReadDto>> GetTeamMembersAsync(Guid teamId)
     {
         var team = await _teamRepository.GetTeamWithMembersAsync(teamId);
         if (team == null)
@@ -146,7 +146,7 @@ public class TeamService : ITeamService
         return _mapper.Map<IEnumerable<MemberReadDto>>(team.Members);
     }
 
-    public async Task<IEnumerable<WorkflowReadDto>> GetTeamWorkflowsAsync(int teamId)
+    public async Task<IEnumerable<WorkflowReadDto>> GetTeamWorkflowsAsync(Guid teamId)
     {
         // Get workflows directly assigned to the team (via TeamId on Workflow)
         var team = await _teamRepository.GetTeamWithWorkflowsAsync(teamId);

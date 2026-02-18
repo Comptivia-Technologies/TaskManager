@@ -1,5 +1,5 @@
 export interface Team {
-  teamId: number;
+  teamId: string;
   teamName: string;
   description?: string;
   createdAt: string;
@@ -18,11 +18,11 @@ export interface TeamUpdate {
 }
 
 export interface Member {
-  memberId: number;
+  memberId: string;
   firstName: string;
   lastName: string;
   email: string;
-  teamId?: number;
+  teamId?: string;
   teamName?: string;
   role: string;
   skillLevel: number;
@@ -34,7 +34,7 @@ export interface MemberCreate {
   firstName: string;
   lastName: string;
   email: string;
-  teamId?: number;
+  teamId?: string;
   role: string;
   skillLevel: number;
 }
@@ -43,16 +43,16 @@ export interface MemberUpdate {
   firstName: string;
   lastName: string;
   email: string;
-  teamId?: number;
+  teamId?: string;
   role: string;
   skillLevel: number;
 }
 
 export interface Workflow {
-  workflowId: number;
+  workflowId: string;
   workflowName: string;
   description?: string;
-  teamId?: number;
+  teamId?: string;
   teamName?: string;
   createdAt: string;
   updatedAt: string;
@@ -63,7 +63,7 @@ export interface Workflow {
 export interface WorkflowCreate {
   workflowName: string;
   description?: string;
-  teamId?: number;
+  teamId?: string;
 }
 
 export interface WorkflowUpdate {
@@ -75,11 +75,11 @@ export type StageType = 'Process' | 'Escalation';
 export type TransitionPolicy = 'OnComplete' | 'OnTimeout' | 'Manual';
 
 export interface Stage {
-  stageId: number;
+  stageId: string;
   stageName: string;
   stageOrder: number;
-  workflowId: number;
-  teamId: number;
+  workflowId: string;
+  teamId: string;
   teamName: string;
   stageType: StageType;
   transitionPolicy: TransitionPolicy;
@@ -90,8 +90,8 @@ export interface Stage {
 export interface StageCreate {
   stageName: string;
   stageOrder: number;
-  workflowId: number;
-  teamId: number;
+  workflowId: string;
+  teamId: string;
   stageType: StageType;
   transitionPolicy: TransitionPolicy;
   timeoutMinutes?: number;
@@ -100,23 +100,23 @@ export interface StageCreate {
 export interface StageUpdate {
   stageName: string;
   stageOrder: number;
-  teamId: number;
+  teamId: string;
   stageType: StageType;
   transitionPolicy: TransitionPolicy;
   timeoutMinutes?: number;
 }
 
 export interface Task {
-  taskId: number;
+  taskId: string;
   taskName: string;
   description?: string;
   status: string;
   priority: string;
   dueDate?: string;
-  workflowId: number;
-  stageId?: number;
+  workflowId: string;
+  stageId?: string;
   stageName?: string;
-  assignedToMemberId?: number;
+  assignedToMemberId?: string;
   assignedToMemberName?: string;
   isOverdue?: boolean;
   createdAt: string;
@@ -129,9 +129,9 @@ export interface TaskCreate {
   status: string;
   priority: string;
   dueDate?: string;
-  workflowId: number;
-  stageId?: number;
-  assignedToMemberId?: number;
+  workflowId: string;
+  stageId?: string;
+  assignedToMemberId?: string;
 }
 
 export interface TaskUpdate {
@@ -140,24 +140,24 @@ export interface TaskUpdate {
   status: string;
   priority: string;
   dueDate?: string;
-  stageId?: number;
-  assignedToMemberId?: number;
+  stageId?: string;
+  assignedToMemberId?: string;
 }
 
 // SLA and task priorities are now fully dynamic, so this is a free-form string
 export type PriorityLevel = string;
 
 export interface ManagedTask {
-  taskId: number;
+  taskId: string;
   title: string;
   description?: string;
   status: string;
   priority: string;
   externalTaskId?: string;
   payload: unknown;
-  workflowId: number;
+  workflowId: string;
   workflowName: string;
-  slaConfigurationId?: number;
+  slaConfigurationId?: string;
   slaPriority?: PriorityLevel | string;
   slaResponseTimeMinutes?: number;
   slaResolutionTimeMinutes?: number;
@@ -171,11 +171,11 @@ export interface ManagedTaskCreate {
   priority: PriorityLevel;
   externalTaskId?: string;
   payload?: unknown;
-  teamId?: number;
+  teamId?: string;
 }
 
 export interface SLAConfiguration {
-  workflowId: number;
+  workflowId: string;
   workflowName: string;
   priorityLevels: {
     // key is the priority name (e.g. "Very Critical", "High", etc.)
@@ -186,7 +186,7 @@ export interface SLAConfiguration {
 }
 
 export interface SLAConfigurationCreate {
-  workflowId: number;
+  workflowId: string;
   priorityLevels: {
     [key: string]: {
       responseTime: number;
@@ -223,7 +223,7 @@ export interface WorkloadBreakdown {
 }
 
 export interface WorkloadResponse {
-  memberId: number;
+  memberId: string;
   memberName: string;
   memberEmail: string;
   workloadScore: number;
@@ -234,7 +234,7 @@ export interface WorkloadResponse {
 }
 
 export interface PriorityRule {
-  ruleId: number;
+  ruleId: string;
   ruleName: string;
   priority: string;  // "Critical", "High", "Medium", "Low"
   salience: number;
@@ -242,7 +242,7 @@ export interface PriorityRule {
   conditionsJson: string;
   maxWorkloadScore?: number;
   teamName?: string;
-  workflowId?: number;  // NULL = global rule, specific ID = workflow-specific rule
+  workflowId?: string;  // NULL = global rule, specific ID = workflow-specific rule
   createdAt: string;
   updatedAt: string;
 }
@@ -255,7 +255,7 @@ export interface PriorityRuleCreate {
   conditionsJson: string;
   maxWorkloadScore?: number;
   teamName?: string;
-  workflowId?: number;  // NULL = global rule, specific ID = workflow-specific rule
+  workflowId?: string;  // NULL = global rule, specific ID = workflow-specific rule
 }
 
 export interface PriorityRuleUpdate {
@@ -266,7 +266,7 @@ export interface PriorityRuleUpdate {
   conditionsJson: string;
   maxWorkloadScore?: number;
   teamName?: string;
-  workflowId?: number;  // NULL = global rule, specific ID = workflow-specific rule
+  workflowId?: string;  // NULL = global rule, specific ID = workflow-specific rule
 }
 
 export interface RuleCondition {

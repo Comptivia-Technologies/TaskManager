@@ -21,8 +21,8 @@ import TaskCard from './TaskCard';
 
 interface KanbanBoardProps {
   workflow: Workflow;
-  onTaskMove: (taskId: number, newStageId: number | null) => void;
-  onTaskUpdate: (taskId: number, updates: Partial<TaskUpdate>) => void;
+  onTaskMove: (taskId: string, newStageId: string | null) => void;
+  onTaskUpdate: (taskId: string, updates: Partial<TaskUpdate>) => void;
 }
 
 const KanbanBoard = ({ workflow, onTaskMove, onTaskUpdate }: KanbanBoardProps) => {
@@ -36,7 +36,7 @@ const KanbanBoard = ({ workflow, onTaskMove, onTaskUpdate }: KanbanBoardProps) =
 
   const sortedStages = [...workflow.stages].sort((a, b) => a.stageOrder - b.stageOrder);
 
-  const getTasksByStage = (stageId: number | null) => {
+  const getTasksByStage = (stageId: string | null) => {
     if (stageId === null) {
       return workflow.tasks.filter((t) => !t.stageId);
     }
@@ -45,7 +45,7 @@ const KanbanBoard = ({ workflow, onTaskMove, onTaskUpdate }: KanbanBoardProps) =
 
   const handleDragStart = (event: any) => {
     const { active } = event;
-    const task = workflow.tasks.find((t) => t.taskId === Number(active.id));
+    const task = workflow.tasks.find((t) => t.taskId === active.id);
     setActiveTask(task || null);
   };
 
@@ -55,18 +55,18 @@ const KanbanBoard = ({ workflow, onTaskMove, onTaskUpdate }: KanbanBoardProps) =
 
     if (!over) return;
 
-    const taskId = Number(active.id);
+    const taskId = active.id.toString();
     const overId = over.id.toString();
 
     // Check if dropped on a stage column
     if (overId.startsWith('stage-')) {
-      const stageId = parseInt(overId.replace('stage-', ''));
+      const stageId = overId.replace('stage-', '');
       onTaskMove(taskId, stageId);
       return;
     }
 
     // Check if dropped on another task
-    const targetTask = workflow.tasks.find((t) => t.taskId === Number(overId));
+    const targetTask = workflow.tasks.find((t) => t.taskId === overId);
     if (targetTask) {
       onTaskMove(taskId, targetTask.stageId || null);
       return;

@@ -5,11 +5,11 @@ namespace WorkflowManagement.API.Models;
 /// </summary>
 public class Stage
 {
-    public int StageId { get; set; }
+    public Guid StageId { get; set; } = Guid.NewGuid();
     public string StageName { get; set; } = string.Empty;
     public int StageOrder { get; set; }
-    public int WorkflowId { get; set; }
-    public int TeamId { get; set; }
+    public Guid WorkflowId { get; set; }
+    public Guid TeamId { get; set; }
     
     /// <summary>
     /// Stage type: Process (transitions on completion) or Escalation (transitions on timeout)

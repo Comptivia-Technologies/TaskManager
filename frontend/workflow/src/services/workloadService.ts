@@ -13,7 +13,7 @@ const workloadApi = axios.create({
 });
 
 export const workloadService = {
-  getByMemberId: async (memberId: number): Promise<WorkloadResponse> => {
+  getByMemberId: async (memberId: string): Promise<WorkloadResponse> => {
     const response = await workloadApi.get<WorkloadResponse>(`/api/workload/${memberId}`);
     return response.data;
   },

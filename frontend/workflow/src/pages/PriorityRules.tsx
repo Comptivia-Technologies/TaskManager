@@ -13,11 +13,11 @@ const PriorityRules = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingRule, setEditingRule] = useState<PriorityRule | null>(null);
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | 'global' | null>(null);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | 'global' | null>(null);
   const [showActiveOnly, setShowActiveOnly] = useState(false);
 
   // Group rules by workflow
-  const [rulesByWorkflow, setRulesByWorkflow] = useState<Map<number | 'global', PriorityRule[]>>(new Map());
+  const [rulesByWorkflow, setRulesByWorkflow] = useState<Map<string | 'global', PriorityRule[]>>(new Map());
 
   const loadRules = useCallback(async () => {
     try {
@@ -38,7 +38,7 @@ const PriorityRules = () => {
 
   useEffect(() => {
     // Group rules by workflow
-    const grouped = new Map<number | 'global', PriorityRule[]>();
+    const grouped = new Map<string | 'global', PriorityRule[]>();
     
     // Global rules (no workflowId)
     const globalRules = rules.filter(r => !r.workflowId);
@@ -58,7 +58,7 @@ const PriorityRules = () => {
   }, [rules, workflows]);
 
 
-  const handleAddRule = (workflowId: number | 'global') => {
+  const handleAddRule = (workflowId: string | 'global') => {
     setSelectedWorkflowId(workflowId);
     setEditingRule(null);
     setFormData({
@@ -90,7 +90,7 @@ const PriorityRules = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this rule?')) return;
 
     try {
@@ -107,7 +107,7 @@ const PriorityRules = () => {
     e.preventDefault();
     try {
       // Determine the workflowId to use
-      let finalWorkflowId: number | undefined;
+      let finalWorkflowId: string | undefined;
       
       if (editingRule) {
         // When editing, use formData.workflowId (user might have changed it)
@@ -115,7 +115,7 @@ const PriorityRules = () => {
       } else {
         // When creating, prioritize selectedWorkflowId
         if (selectedWorkflowId && selectedWorkflowId !== 'global') {
-          finalWorkflowId = selectedWorkflowId as number;
+          finalWorkflowId = selectedWorkflowId as string;
         } else if (selectedWorkflowId === 'global') {
           finalWorkflowId = undefined;
         } else {
@@ -205,7 +205,7 @@ const PriorityRules = () => {
     }
   };
 
-  const getWorkflowName = (workflowId?: number): string => {
+  const getWorkflowName = (workflowId?: string): string => {
     if (!workflowId) return 'Global';
     const workflow = workflows.find(w => w.workflowId === workflowId);
     return workflow?.workflowName || `Workflow #${workflowId}`;
@@ -444,7 +444,7 @@ const PriorityRules = () => {
               </h2>
               {selectedWorkflowId && selectedWorkflowId !== 'global' && (
                 <p className="text-sm text-black/70 mb-4 font-sans">
-                  For workflow: <span className="font-semibold">{getWorkflowName(selectedWorkflowId as number)}</span>
+                  For workflow: <span className="font-semibold">{getWorkflowName(selectedWorkflowId as string)}</span>
                 </p>
               )}
               {selectedWorkflowId === 'global' && (
@@ -517,7 +517,7 @@ const PriorityRules = () => {
                       </label>
                       <select
                         value={formData.workflowId || ''}
-                        onChange={(e) => setFormData({ ...formData, workflowId: e.target.value ? parseInt(e.target.value) : undefined })}
+                        onChange={(e) => setFormData({ ...formData, workflowId: e.target.value || undefined })}
                         className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] font-sans"
                       >
                         <option value="">Global (All Workflows)</option>

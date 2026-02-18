@@ -4,10 +4,10 @@ namespace WorkflowManagement.API.Models;
 
 public class Workflow
 {
-    public int WorkflowId { get; set; }
+    public Guid WorkflowId { get; set; } = Guid.NewGuid();
     public string WorkflowName { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public int? TeamId { get; set; }
+    public Guid? TeamId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     

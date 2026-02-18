@@ -4,7 +4,7 @@ namespace WorkflowManagement.API.DTOs;
 
 public class TeamReadDto
 {
-    public int TeamId { get; set; }
+    public Guid TeamId { get; set; }
     public string TeamName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public DateTime CreatedAt { get; set; }

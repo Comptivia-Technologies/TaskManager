@@ -10,7 +10,7 @@ public class TaskRepository : Repository<Models.Task>, ITaskRepository
     {
     }
 
-    public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksByWorkflowAsync(int workflowId)
+    public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksByWorkflowAsync(Guid workflowId)
     {
         return await _context.Tasks
             .Include(t => t.Workflow)
@@ -20,7 +20,7 @@ public class TaskRepository : Repository<Models.Task>, ITaskRepository
             .ToListAsync();
     }
 
-    public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksByStageAsync(int stageId)
+    public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksByStageAsync(Guid stageId)
     {
         return await _context.Tasks
             .Include(t => t.Workflow)
@@ -30,7 +30,7 @@ public class TaskRepository : Repository<Models.Task>, ITaskRepository
             .ToListAsync();
     }
 
-    public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksByMemberAsync(int memberId)
+    public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksByMemberAsync(Guid memberId)
     {
         return await _context.Tasks
             .Include(t => t.Workflow)

@@ -17,8 +17,9 @@ const WorkflowDetail = () => {
 
   useEffect(() => {
     const fetchWorkflow = async () => {
+      if (!id) return;
       try {
-        const data = await workflowService.getById(Number(id));
+        const data = await workflowService.getById(id);
         setWorkflow(data);
       } catch (error: any) {
         toast.error('Failed to load workflow');
@@ -28,9 +29,7 @@ const WorkflowDetail = () => {
       }
     };
 
-    if (id) {
-      fetchWorkflow();
-    }
+    fetchWorkflow();
   }, [id, navigate]);
 
 

@@ -6,7 +6,7 @@ namespace Shared.Contracts.EventContracts;
 public class TaskOverdueEvent
 {
     public Guid TaskId { get; set; }
-    public int MemberId { get; set; }
+    public Guid MemberId { get; set; }
     public DateTime SLADeadline { get; set; }
     public DateTime BreachedAt { get; set; }
     public int MinutesOverdue { get; set; }

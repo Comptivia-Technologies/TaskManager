@@ -33,7 +33,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<TeamReadDto>> GetTeamById(int id)
+    public async Task<ActionResult<TeamReadDto>> GetTeamById(Guid id)
     {
         try
         {
@@ -69,7 +69,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<ActionResult<TeamReadDto>> UpdateTeam(int id, [FromBody] TeamUpdateDto teamUpdateDto)
+    public async Task<ActionResult<TeamReadDto>> UpdateTeam(Guid id, [FromBody] TeamUpdateDto teamUpdateDto)
     {
         try
         {
@@ -90,7 +90,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteTeam(int id)
+    public async Task<IActionResult> DeleteTeam(Guid id)
     {
         try
         {
@@ -113,7 +113,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpGet("{id}/members")]
-    public async Task<ActionResult<IEnumerable<MemberReadDto>>> GetTeamMembers(int id)
+    public async Task<ActionResult<IEnumerable<MemberReadDto>>> GetTeamMembers(Guid id)
     {
         try
         {
@@ -128,7 +128,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpGet("{id}/workflows")]
-    public async Task<ActionResult<IEnumerable<WorkflowReadDto>>> GetTeamWorkflows(int id)
+    public async Task<ActionResult<IEnumerable<WorkflowReadDto>>> GetTeamWorkflows(Guid id)
     {
         try
         {

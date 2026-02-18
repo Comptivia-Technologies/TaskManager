@@ -6,9 +6,9 @@ namespace Shared.Contracts.EventContracts;
 public class TaskCompletedEvent
 {
     public Guid TaskId { get; set; }
-    public int WorkflowId { get; set; }
+    public Guid WorkflowId { get; set; }
     public string WorkflowName { get; set; } = string.Empty;
-    public int FinalStageId { get; set; }
+    public Guid FinalStageId { get; set; }
     public string FinalStageName { get; set; } = string.Empty;
     public DateTime CompletedAt { get; set; }
     public TimeSpan TotalDuration { get; set; }

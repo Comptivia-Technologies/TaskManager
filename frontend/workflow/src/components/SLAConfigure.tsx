@@ -7,7 +7,7 @@ import { FiChevronLeft, FiChevronRight, FiX, FiCheck, FiClock } from 'react-icon
 interface SLAConfigureProps {
   onSuccess: () => void;
   onCancel: () => void;
-  initialWorkflowId?: number;
+  initialWorkflowId?: string;
 }
 
 const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigureProps) => {
@@ -19,7 +19,7 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
   const stepLabels = ['Select Workflow', 'Configure Priorities'];
 
   // Step 1: Select Workflow
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(initialWorkflowId || null);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(initialWorkflowId || null);
 
   // Step 2: Configure dynamic priorities and their response times
   type TimeUnit = 'minutes' | 'hours' | 'days';
@@ -218,7 +218,7 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
                 </label>
                 <select
                   value={selectedWorkflowId || ''}
-                  onChange={(e) => setSelectedWorkflowId(parseInt(e.target.value) || null)}
+                  onChange={(e) => setSelectedWorkflowId(e.target.value || null)}
                   className="w-full px-4 py-3 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
                   required
                 >

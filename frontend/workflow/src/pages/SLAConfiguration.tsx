@@ -8,10 +8,10 @@ import SLAConfigure from '../components/SLAConfigure';
 
 const SLAConfigurationPage = () => {
   const { workflows, loading: workflowsLoading } = useWorkflows();
-  const [slaConfigs, setSlaConfigs] = useState<Map<number, SLAConfiguration>>(new Map());
+  const [slaConfigs, setSlaConfigs] = useState<Map<string, SLAConfiguration>>(new Map());
   const [loading, setLoading] = useState(true);
   const [isConfigureMode, setIsConfigureMode] = useState(false);
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | undefined>(undefined);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | undefined>(undefined);
 
   const priorityColorClasses = [
     'bg-red-100 text-red-800 border-red-300',
@@ -27,7 +27,7 @@ const SLAConfigurationPage = () => {
       try {
         setLoading(true);
         const configs = await slaService.getAll();
-        const configsMap = new Map<number, SLAConfiguration>();
+        const configsMap = new Map<string, SLAConfiguration>();
         configs.forEach((config) => {
           configsMap.set(config.workflowId, config);
         });
@@ -53,7 +53,7 @@ const SLAConfigurationPage = () => {
     const fetchSLAConfigs = async () => {
       try {
         const configs = await slaService.getAll();
-        const configsMap = new Map<number, SLAConfiguration>();
+        const configsMap = new Map<string, SLAConfiguration>();
         configs.forEach((config) => {
           configsMap.set(config.workflowId, config);
         });
@@ -80,7 +80,7 @@ const SLAConfigurationPage = () => {
     return `${hours}h ${mins}m`;
   };
 
-  const getSLAStatus = (workflowId: number): { configured: boolean; count: number } => {
+  const getSLAStatus = (workflowId: string): { configured: boolean; count: number } => {
     const config = slaConfigs.get(workflowId);
     if (!config) return { configured: false, count: 0 };
     

@@ -28,7 +28,7 @@ public class StageService : IStageService
         return _mapper.Map<IEnumerable<StageReadDto>>(stages);
     }
 
-    public async Task<StageReadDto?> GetStageByIdAsync(int id)
+    public async Task<StageReadDto?> GetStageByIdAsync(Guid id)
     {
         var stage = await _stageRepository.GetByIdAsync(id);
         return stage == null ? null : _mapper.Map<StageReadDto>(stage);
@@ -69,7 +69,7 @@ public class StageService : IStageService
         return stageDto;
     }
 
-    public async Task<StageReadDto?> UpdateStageAsync(int id, StageUpdateDto stageUpdateDto)
+    public async Task<StageReadDto?> UpdateStageAsync(Guid id, StageUpdateDto stageUpdateDto)
     {
         var stage = await _stageRepository.GetByIdAsync(id);
         if (stage == null)
@@ -93,7 +93,7 @@ public class StageService : IStageService
         return _mapper.Map<StageReadDto>(updatedStage);
     }
 
-    public async Task<bool> DeleteStageAsync(int id)
+    public async Task<bool> DeleteStageAsync(Guid id)
     {
         var stage = await _stageRepository.GetByIdAsync(id);
         if (stage == null)
@@ -118,7 +118,7 @@ public class StageService : IStageService
         return deleted;
     }
 
-    public async Task<IEnumerable<StageReadDto>> GetStagesByWorkflowAsync(int workflowId)
+    public async Task<IEnumerable<StageReadDto>> GetStagesByWorkflowAsync(Guid workflowId)
     {
         var stages = await _stageRepository.GetStagesByWorkflowAsync(workflowId);
         return _mapper.Map<IEnumerable<StageReadDto>>(stages);

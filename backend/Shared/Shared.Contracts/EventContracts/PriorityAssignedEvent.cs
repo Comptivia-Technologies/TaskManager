@@ -6,7 +6,7 @@ namespace Shared.Contracts.EventContracts;
 public class PriorityAssignedEvent
 {
     public Guid TaskId { get; set; }
-    public int WorkflowId { get; set; }  // Workflow ID for SLA configuration
+    public Guid WorkflowId { get; set; }  // Workflow ID for SLA configuration
     public string Priority { get; set; } = string.Empty;
     public string AssignedBy { get; set; } = "RuleEngine";  // "RuleEngine" or "Manual"
     public int? RuleId { get; set; }  // Which rule matched (null if default)

@@ -13,11 +13,11 @@ interface WorkflowEditProps {
 }
 
 interface StageForm {
-  stageId?: number; // Existing stage has ID, new stage doesn't
+  stageId?: string; // Existing stage has ID, new stage doesn't
   tempId?: number; // Temporary ID for new stages
   stageName: string;
   stageOrder: number;
-  teamId: number;
+  teamId: string;
   teamName?: string;
   stageType?: 'Process' | 'Escalation';
   transitionPolicy?: 'OnComplete' | 'OnTimeout' | 'Manual';
@@ -34,7 +34,7 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
   const [stageForm, setStageForm] = useState<StageForm>({
     stageName: '',
     stageOrder: 1,
-    teamId: teams.length > 0 ? teams[0].teamId : 0,
+    teamId: teams.length > 0 ? teams[0].teamId : '',
   });
   const [loading, setLoading] = useState(false);
 
@@ -62,7 +62,7 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
       return;
     }
 
-    if (!stageForm.teamId || stageForm.teamId === 0) {
+    if (!stageForm.teamId) {
       toast.error('Please select a team for the stage');
       return;
     }
@@ -88,7 +88,7 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
     setStageForm({
       stageName: '',
       stageOrder: stages.length + 1,
-      teamId: teams.length > 0 ? teams[0].teamId : 0,
+      teamId: teams.length > 0 ? teams[0].teamId : '',
     });
   };
 
@@ -108,7 +108,7 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
       setStageForm({
         stageName: '',
         stageOrder: updatedStages.length + 1,
-        teamId: teams.length > 0 ? teams[0].teamId : 0,
+        teamId: teams.length > 0 ? teams[0].teamId : '',
       });
     } else if (editingStageIndex !== null && editingStageIndex > index) {
       setEditingStageIndex(editingStageIndex - 1);
@@ -120,7 +120,7 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
     setStageForm({
       stageName: '',
       stageOrder: stages.length + 1,
-      teamId: teams.length > 0 ? teams[0].teamId : 0,
+      teamId: teams.length > 0 ? teams[0].teamId : '',
     });
   };
 
@@ -137,7 +137,7 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
       return;
     }
 
-    if (stages.some(s => !s.teamId || s.teamId === 0)) {
+    if (stages.some(s => !s.teamId)) {
       toast.error('Please assign a team to all stages');
       return;
     }
@@ -303,14 +303,14 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
                       Team *
                     </label>
                     <select
-                      value={stageForm.teamId || 0}
-                      onChange={(e) =>
-                        setStageForm({
-                          ...stageForm,
-                          teamId: parseInt(e.target.value) || 0,
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
+                    value={stageForm.teamId || ''}
+                    onChange={(e) =>
+                      setStageForm({
+                        ...stageForm,
+                        teamId: e.target.value || '',
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
                       required
                     >
                       <option value={0}>Select Team</option>

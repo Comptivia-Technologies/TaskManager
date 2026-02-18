@@ -10,21 +10,21 @@ public class TeamRepository : Repository<Team>, ITeamRepository
     {
     }
 
-    public async Task<Team?> GetTeamWithMembersAsync(int teamId)
+    public async Task<Team?> GetTeamWithMembersAsync(Guid teamId)
     {
         return await _context.Teams
             .Include(t => t.Members)
             .FirstOrDefaultAsync(t => t.TeamId == teamId);
     }
 
-    public async Task<Team?> GetTeamWithWorkflowsAsync(int teamId)
+    public async Task<Team?> GetTeamWithWorkflowsAsync(Guid teamId)
     {
         return await _context.Teams
             .Include(t => t.Workflows)
             .FirstOrDefaultAsync(t => t.TeamId == teamId);
     }
 
-    public async Task<Team?> GetTeamWithMembersAndWorkflowsAsync(int teamId)
+    public async Task<Team?> GetTeamWithMembersAndWorkflowsAsync(Guid teamId)
     {
         return await _context.Teams
             .Include(t => t.Members)

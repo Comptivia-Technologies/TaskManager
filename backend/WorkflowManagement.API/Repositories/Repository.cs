@@ -20,7 +20,7 @@ public class Repository<T> : IRepository<T> where T : class
         return await _dbSet.ToListAsync();
     }
 
-    public virtual async Task<T?> GetByIdAsync(int id)
+    public virtual async Task<T?> GetByIdAsync(Guid id)
     {
         return await _dbSet.FindAsync(id);
     }
@@ -39,7 +39,7 @@ public class Repository<T> : IRepository<T> where T : class
         return entity;
     }
 
-    public virtual async Task<bool> DeleteAsync(int id)
+    public virtual async Task<bool> DeleteAsync(Guid id)
     {
         var entity = await GetByIdAsync(id);
         if (entity == null)
@@ -50,7 +50,7 @@ public class Repository<T> : IRepository<T> where T : class
         return true;
     }
 
-    public virtual async Task<bool> ExistsAsync(int id)
+    public virtual async Task<bool> ExistsAsync(Guid id)
     {
         var entity = await GetByIdAsync(id);
         return entity != null;

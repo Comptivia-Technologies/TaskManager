@@ -15,10 +15,10 @@ const Workflows = () => {
   const [isWizardMode, setIsWizardMode] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
   const [isSLAConfigureMode, setIsSLAConfigureMode] = useState(false);
-  const [selectedWorkflowForSLA, setSelectedWorkflowForSLA] = useState<number | undefined>(undefined);
+  const [selectedWorkflowForSLA, setSelectedWorkflowForSLA] = useState<string | undefined>(undefined);
   const navigate = useNavigate();
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this workflow?')) {
       try {
         await workflowService.delete(id);
@@ -30,7 +30,7 @@ const Workflows = () => {
     }
   };
 
-  const handleWizardSuccess = (workflowId: number) => {
+  const handleWizardSuccess = (workflowId: string) => {
     setIsWizardMode(false);
     refetch();
     navigate(`/workflows/${workflowId}`);

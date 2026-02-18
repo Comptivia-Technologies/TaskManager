@@ -7,7 +7,7 @@ export const memberService = {
     return response.data;
   },
 
-  getById: async (id: number): Promise<Member> => {
+  getById: async (id: string): Promise<Member> => {
     const response = await api.get<Member>(`/api/members/${id}`);
     return response.data;
   },
@@ -17,16 +17,16 @@ export const memberService = {
     return response.data;
   },
 
-  update: async (id: number, member: MemberUpdate): Promise<Member> => {
+  update: async (id: string, member: MemberUpdate): Promise<Member> => {
     const response = await api.put<Member>(`/api/members/${id}`, member);
     return response.data;
   },
 
-  delete: async (id: number): Promise<void> => {
+  delete: async (id: string): Promise<void> => {
     await api.delete(`/api/members/${id}`);
   },
 
-  getTasks: async (memberId: number) => {
+  getTasks: async (memberId: string) => {
     const response = await api.get(`/api/members/${memberId}/tasks`);
     return response.data;
   },
