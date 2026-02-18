@@ -3,7 +3,7 @@ import { useMembers } from '../hooks/useMembers';
 import { workloadService } from '../services/workloadService';
 import { WorkloadResponse } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiRefreshCw, FiSearch, FiCheckCircle, FiAlertCircle, FiXCircle, FiClock } from 'react-icons/fi';
+import { FiRefreshCw, FiSearch, FiCheckCircle, FiAlertCircle, FiXCircle, FiClock, FiEye, FiX } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 const WorkloadConfiguration = () => {
@@ -12,6 +12,8 @@ const WorkloadConfiguration = () => {
   const [loadingWorkloads, setLoadingWorkloads] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const loadAllWorkloads = useCallback(async () => {
     setRefreshing(true);
@@ -88,6 +90,19 @@ const WorkloadConfiguration = () => {
       (member.teamName && member.teamName.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesSearch;
   });
+
+  const handleOpenModal = (memberId: string) => {
+    setSelectedMemberId(memberId);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedMemberId(null);
+  };
+
+  const selectedWorkload = selectedMemberId ? workloads.get(selectedMemberId) : null;
+  const selectedMember = selectedMemberId ? members.find(m => m.memberId === selectedMemberId) : null;
 
   if (membersLoading) {
     return <LoadingSpinner />;
@@ -287,27 +302,13 @@ const WorkloadConfiguration = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
                         {workload ? (
-                          <div className="text-sm">
-                            <div>
-                              <span className="font-medium">{workload.metrics.activeTaskCount}</span>
-                              <span className="text-black/40 ml-1">active</span>
-                            </div>
-                            <div>
-                              <span className="font-medium">{workload.metrics.pendingTaskCount}</span>
-                              <span className="text-black/40 ml-1">pending</span>
-                            </div>
-                            <div>
-                              <span className="font-medium">{workload.metrics.completedTaskCount}</span>
-                              <span className="text-black/40 ml-1">completed</span>
-                            </div>
-                            <div>
-                              <span className="font-medium text-red-600">{workload.metrics.overdueTaskCount}</span>
-                              <span className="text-black/40 ml-1">overdue</span>
-                            </div>
-                            <div className="text-black/40 text-xs mt-0.5">
-                              {workload.metrics.totalTaskCount} total
-                            </div>
-                          </div>
+                          <button
+                            onClick={() => handleOpenModal(member.memberId)}
+                            className="flex items-center justify-center w-8 h-8 rounded-azure-sm hover:bg-[#434E78]/10 text-[#434E78] hover:text-[#434E78]/80 transition-colors"
+                            title="View task counts"
+                          >
+                            <FiEye className="text-lg" />
+                          </button>
                         ) : (
                           <span className="text-black/40 text-sm">-</span>
                         )}
@@ -320,6 +321,61 @@ const WorkloadConfiguration = () => {
           </table>
         </div>
       </div>
+
+      {/* Task Counts Modal */}
+      {isModalOpen && selectedWorkload && selectedMember && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-black font-sans">
+                Task Counts - {selectedMember.firstName} {selectedMember.lastName}
+              </h2>
+              <button
+                onClick={handleCloseModal}
+                className="text-black/70 hover:text-black hover:bg-[#434E78]/10 p-1 rounded-azure-sm transition-colors"
+              >
+                <FiX className="text-lg" />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b border-[#434E78]/10">
+                <span className="text-black/70 font-sans">Active</span>
+                <span className="font-semibold text-black font-sans">{selectedWorkload.metrics.activeTaskCount}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-[#434E78]/10">
+                <span className="text-black/70 font-sans">Pending</span>
+                <span className="font-semibold text-black font-sans">{selectedWorkload.metrics.pendingTaskCount}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-[#434E78]/10">
+                <span className="text-black/70 font-sans">Completed</span>
+                <span className="font-semibold text-black font-sans">{selectedWorkload.metrics.completedTaskCount}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-[#434E78]/10">
+                <span className="text-black/70 font-sans">Escalated</span>
+                <span className="font-semibold text-orange-600 font-sans">{selectedWorkload.metrics.escalatedTaskCount}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-[#434E78]/10">
+                <span className="text-black/70 font-sans">Overdue</span>
+                <span className="font-semibold text-red-600 font-sans">{selectedWorkload.metrics.overdueTaskCount}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 pt-3">
+                <span className="text-black/60 font-sans text-sm">Total</span>
+                <span className="font-semibold text-black font-sans">{selectedWorkload.metrics.totalTaskCount}</span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={handleCloseModal}
+                className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

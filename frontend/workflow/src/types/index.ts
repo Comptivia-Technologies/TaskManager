@@ -210,6 +210,7 @@ export interface WorkloadMetrics {
   pendingTaskCount: number;
   completedTaskCount: number;
   overdueTaskCount: number;
+  escalatedTaskCount: number;
   totalTaskCount: number;
   isAvailable: boolean;
 }

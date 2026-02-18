@@ -319,6 +319,8 @@ public class TaskStageStartedEventHandler
                 dueDate = dueDateUtc,
                 stageId = @event.StageId,
                 assignedToMemberId = workflowTask.AssignedToMemberId,
+                completedByMemberIds = workflowTask.CompletedByMemberIds,  // Preserve existing value
+                escalatedByMemberIds = workflowTask.EscalatedByMemberIds,  // Preserve existing value
                 isOverdue = task.IsOverdue
             };
 
@@ -360,5 +362,7 @@ public class TaskStageStartedEventHandler
         public Guid WorkflowId { get; set; }
         public Guid? StageId { get; set; }
         public Guid? AssignedToMemberId { get; set; }
+        public string? CompletedByMemberIds { get; set; }
+        public string? EscalatedByMemberIds { get; set; }
     }
 }

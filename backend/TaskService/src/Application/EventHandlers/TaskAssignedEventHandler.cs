@@ -177,24 +177,52 @@ public class TaskAssignedEventHandler
             {
                 // UPDATE existing task
                 // Build CompletedByMemberIds - append previous member if this is a reassignment
+                // BUT only if the reassignment is due to stage completion, NOT escalation
                 var completedByMemberIds = existingWorkflowTask.CompletedByMemberIds ?? "";
+                var escalatedByMemberIds = existingWorkflowTask.EscalatedByMemberIds ?? "";
+                
                 if (existingWorkflowTask.AssignedToMemberId.HasValue && 
                     existingWorkflowTask.AssignedToMemberId.Value != task.MemberId.Value)
                 {
-                    // This is a reassignment - credit the previous member for completing their stage
-                    var previousMemberId = existingWorkflowTask.AssignedToMemberId.Value.ToString();
-                    if (string.IsNullOrEmpty(completedByMemberIds))
-                    {
-                        completedByMemberIds = previousMemberId;
-                    }
-                    else if (!completedByMemberIds.Split(',').Contains(previousMemberId))
-                    {
-                        completedByMemberIds += "," + previousMemberId;
-                    }
+                    // Check if this reassignment is due to escalation (should NOT credit previous member for completion)
+                    // If task has escalation event IDs set, it means the last stage transition was via escalation
+                    bool isEscalationReassignment = task.TaskStageEscalatedEventId.HasValue || 
+                                                    task.TaskStageEscalationTriggeredEventId.HasValue;
                     
-                    _logger.LogInformation(
-                        "Stage reassignment: crediting previous member for stage completion. TaskId: {TaskId}, PreviousMemberId: {PreviousMemberId}, NewMemberId: {NewMemberId}, CompletedByMemberIds: {CompletedByMemberIds}",
-                        task.TaskId, previousMemberId, task.MemberId.Value, completedByMemberIds);
+                    if (!isEscalationReassignment)
+                    {
+                        // This is a reassignment due to stage completion - credit the previous member
+                        var previousMemberId = existingWorkflowTask.AssignedToMemberId.Value.ToString();
+                        if (string.IsNullOrEmpty(completedByMemberIds))
+                        {
+                            completedByMemberIds = previousMemberId;
+                        }
+                        else if (!completedByMemberIds.Split(',').Contains(previousMemberId))
+                        {
+                            completedByMemberIds += "," + previousMemberId;
+                        }
+                        
+                        _logger.LogInformation(
+                            "Stage reassignment: crediting previous member for stage completion. TaskId: {TaskId}, PreviousMemberId: {PreviousMemberId}, NewMemberId: {NewMemberId}, CompletedByMemberIds: {CompletedByMemberIds}",
+                            task.TaskId, previousMemberId, task.MemberId.Value, completedByMemberIds);
+                    }
+                    else
+                    {
+                        // This is a reassignment due to escalation - credit the previous member for escalation
+                        var previousMemberId = existingWorkflowTask.AssignedToMemberId.Value.ToString();
+                        if (string.IsNullOrEmpty(escalatedByMemberIds))
+                        {
+                            escalatedByMemberIds = previousMemberId;
+                        }
+                        else if (!escalatedByMemberIds.Split(',').Contains(previousMemberId))
+                        {
+                            escalatedByMemberIds += "," + previousMemberId;
+                        }
+                        
+                        _logger.LogInformation(
+                            "Stage reassignment due to escalation: crediting previous member for escalation. TaskId: {TaskId}, PreviousMemberId: {PreviousMemberId}, NewMemberId: {NewMemberId}, EscalatedByMemberIds: {EscalatedByMemberIds}",
+                            task.TaskId, previousMemberId, task.MemberId.Value, escalatedByMemberIds);
+                    }
                 }
 
                 // Ensure DueDate is UTC (PostgreSQL requires UTC for timestamp with time zone)
@@ -217,6 +245,7 @@ public class TaskAssignedEventHandler
                     StageId = task.CurrentStageId,
                     AssignedToMemberId = task.MemberId.Value,
                     CompletedByMemberIds = string.IsNullOrEmpty(completedByMemberIds) ? null : completedByMemberIds,
+                    EscalatedByMemberIds = string.IsNullOrEmpty(escalatedByMemberIds) ? null : escalatedByMemberIds,
                     IsOverdue = task.IsOverdue
                 };
 
@@ -307,6 +336,7 @@ public class TaskAssignedEventHandler
         public string? Description { get; set; }
         public Guid? AssignedToMemberId { get; set; }
         public string? CompletedByMemberIds { get; set; }
+        public string? EscalatedByMemberIds { get; set; }
     }
 }
 

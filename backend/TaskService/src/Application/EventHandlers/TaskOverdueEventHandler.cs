@@ -163,6 +163,23 @@ public class TaskOverdueEventHandler
 
                 if (matchingTaskId.HasValue)
                 {
+                    // Get existing task to preserve CompletedByMemberIds and EscalatedByMemberIds
+                    var existingTaskResponse = await _httpClient.GetAsync(
+                        $"{workflowManagementApiUrl}/tasks/{matchingTaskId.Value}");
+                    
+                    string? existingCompletedByMemberIds = null;
+                    string? existingEscalatedByMemberIds = null;
+                    if (existingTaskResponse.IsSuccessStatusCode)
+                    {
+                        var existingTaskJson = await existingTaskResponse.Content.ReadAsStringAsync();
+                        var existingTask = System.Text.Json.JsonSerializer.Deserialize<WorkflowTaskInfo>(existingTaskJson, new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+                        existingCompletedByMemberIds = existingTask?.CompletedByMemberIds;
+                        existingEscalatedByMemberIds = existingTask?.EscalatedByMemberIds;
+                    }
+
                     // Ensure DueDate is UTC (PostgreSQL requires UTC for timestamp with time zone)
                     DateTime? dueDateUtc = null;
                     if (task.SLADeadline.HasValue)
@@ -182,6 +199,8 @@ public class TaskOverdueEventHandler
                         DueDate = dueDateUtc,
                         StageId = task.CurrentStageId,
                         AssignedToMemberId = task.MemberId.Value,
+                        CompletedByMemberIds = existingCompletedByMemberIds,  // Preserve existing value
+                        EscalatedByMemberIds = existingEscalatedByMemberIds,  // Preserve existing value
                         IsOverdue = task.IsOverdue
                     };
 
@@ -228,6 +247,13 @@ public class TaskOverdueEventHandler
                 "Error syncing task overdue status to WorkflowManagement.API. TaskId: {TaskId}",
                 task.TaskId);
         }
+    }
+
+    private class WorkflowTaskInfo
+    {
+        public Guid TaskId { get; set; }
+        public string? CompletedByMemberIds { get; set; }
+        public string? EscalatedByMemberIds { get; set; }
     }
 }
 
