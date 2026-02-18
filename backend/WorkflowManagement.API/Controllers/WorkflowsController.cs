@@ -33,7 +33,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<WorkflowReadDto>> GetWorkflowById(int id)
+    public async Task<ActionResult<WorkflowReadDto>> GetWorkflowById(Guid id)
     {
         try
         {
@@ -73,7 +73,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<ActionResult<WorkflowReadDto>> UpdateWorkflow(int id, [FromBody] WorkflowUpdateDto workflowUpdateDto)
+    public async Task<ActionResult<WorkflowReadDto>> UpdateWorkflow(Guid id, [FromBody] WorkflowUpdateDto workflowUpdateDto)
     {
         try
         {
@@ -94,7 +94,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteWorkflow(int id)
+    public async Task<IActionResult> DeleteWorkflow(Guid id)
     {
         try
         {
@@ -112,7 +112,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{id}/stages")]
-    public async Task<ActionResult<IEnumerable<StageReadDto>>> GetWorkflowStages(int id)
+    public async Task<ActionResult<IEnumerable<StageReadDto>>> GetWorkflowStages(Guid id)
     {
         try
         {
@@ -127,7 +127,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{id}/tasks")]
-    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetWorkflowTasks(int id)
+    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetWorkflowTasks(Guid id)
     {
         try
         {
@@ -142,7 +142,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{id}/json")]
-    public async Task<ActionResult<object>> GetWorkflowJson(int id)
+    public async Task<ActionResult<object>> GetWorkflowJson(Guid id)
     {
         try
         {
@@ -161,7 +161,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpPost("{id}/update-json")]
-    public async Task<IActionResult> UpdateWorkflowJson(int id)
+    public async Task<IActionResult> UpdateWorkflowJson(Guid id)
     {
         try
         {

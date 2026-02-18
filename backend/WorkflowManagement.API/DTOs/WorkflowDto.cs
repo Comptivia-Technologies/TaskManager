@@ -4,10 +4,10 @@ namespace WorkflowManagement.API.DTOs;
 
 public class WorkflowReadDto
 {
-    public int WorkflowId { get; set; }
+    public Guid WorkflowId { get; set; }
     public string WorkflowName { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public int? TeamId { get; set; }
+    public Guid? TeamId { get; set; }
     public string? TeamName { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -24,7 +24,7 @@ public class WorkflowCreateDto
     [StringLength(1000)]
     public string? Description { get; set; }
 
-    public int? TeamId { get; set; }
+    public Guid? TeamId { get; set; }
 }
 
 public class WorkflowUpdateDto

@@ -9,7 +9,7 @@ export const priorityRulesService = {
     return response.data;
   },
 
-  getById: async (id: number): Promise<PriorityRule> => {
+  getById: async (id: string): Promise<PriorityRule> => {
     const response = await priorityRulesApi.get<PriorityRule>(`/api/priority-rules/${id}`);
     return response.data;
   },
@@ -19,12 +19,12 @@ export const priorityRulesService = {
     return response.data;
   },
 
-  update: async (id: number, rule: PriorityRuleUpdate): Promise<PriorityRule> => {
+  update: async (id: string, rule: PriorityRuleUpdate): Promise<PriorityRule> => {
     const response = await priorityRulesApi.put<PriorityRule>(`/api/priority-rules/${id}`, rule);
     return response.data;
   },
 
-  delete: async (id: number): Promise<void> => {
+  delete: async (id: string): Promise<void> => {
     await priorityRulesApi.delete(`/api/priority-rules/${id}`);
   },
 };

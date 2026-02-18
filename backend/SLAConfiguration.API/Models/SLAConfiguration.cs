@@ -4,8 +4,8 @@ namespace SLAConfiguration.API.Models;
 
 public class SLAConfiguration
 {
-    public int SLAConfigurationId { get; set; }
-    public int WorkflowId { get; set; }
+    public Guid SLAConfigurationId { get; set; } = Guid.NewGuid();
+    public Guid WorkflowId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     
@@ -17,7 +17,7 @@ public class SLAConfiguration
 // Minimal Workflow model for reference (since we're querying the same database)
 public class Workflow
 {
-    public int WorkflowId { get; set; }
+    public Guid WorkflowId { get; set; }
     public string WorkflowName { get; set; } = string.Empty;
 }
 

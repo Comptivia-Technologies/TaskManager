@@ -7,7 +7,7 @@ export const slaService = {
     return response.data;
   },
 
-  getByWorkflowId: async (workflowId: number): Promise<SLAConfiguration> => {
+  getByWorkflowId: async (workflowId: string): Promise<SLAConfiguration> => {
     const response = await slaApi.get<SLAConfiguration>(`/api/sla-configurations/workflow/${workflowId}`);
     return response.data;
   },
@@ -17,12 +17,12 @@ export const slaService = {
     return response.data;
   },
 
-  update: async (workflowId: number, slaConfig: SLAConfigurationUpdate): Promise<SLAConfiguration> => {
+  update: async (workflowId: string, slaConfig: SLAConfigurationUpdate): Promise<SLAConfiguration> => {
     const response = await slaApi.put<SLAConfiguration>(`/api/sla-configurations/workflow/${workflowId}`, slaConfig);
     return response.data;
   },
 
-  delete: async (workflowId: number): Promise<void> => {
+  delete: async (workflowId: string): Promise<void> => {
     await slaApi.delete(`/api/sla-configurations/workflow/${workflowId}`);
   },
 };

@@ -2,11 +2,11 @@ namespace WorkflowManagement.API.Models;
 
 public class Member
 {
-    public int MemberId { get; set; }
+    public Guid MemberId { get; set; } = Guid.NewGuid();
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
-    public int? TeamId { get; set; }
+    public Guid? TeamId { get; set; }
     public string Role { get; set; } = string.Empty;
     public int SkillLevel { get; set; }
     public DateTime CreatedAt { get; set; }

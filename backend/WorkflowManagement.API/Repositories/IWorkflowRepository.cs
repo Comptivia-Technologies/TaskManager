@@ -4,10 +4,10 @@ namespace WorkflowManagement.API.Repositories;
 
 public interface IWorkflowRepository : IRepository<Workflow>
 {
-    Task<Workflow?> GetWorkflowWithStagesAsync(int workflowId);
-    Task<Workflow?> GetWorkflowWithTasksAsync(int workflowId);
-    Task<Workflow?> GetWorkflowWithStagesAndTasksAsync(int workflowId);
-    Task<IEnumerable<Workflow>> GetWorkflowsByTeamAsync(int teamId);
+    Task<Workflow?> GetWorkflowWithStagesAsync(Guid workflowId);
+    Task<Workflow?> GetWorkflowWithTasksAsync(Guid workflowId);
+    Task<Workflow?> GetWorkflowWithStagesAndTasksAsync(Guid workflowId);
+    Task<IEnumerable<Workflow>> GetWorkflowsByTeamAsync(Guid teamId);
 }
 
 

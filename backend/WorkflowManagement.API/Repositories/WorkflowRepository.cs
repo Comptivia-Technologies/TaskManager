@@ -10,7 +10,7 @@ public class WorkflowRepository : Repository<Workflow>, IWorkflowRepository
     {
     }
 
-    public async Task<Workflow?> GetWorkflowWithStagesAsync(int workflowId)
+    public async Task<Workflow?> GetWorkflowWithStagesAsync(Guid workflowId)
     {
         return await _context.Workflows
             .Include(w => w.Stages)
@@ -18,7 +18,7 @@ public class WorkflowRepository : Repository<Workflow>, IWorkflowRepository
             .FirstOrDefaultAsync(w => w.WorkflowId == workflowId);
     }
 
-    public async Task<Workflow?> GetWorkflowWithTasksAsync(int workflowId)
+    public async Task<Workflow?> GetWorkflowWithTasksAsync(Guid workflowId)
     {
         return await _context.Workflows
             .Include(w => w.Tasks)
@@ -28,7 +28,7 @@ public class WorkflowRepository : Repository<Workflow>, IWorkflowRepository
             .FirstOrDefaultAsync(w => w.WorkflowId == workflowId);
     }
 
-    public async Task<Workflow?> GetWorkflowWithStagesAndTasksAsync(int workflowId)
+    public async Task<Workflow?> GetWorkflowWithStagesAndTasksAsync(Guid workflowId)
     {
         var workflow = await _context.Workflows
             .Include(w => w.Team)
@@ -47,7 +47,7 @@ public class WorkflowRepository : Repository<Workflow>, IWorkflowRepository
         return workflow;
     }
 
-    public async Task<IEnumerable<Workflow>> GetWorkflowsByTeamAsync(int teamId)
+    public async Task<IEnumerable<Workflow>> GetWorkflowsByTeamAsync(Guid teamId)
     {
         return await _context.Workflows
             .Include(w => w.Team)

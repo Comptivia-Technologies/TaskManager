@@ -4,16 +4,16 @@ namespace WorkflowManagement.API.DTOs;
 
 public class TaskReadDto
 {
-    public int TaskId { get; set; }
+    public Guid TaskId { get; set; }
     public string TaskName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string Status { get; set; } = string.Empty;
     public string Priority { get; set; } = string.Empty;
     public DateTime? DueDate { get; set; }
-    public int WorkflowId { get; set; }
-    public int? StageId { get; set; }
+    public Guid WorkflowId { get; set; }
+    public Guid? StageId { get; set; }
     public string? StageName { get; set; }
-    public int? AssignedToMemberId { get; set; }
+    public Guid? AssignedToMemberId { get; set; }
     public string? AssignedToMemberName { get; set; }
     public string? CompletedByMemberIds { get; set; }  // Comma-separated member IDs who completed stages
     public bool IsOverdue { get; set; }
@@ -41,11 +41,11 @@ public class TaskCreateDto
     public DateTime? DueDate { get; set; }
 
     [Required]
-    public int WorkflowId { get; set; }
+    public Guid WorkflowId { get; set; }
 
-    public int? StageId { get; set; }
+    public Guid? StageId { get; set; }
 
-    public int? AssignedToMemberId { get; set; }
+    public Guid? AssignedToMemberId { get; set; }
 }
 
 public class TaskUpdateDto
@@ -67,9 +67,9 @@ public class TaskUpdateDto
 
     public DateTime? DueDate { get; set; }
 
-    public int? StageId { get; set; }
+    public Guid? StageId { get; set; }
 
-    public int? AssignedToMemberId { get; set; }
+    public Guid? AssignedToMemberId { get; set; }
 
     [StringLength(500)]
     public string? CompletedByMemberIds { get; set; }  // Comma-separated member IDs who completed stages

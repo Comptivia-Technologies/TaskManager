@@ -5,10 +5,10 @@ namespace WorkloadService.Domain.Entities;
 /// </summary>
 public class Task
 {
-    public int TaskId { get; set; }
+    public Guid TaskId { get; set; }
     public string TaskName { get; set; } = string.Empty;
     public string Status { get; set; } = "Pending";
     public string Priority { get; set; } = "Medium";
-    public int? AssignedToMemberId { get; set; }
+    public Guid? AssignedToMemberId { get; set; }
 }
 

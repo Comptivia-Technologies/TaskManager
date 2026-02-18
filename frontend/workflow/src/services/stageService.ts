@@ -7,7 +7,7 @@ export const stageService = {
     return response.data;
   },
 
-  getById: async (id: number): Promise<Stage> => {
+  getById: async (id: string): Promise<Stage> => {
     const response = await api.get<Stage>(`/api/stages/${id}`);
     return response.data;
   },
@@ -17,16 +17,16 @@ export const stageService = {
     return response.data;
   },
 
-  update: async (id: number, stage: StageUpdate): Promise<Stage> => {
+  update: async (id: string, stage: StageUpdate): Promise<Stage> => {
     const response = await api.put<Stage>(`/api/stages/${id}`, stage);
     return response.data;
   },
 
-  delete: async (id: number): Promise<void> => {
+  delete: async (id: string): Promise<void> => {
     await api.delete(`/api/stages/${id}`);
   },
 
-  getByWorkflow: async (workflowId: number): Promise<Stage[]> => {
+  getByWorkflow: async (workflowId: string): Promise<Stage[]> => {
     const response = await api.get<Stage[]>(`/api/stages/workflow/${workflowId}`);
     return response.data;
   },

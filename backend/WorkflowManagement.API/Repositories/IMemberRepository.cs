@@ -4,7 +4,7 @@ namespace WorkflowManagement.API.Repositories;
 
 public interface IMemberRepository : IRepository<Member>
 {
-    Task<IEnumerable<Member>> GetMembersByTeamAsync(int teamId);
+    Task<IEnumerable<Member>> GetMembersByTeamAsync(Guid teamId);
     Task<IEnumerable<Member>> GetMembersWithTeamAsync();
 }
 

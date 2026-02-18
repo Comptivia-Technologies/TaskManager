@@ -33,7 +33,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<TaskReadDto>> GetTaskById(int id)
+    public async Task<ActionResult<TaskReadDto>> GetTaskById(Guid id)
     {
         try
         {
@@ -73,7 +73,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<ActionResult<TaskReadDto>> UpdateTask(int id, [FromBody] TaskUpdateDto taskUpdateDto)
+    public async Task<ActionResult<TaskReadDto>> UpdateTask(Guid id, [FromBody] TaskUpdateDto taskUpdateDto)
     {
         try
         {
@@ -98,7 +98,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteTask(int id)
+    public async Task<IActionResult> DeleteTask(Guid id)
     {
         try
         {
@@ -116,7 +116,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("workflow/{workflowId}")]
-    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetTasksByWorkflow(int workflowId)
+    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetTasksByWorkflow(Guid workflowId)
     {
         try
         {
@@ -131,7 +131,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("stage/{stageId}")]
-    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetTasksByStage(int stageId)
+    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetTasksByStage(Guid stageId)
     {
         try
         {
@@ -146,7 +146,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("member/{memberId}")]
-    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetTasksByMember(int memberId)
+    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetTasksByMember(Guid memberId)
     {
         try
         {

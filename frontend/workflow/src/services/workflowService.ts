@@ -7,7 +7,7 @@ export const workflowService = {
     return response.data;
   },
 
-  getById: async (id: number): Promise<Workflow> => {
+  getById: async (id: string): Promise<Workflow> => {
     const response = await api.get<Workflow>(`/api/workflows/${id}`);
     return response.data;
   },
@@ -17,31 +17,31 @@ export const workflowService = {
     return response.data;
   },
 
-  update: async (id: number, workflow: WorkflowUpdate): Promise<Workflow> => {
+  update: async (id: string, workflow: WorkflowUpdate): Promise<Workflow> => {
     const response = await api.put<Workflow>(`/api/workflows/${id}`, workflow);
     return response.data;
   },
 
-  delete: async (id: number): Promise<void> => {
+  delete: async (id: string): Promise<void> => {
     await api.delete(`/api/workflows/${id}`);
   },
 
-  getStages: async (workflowId: number) => {
+  getStages: async (workflowId: string) => {
     const response = await api.get(`/api/workflows/${workflowId}/stages`);
     return response.data;
   },
 
-  getTasks: async (workflowId: number) => {
+  getTasks: async (workflowId: string) => {
     const response = await api.get(`/api/workflows/${workflowId}/tasks`);
     return response.data;
   },
 
-  getJson: async (workflowId: number): Promise<Workflow> => {
+  getJson: async (workflowId: string): Promise<Workflow> => {
     const response = await api.get<Workflow>(`/api/workflows/${workflowId}/json`);
     return response.data;
   },
 
-  updateJson: async (workflowId: number): Promise<void> => {
+  updateJson: async (workflowId: string): Promise<void> => {
     await api.post(`/api/workflows/${workflowId}/update-json`);
   },
 };

@@ -16,12 +16,12 @@ public class Task
     public DomainTaskStatus Status { get; set; } = DomainTaskStatus.Created;
     
     // Foreign keys (set by other services via events)
-    public int? WorkflowId { get; set; }
-    public int? MemberId { get; set; }
-    public int? SLAConfigurationId { get; set; }
+    public Guid? WorkflowId { get; set; }
+    public Guid? MemberId { get; set; }
+    public Guid? SLAConfigurationId { get; set; }
     
     // Stage tracking (for stage orchestration)
-    public int? CurrentStageId { get; set; }
+    public Guid? CurrentStageId { get; set; }
     public DateTime? CurrentStageStartedAt { get; set; }
     public DateTime? StageTimeoutAt { get; set; } // For escalation stages
     

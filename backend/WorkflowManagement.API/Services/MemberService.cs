@@ -38,7 +38,7 @@ public class MemberService : IMemberService
         return memberDtos;
     }
 
-    public async Task<MemberReadDto?> GetMemberByIdAsync(int id)
+    public async Task<MemberReadDto?> GetMemberByIdAsync(Guid id)
     {
         var member = await _memberRepository.GetByIdAsync(id);
         if (member == null)
@@ -80,7 +80,7 @@ public class MemberService : IMemberService
         return memberDto;
     }
 
-    public async Task<MemberReadDto?> UpdateMemberAsync(int id, MemberUpdateDto memberUpdateDto)
+    public async Task<MemberReadDto?> UpdateMemberAsync(Guid id, MemberUpdateDto memberUpdateDto)
     {
         var member = await _memberRepository.GetByIdAsync(id);
         if (member == null)
@@ -118,12 +118,12 @@ public class MemberService : IMemberService
         return memberDto;
     }
 
-    public async Task<bool> DeleteMemberAsync(int id)
+    public async Task<bool> DeleteMemberAsync(Guid id)
     {
         return await _memberRepository.DeleteAsync(id);
     }
 
-    public async Task<IEnumerable<TaskReadDto>> GetTasksByMemberAsync(int memberId)
+    public async Task<IEnumerable<TaskReadDto>> GetTasksByMemberAsync(Guid memberId)
     {
         var tasks = await _taskRepository.GetTasksByMemberAsync(memberId);
         return _mapper.Map<IEnumerable<TaskReadDto>>(tasks);

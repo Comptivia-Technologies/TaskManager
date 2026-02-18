@@ -10,7 +10,7 @@ public class StageRepository : Repository<Stage>, IStageRepository
     {
     }
 
-    public async Task<IEnumerable<Stage>> GetStagesByWorkflowAsync(int workflowId)
+    public async Task<IEnumerable<Stage>> GetStagesByWorkflowAsync(Guid workflowId)
     {
         return await _context.Stages
             .Include(s => s.Workflow)
@@ -28,7 +28,7 @@ public class StageRepository : Repository<Stage>, IStageRepository
             .ToListAsync();
     }
 
-    public async Task<Stage?> GetStageWithTeamAsync(int stageId)
+    public async Task<Stage?> GetStageWithTeamAsync(Guid stageId)
     {
         return await _context.Stages
             .Include(s => s.Workflow)

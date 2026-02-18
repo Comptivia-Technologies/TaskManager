@@ -33,7 +33,7 @@ public class MembersController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<MemberReadDto>> GetMemberById(int id)
+    public async Task<ActionResult<MemberReadDto>> GetMemberById(Guid id)
     {
         try
         {
@@ -79,7 +79,7 @@ public class MembersController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<ActionResult<MemberReadDto>> UpdateMember(int id, [FromBody] MemberUpdateDto memberUpdateDto)
+    public async Task<ActionResult<MemberReadDto>> UpdateMember(Guid id, [FromBody] MemberUpdateDto memberUpdateDto)
     {
         try
         {
@@ -104,7 +104,7 @@ public class MembersController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteMember(int id)
+    public async Task<IActionResult> DeleteMember(Guid id)
     {
         try
         {
@@ -122,7 +122,7 @@ public class MembersController : ControllerBase
     }
 
     [HttpGet("{id}/tasks")]
-    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetMemberTasks(int id)
+    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetMemberTasks(Guid id)
     {
         try
         {

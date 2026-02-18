@@ -4,11 +4,11 @@ namespace WorkflowManagement.API.DTOs;
 
 public class StageReadDto
 {
-    public int StageId { get; set; }
+    public Guid StageId { get; set; }
     public string StageName { get; set; } = string.Empty;
     public int StageOrder { get; set; }
-    public int WorkflowId { get; set; }
-    public int TeamId { get; set; }
+    public Guid WorkflowId { get; set; }
+    public Guid TeamId { get; set; }
     public string TeamName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
 }
@@ -24,10 +24,10 @@ public class StageCreateDto
     public int StageOrder { get; set; }
 
     [Required]
-    public int WorkflowId { get; set; }
+    public Guid WorkflowId { get; set; }
 
     [Required]
-    public int TeamId { get; set; }
+    public Guid TeamId { get; set; }
 }
 
 public class StageUpdateDto
@@ -41,6 +41,6 @@ public class StageUpdateDto
     public int StageOrder { get; set; }
 
     [Required]
-    public int TeamId { get; set; }
+    public Guid TeamId { get; set; }
 }
 

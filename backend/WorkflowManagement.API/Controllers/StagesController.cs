@@ -33,7 +33,7 @@ public class StagesController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<StageReadDto>> GetStageById(int id)
+    public async Task<ActionResult<StageReadDto>> GetStageById(Guid id)
     {
         try
         {
@@ -73,7 +73,7 @@ public class StagesController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<ActionResult<StageReadDto>> UpdateStage(int id, [FromBody] StageUpdateDto stageUpdateDto)
+    public async Task<ActionResult<StageReadDto>> UpdateStage(Guid id, [FromBody] StageUpdateDto stageUpdateDto)
     {
         try
         {
@@ -94,7 +94,7 @@ public class StagesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteStage(int id)
+    public async Task<IActionResult> DeleteStage(Guid id)
     {
         try
         {
@@ -112,7 +112,7 @@ public class StagesController : ControllerBase
     }
 
     [HttpGet("workflow/{workflowId}")]
-    public async Task<ActionResult<IEnumerable<StageReadDto>>> GetStagesByWorkflow(int workflowId)
+    public async Task<ActionResult<IEnumerable<StageReadDto>>> GetStagesByWorkflow(Guid workflowId)
     {
         try
         {

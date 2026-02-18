@@ -6,6 +6,7 @@ import Workflows from './pages/Workflows';
 import WorkflowDetail from './pages/WorkflowDetail';
 import Teams from './pages/Teams';
 import Members from './pages/Members';
+import MemberDetail from './pages/MemberDetail';
 import SLAConfiguration from './pages/SLAConfiguration';
 import WorkloadConfiguration from './pages/WorkloadConfiguration';
 import Tasks from './pages/Tasks';
@@ -23,6 +24,7 @@ function App() {
             <Route path="/workflows/:id" element={<WorkflowDetail />} />
             <Route path="/teams" element={<Teams />} />
             <Route path="/members" element={<Members />} />
+            <Route path="/members/:id" element={<MemberDetail />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/sla-configuration" element={<SLAConfiguration />} />
             <Route path="/workload-configuration" element={<WorkloadConfiguration />} />

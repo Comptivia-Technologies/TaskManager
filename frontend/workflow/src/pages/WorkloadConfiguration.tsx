@@ -8,15 +8,15 @@ import { toast } from 'react-toastify';
 
 const WorkloadConfiguration = () => {
   const { members, loading: membersLoading } = useMembers();
-  const [workloads, setWorkloads] = useState<Map<number, WorkloadResponse>>(new Map());
-  const [loadingWorkloads, setLoadingWorkloads] = useState<Set<number>>(new Set());
+  const [workloads, setWorkloads] = useState<Map<string, WorkloadResponse>>(new Map());
+  const [loadingWorkloads, setLoadingWorkloads] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
   const loadAllWorkloads = useCallback(async () => {
     setRefreshing(true);
-    const newWorkloads = new Map<number, WorkloadResponse>();
-    const loadingSet = new Set<number>();
+    const newWorkloads = new Map<string, WorkloadResponse>();
+    const loadingSet = new Set<string>();
 
     for (const member of members) {
       loadingSet.add(member.memberId);

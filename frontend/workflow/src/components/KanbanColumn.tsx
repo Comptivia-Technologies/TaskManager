@@ -6,7 +6,7 @@ import TaskCard from './TaskCard';
 interface KanbanColumnProps {
   stage: Stage;
   tasks: Task[];
-  onTaskUpdate: (taskId: number, updates: Partial<TaskUpdate>) => void;
+  onTaskUpdate: (taskId: string, updates: Partial<TaskUpdate>) => void;
 }
 
 const KanbanColumn = ({ stage, tasks, onTaskUpdate }: KanbanColumnProps) => {

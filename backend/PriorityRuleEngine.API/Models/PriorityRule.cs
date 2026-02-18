@@ -20,7 +20,7 @@ public class PriorityRule
     public string? TeamName { get; set; }      // Only for specific team
     
     // Workflow-specific rules
-    public int? WorkflowId { get; set; }  // NULL = global rule, specific ID = workflow-specific rule
+    public Guid? WorkflowId { get; set; }  // NULL = global rule, specific ID = workflow-specific rule
     
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

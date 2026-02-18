@@ -122,7 +122,7 @@ using (var scope = app.Services.CreateScope())
                 createCommand.CommandText = @"
                     -- Create Teams table
                     CREATE TABLE IF NOT EXISTS ""Teams"" (
-                        ""TeamId"" SERIAL PRIMARY KEY,
+                        ""TeamId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         ""TeamName"" VARCHAR(200) NOT NULL,
                         ""Description"" VARCHAR(1000),
                         ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -131,13 +131,13 @@ using (var scope = app.Services.CreateScope())
                     
                     -- Create Members table
                     CREATE TABLE IF NOT EXISTS ""Members"" (
-                        ""MemberId"" SERIAL PRIMARY KEY,
+                        ""MemberId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         ""FirstName"" VARCHAR(100) NOT NULL,
                         ""LastName"" VARCHAR(100) NOT NULL,
                         ""Email"" VARCHAR(200) NOT NULL,
                         ""Role"" VARCHAR(100) NOT NULL,
                         ""SkillLevel"" INTEGER NOT NULL DEFAULT 3,
-                        ""TeamId"" INTEGER,
+                        ""TeamId"" UUID,
                         ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         CONSTRAINT ""FK_Members_Teams_TeamId"" FOREIGN KEY (""TeamId"") 
@@ -148,10 +148,10 @@ using (var scope = app.Services.CreateScope())
                     
                     -- Create Workflows table
                     CREATE TABLE IF NOT EXISTS ""Workflows"" (
-                        ""WorkflowId"" SERIAL PRIMARY KEY,
+                        ""WorkflowId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         ""WorkflowName"" VARCHAR(200) NOT NULL,
                         ""Description"" VARCHAR(1000),
-                        ""TeamId"" INTEGER,
+                        ""TeamId"" UUID,
                         ""WorkflowJson"" JSONB,
                         ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -161,11 +161,11 @@ using (var scope = app.Services.CreateScope())
                     
                     -- Create Stages table
                     CREATE TABLE IF NOT EXISTS ""Stages"" (
-                        ""StageId"" SERIAL PRIMARY KEY,
+                        ""StageId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         ""StageName"" VARCHAR(200) NOT NULL,
                         ""StageOrder"" INTEGER NOT NULL,
-                        ""WorkflowId"" INTEGER NOT NULL,
-                        ""TeamId"" INTEGER NOT NULL,
+                        ""WorkflowId"" UUID NOT NULL,
+                        ""TeamId"" UUID NOT NULL,
                         ""StageType"" INTEGER NOT NULL DEFAULT 0,
                         ""TransitionPolicy"" INTEGER NOT NULL DEFAULT 0,
                         ""TimeoutMinutes"" INTEGER,
@@ -178,15 +178,15 @@ using (var scope = app.Services.CreateScope())
                     
                     -- Create Tasks table
                     CREATE TABLE IF NOT EXISTS ""Tasks"" (
-                        ""TaskId"" SERIAL PRIMARY KEY,
+                        ""TaskId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         ""TaskName"" VARCHAR(200) NOT NULL,
                         ""Description"" VARCHAR(1000),
                         ""Status"" VARCHAR(50) NOT NULL,
                         ""Priority"" VARCHAR(50) NOT NULL,
                         ""DueDate"" TIMESTAMP,
-                        ""WorkflowId"" INTEGER NOT NULL,
-                        ""StageId"" INTEGER,
-                        ""AssignedToMemberId"" INTEGER,
+                        ""WorkflowId"" UUID NOT NULL,
+                        ""StageId"" UUID,
+                        ""AssignedToMemberId"" UUID,
                         ""CompletedByMemberIds"" TEXT,
                         ""IsOverdue"" BOOLEAN NOT NULL DEFAULT FALSE,
                         ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

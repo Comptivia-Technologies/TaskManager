@@ -1,15 +1,17 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMembers } from '../hooks/useMembers';
 import { useTeams } from '../hooks/useTeams';
 import { memberService } from '../services/memberService';
 import { Member } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiEdit, FiTrash2, FiFilter, FiSearch, FiPlus } from 'react-icons/fi';
+import { FiEdit, FiTrash2, FiFilter, FiSearch, FiPlus, FiUser } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 const Members = () => {
   const { members, loading, refetch } = useMembers();
   const { teams } = useTeams();
+  const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -21,7 +23,7 @@ const Members = () => {
     skillLevel: 1,
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTeamFilter, setSelectedTeamFilter] = useState<number | 'all'>('all');
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | 'all'>('all');
 
 
   const handleOpenModal = (member?: Member) => {
@@ -93,7 +95,7 @@ const Members = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this member?')) {
       try {
         await memberService.delete(id);
@@ -103,6 +105,10 @@ const Members = () => {
         toast.error(error.response?.data?.error || 'Failed to delete member');
       }
     }
+  };
+
+  const handleViewDetails = (member: Member) => {
+    navigate(`/members/${member.memberId}`);
   };
 
   const filteredMembers = members.filter((member) => {
@@ -160,7 +166,7 @@ const Members = () => {
               value={selectedTeamFilter}
               onChange={(e) =>
                 setSelectedTeamFilter(
-                  e.target.value === 'all' ? 'all' : parseInt(e.target.value)
+                  e.target.value === 'all' ? 'all' : e.target.value
                 )
               }
               className="w-full pl-10 pr-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans appearance-none cursor-pointer"
@@ -235,6 +241,13 @@ const Members = () => {
                     {member.role}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button
+                      onClick={() => handleViewDetails(member)}
+                      className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-2 rounded-azure-sm mr-2 transition-colors"
+                      title="View Details"
+                    >
+                      <FiUser className="text-base" />
+                    </button>
                     <button
                       onClick={() => handleOpenModal(member)}
                       className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-2 rounded-azure-sm mr-2 transition-colors"

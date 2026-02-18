@@ -64,7 +64,7 @@ public class WorkflowService : IWorkflowService
         return workflowsDto;
     }
 
-    public async System.Threading.Tasks.Task<WorkflowReadDto?> GetWorkflowByIdAsync(int id)
+    public async System.Threading.Tasks.Task<WorkflowReadDto?> GetWorkflowByIdAsync(Guid id)
     {
         var workflow = await _workflowRepository.GetWorkflowWithStagesAndTasksAsync(id);
         if (workflow == null)
@@ -126,7 +126,7 @@ public class WorkflowService : IWorkflowService
         return workflowDto;
     }
 
-    public async System.Threading.Tasks.Task<WorkflowReadDto?> UpdateWorkflowAsync(int id, WorkflowUpdateDto workflowUpdateDto)
+    public async System.Threading.Tasks.Task<WorkflowReadDto?> UpdateWorkflowAsync(Guid id, WorkflowUpdateDto workflowUpdateDto)
     {
         var workflow = await _workflowRepository.GetByIdAsync(id);
         if (workflow == null)
@@ -147,12 +147,12 @@ public class WorkflowService : IWorkflowService
         return workflowDto;
     }
 
-    public async System.Threading.Tasks.Task<bool> DeleteWorkflowAsync(int id)
+    public async System.Threading.Tasks.Task<bool> DeleteWorkflowAsync(Guid id)
     {
         return await _workflowRepository.DeleteAsync(id);
     }
 
-    public async System.Threading.Tasks.Task<IEnumerable<StageReadDto>> GetWorkflowStagesAsync(int workflowId)
+    public async System.Threading.Tasks.Task<IEnumerable<StageReadDto>> GetWorkflowStagesAsync(Guid workflowId)
     {
         var stages = await _workflowRepository.GetWorkflowWithStagesAsync(workflowId);
         if (stages == null)
@@ -161,7 +161,7 @@ public class WorkflowService : IWorkflowService
         return _mapper.Map<IEnumerable<StageReadDto>>(stages.Stages);
     }
 
-    public async System.Threading.Tasks.Task<IEnumerable<TaskReadDto>> GetWorkflowTasksAsync(int workflowId)
+    public async System.Threading.Tasks.Task<IEnumerable<TaskReadDto>> GetWorkflowTasksAsync(Guid workflowId)
     {
         var workflow = await _workflowRepository.GetWorkflowWithTasksAsync(workflowId);
         if (workflow == null)
@@ -225,7 +225,7 @@ public class WorkflowService : IWorkflowService
     /// <summary>
     /// Updates the workflow JSON in the JSONB field
     /// </summary>
-    public async System.Threading.Tasks.Task UpdateWorkflowJsonAsync(int workflowId)
+    public async System.Threading.Tasks.Task UpdateWorkflowJsonAsync(Guid workflowId)
     {
         var workflow = await _workflowRepository.GetWorkflowWithStagesAndTasksAsync(workflowId);
         if (workflow == null)

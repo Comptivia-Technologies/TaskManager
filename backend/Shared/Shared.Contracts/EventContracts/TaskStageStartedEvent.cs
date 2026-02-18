@@ -6,12 +6,12 @@ namespace Shared.Contracts.EventContracts;
 public class TaskStageStartedEvent
 {
     public Guid TaskId { get; set; }
-    public int StageId { get; set; }
+    public Guid StageId { get; set; }
     public string StageName { get; set; } = string.Empty;
     public int StageOrder { get; set; }
     public string StageType { get; set; } = string.Empty; // "Process" or "Escalation"
-    public int WorkflowId { get; set; }
-    public int TeamId { get; set; }
+    public Guid WorkflowId { get; set; }
+    public Guid TeamId { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? StageTimeoutAt { get; set; } // For escalation stages
     public Guid CorrelationId { get; set; }

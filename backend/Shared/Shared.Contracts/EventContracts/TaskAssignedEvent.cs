@@ -7,7 +7,7 @@ public class TaskAssignedEvent
 {
     public Guid AssignmentId { get; set; } // Unique ID for this task assignment (for idempotency)
     public Guid TaskId { get; set; }
-    public int MemberId { get; set; }
+    public Guid MemberId { get; set; }
     public string MemberName { get; set; } = string.Empty;
     public string MemberEmail { get; set; } = string.Empty;
     public double WorkloadScore { get; set; }

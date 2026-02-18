@@ -21,7 +21,7 @@ const Teams = () => {
     description: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   
   // Member management state
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
@@ -31,7 +31,7 @@ const Teams = () => {
     firstName: '',
     lastName: '',
     email: '',
-    teamId: 0,
+    teamId: undefined,
     role: '',
     skillLevel: 1,
   });
@@ -72,7 +72,7 @@ const Teams = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      let createdTeamId: number;
+      let createdTeamId: string;
       
       if (isEditMode && selectedTeam) {
         // Update team details
@@ -121,7 +121,7 @@ const Teams = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     const team = teams.find(t => t.teamId === id);
     const teamName = team?.teamName || 'this team';
     
@@ -187,7 +187,7 @@ const Teams = () => {
       firstName: '',
       lastName: '',
       email: '',
-      teamId: 0,
+      teamId: undefined,
       role: '',
       skillLevel: 1,
     });
@@ -217,7 +217,7 @@ const Teams = () => {
     }
   };
 
-  const handleDeleteMember = async (memberId: number) => {
+  const handleDeleteMember = async (memberId: string) => {
     if (!selectedTeam) return;
     
     if (window.confirm('Are you sure you want to delete this member?')) {
@@ -637,7 +637,7 @@ const Teams = () => {
                   onChange={(e) =>
                     setMemberFormData({
                       ...memberFormData,
-                      teamId: parseInt(e.target.value),
+                      teamId: e.target.value || undefined,
                     })
                   }
                   className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"

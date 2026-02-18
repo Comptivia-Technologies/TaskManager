@@ -6,14 +6,14 @@ import { toast } from 'react-toastify';
 import { FiChevronLeft, FiChevronRight, FiX, FiEdit2, FiCheck } from 'react-icons/fi';
 
 interface WorkflowCreateProps {
-  onSuccess: (workflowId: number) => void;
+  onSuccess: (workflowId: string) => void;
   onCancel: () => void;
 }
 
 interface StageForm {
   stageName: string;
   stageOrder: number;
-  teamId: number;
+  teamId: string;
   tempId: number; // Temporary ID for mapping during creation
   stageType?: 'Process' | 'Escalation';
   transitionPolicy?: 'OnComplete' | 'OnTimeout' | 'Manual';
@@ -42,7 +42,7 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
   const [stageForm, setStageForm] = useState<StageForm>({
     stageName: '',
     stageOrder: 1,
-    teamId: 0,
+    teamId: '',
     tempId: 0,
   });
 
@@ -60,7 +60,7 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
         setStages([...stages, newStage]);
         setNextTempId(nextTempId + 1);
       }
-      setStageForm({ stageName: '', stageOrder: stages.length + 1, teamId: teams.length > 0 ? teams[0].teamId : 0, tempId: 0 });
+      setStageForm({ stageName: '', stageOrder: stages.length + 1, teamId: teams.length > 0 ? teams[0].teamId : '', tempId: 0 });
     }
   };
 
@@ -85,7 +85,7 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
       return;
     }
 
-    if (stages.some(s => !s.teamId || s.teamId === 0)) {
+    if (stages.some(s => !s.teamId)) {
       toast.error('Please assign a team to all stages');
       return;
     }
@@ -219,11 +219,11 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
                   Assign Team *
                 </label>
                 <select
-                  value={stageForm.teamId || 0}
+                  value={stageForm.teamId || ''}
                   onChange={(e) =>
                     setStageForm({
                       ...stageForm,
-                      teamId: parseInt(e.target.value) || 0,
+                      teamId: e.target.value || '',
                     })
                   }
                   className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
@@ -256,7 +256,7 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
                     >
                       <span className="font-medium text-black font-sans">
                         {stage.stageOrder}. {stage.stageName}
-                        {stage.teamId > 0 && (
+                        {stage.teamId && (
                           <span className="text-xs text-black/60 ml-2 font-sans">
                             (Team: {teams.find(t => t.teamId === stage.teamId)?.teamName})
                           </span>
@@ -409,7 +409,7 @@ const WorkflowCreate = ({ onSuccess, onCancel }: WorkflowCreateProps) => {
                   return;
                 }
                 // Validate step 3 - ensure all stages have teams assigned
-                if (currentStep === 3 && stages.some(s => !s.teamId || s.teamId === 0)) {
+                if (currentStep === 3 && stages.some(s => !s.teamId)) {
                   toast.error('Please assign a team to all stages before proceeding');
                   return;
                 }

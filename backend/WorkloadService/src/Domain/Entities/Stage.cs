@@ -5,10 +5,10 @@ namespace WorkloadService.Domain.Entities;
 /// </summary>
 public class Stage
 {
-    public int StageId { get; set; }
+    public Guid StageId { get; set; }
     public string StageName { get; set; } = string.Empty;
     public int StageOrder { get; set; }
-    public int WorkflowId { get; set; }
-    public int TeamId { get; set; }
+    public Guid WorkflowId { get; set; }
+    public Guid TeamId { get; set; }
 }
 

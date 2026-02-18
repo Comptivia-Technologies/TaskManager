@@ -7,7 +7,7 @@ public class TaskAssignment
 {
     public Guid AssignmentId { get; set; } = Guid.NewGuid();
     public Guid TaskId { get; set; }
-    public int MemberId { get; set; }
+    public Guid MemberId { get; set; }
     public double WorkloadScore { get; set; }
     public string AssignmentReason { get; set; } = string.Empty;
     public DateTime AssignedAt { get; set; } = DateTime.UtcNow;

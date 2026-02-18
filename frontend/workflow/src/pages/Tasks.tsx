@@ -69,7 +69,7 @@ const Tasks = () => {
     return () => window.removeEventListener('online', handleOnline);
   }, [loadData]);
 
-  const getWorkflowName = (workflowId: number): string => {
+  const getWorkflowName = (workflowId: string): string => {
     const workflow = workflows.find(w => w.workflowId === workflowId);
     return workflow?.workflowName || `Workflow #${workflowId}`;
   };
