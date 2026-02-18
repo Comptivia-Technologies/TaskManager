@@ -188,6 +188,7 @@ using (var scope = app.Services.CreateScope())
                         ""StageId"" UUID,
                         ""AssignedToMemberId"" UUID,
                         ""CompletedByMemberIds"" TEXT,
+                        ""EscalatedByMemberIds"" TEXT,
                         ""IsOverdue"" BOOLEAN NOT NULL DEFAULT FALSE,
                         ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

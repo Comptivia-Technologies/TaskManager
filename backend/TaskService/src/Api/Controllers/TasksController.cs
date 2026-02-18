@@ -5,7 +5,7 @@ using TaskService.Application.Interfaces;
 namespace TaskService.Api.Controllers;
 
 /// <summary>
-/// TaskService API - Task lifecycle management
+/// TaskService API - Task lifecycle management for TaskService.API
 /// </summary>
 [ApiController]
 [Route("api/task-service")]

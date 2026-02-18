@@ -66,12 +66,22 @@ public class WorkloadService : IWorkloadService
             var stageCompletedCount = stageCompletedTasksQuery
                 .Count(t => t.CompletedByMemberIds!.Split(',').Contains(memberIdStr));
 
-            _logger.LogInformation(
-                "Workload calculation for member {MemberId}: AssignedTasks={AssignedCount}, StageCompletedTasks={StageCompletedCount}",
-                memberId, assignedTasks.Count, stageCompletedCount);
+            // Get tasks where this member escalated a stage (task moved to another member via escalation)
+            // These are tasks where EscalatedByMemberIds contains this member's ID
+            var escalatedTasksQuery = await _context.Tasks
+                .Where(t => t.EscalatedByMemberIds != null)
+                .ToListAsync();
+            
+            // Filter in memory for exact member ID match
+            var escalatedCount = escalatedTasksQuery
+                .Count(t => t.EscalatedByMemberIds!.Split(',').Contains(memberIdStr));
 
-        // Calculate metrics (including stage completions)
-        var metrics = CalculateMetrics(member, assignedTasks, stageCompletedCount);
+            _logger.LogInformation(
+                "Workload calculation for member {MemberId}: AssignedTasks={AssignedCount}, StageCompletedTasks={StageCompletedCount}, EscalatedTasks={EscalatedCount}",
+                memberId, assignedTasks.Count, stageCompletedCount, escalatedCount);
+
+        // Calculate metrics (including stage completions and escalations)
+        var metrics = CalculateMetrics(member, assignedTasks, stageCompletedCount, escalatedCount);
         var breakdown = CalculateBreakdown(metrics);
         var workloadScore = CalculateWorkloadScore(breakdown);
         var workloadStatus = DetermineWorkloadStatus(workloadScore);
@@ -112,7 +122,8 @@ public class WorkloadService : IWorkloadService
     /// <param name="member">The member to calculate metrics for</param>
     /// <param name="tasks">Tasks currently assigned to the member</param>
     /// <param name="stageCompletedCount">Number of tasks where member completed a stage but task moved to another member</param>
-    private WorkloadMetricsDto CalculateMetrics(Member member, List<Models.Task> tasks, int stageCompletedCount = 0)
+    /// <param name="escalatedCount">Number of tasks where member escalated a stage</param>
+    private WorkloadMetricsDto CalculateMetrics(Member member, List<Models.Task> tasks, int stageCompletedCount = 0, int escalatedCount = 0)
     {
         // Active tasks = tasks currently being worked on
         var activeTasks = tasks.Where(t => 
@@ -139,7 +150,7 @@ public class WorkloadService : IWorkloadService
         var overdueCount = overdueTasks.Count;
 
         // If member has no tasks and no stage completions, they should be considered available (low workload)
-        if (totalTasks == 0 && stageCompletedCount == 0)
+        if (totalTasks == 0 && stageCompletedCount == 0 && escalatedCount == 0)
         {
             return new WorkloadMetricsDto
             {
@@ -152,6 +163,7 @@ public class WorkloadService : IWorkloadService
                 PendingTaskCount = 0,
                 CompletedTaskCount = 0,
                 OverdueTaskCount = 0,
+                EscalatedTaskCount = 0,
                 TotalTaskCount = 0,
                 IsAvailable = true
             };
@@ -190,6 +202,7 @@ public class WorkloadService : IWorkloadService
             PendingTaskCount = pendingTasks.Count,
             CompletedTaskCount = completedCount,  // Now includes stage completions
             OverdueTaskCount = overdueCount,
+            EscalatedTaskCount = escalatedCount,
             TotalTaskCount = totalWork,  // Now includes stage completions in total
             IsAvailable = isAvailable
         };

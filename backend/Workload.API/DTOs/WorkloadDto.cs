@@ -27,6 +27,7 @@ public class WorkloadMetricsDto
     public int PendingTaskCount { get; set; }
     public int CompletedTaskCount { get; set; }
     public int OverdueTaskCount { get; set; }
+    public int EscalatedTaskCount { get; set; }
     public int TotalTaskCount { get; set; }
     public bool IsAvailable { get; set; }
 }
