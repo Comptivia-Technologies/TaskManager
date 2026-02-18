@@ -1,85 +1,29 @@
 using Microsoft.AspNetCore.Mvc;
-using APIGateway.Application.DTOs;
-using Shared.Contracts.EventContracts;
-using Shared.Contracts.Constants;
-using Shared.Messaging;
 using System.Text.Json;
 
 namespace APIGateway.Api.Controllers;
 
 /// <summary>
-/// API Gateway - Entry point for task creation
-/// Orchestrates the flow by publishing events (no business logic)
+/// API Gateway - Task details retrieval and status updates
+/// NOTE: Task creation orchestration has been moved to TaskService.
+/// POST /api/tasks should be routed to TaskService via reverse proxy.
 /// </summary>
 [ApiController]
 [Route("api/tasks")]
 public class TasksController : ControllerBase
 {
-    private readonly IEventBus _eventBus;
     private readonly ILogger<TasksController> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
 
     public TasksController(
-        IEventBus eventBus,
         ILogger<TasksController> logger,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration)
     {
-        _eventBus = eventBus;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
-    }
-
-    /// <summary>
-    /// Create a new task - Entry point for orchestration flow
-    /// Returns taskId immediately. Use GET /api/tasks/{taskId} to retrieve full details after processing.
-    /// </summary>
-    [HttpPost]
-    public async Task<ActionResult> CreateTask([FromBody] CreateTaskRequestDto request)
-    {
-        try
-        {
-            var correlationId = Guid.NewGuid();
-            var taskId = Guid.NewGuid();
-
-            var taskCreatedEvent = new TaskCreatedEvent
-            {
-                TaskId = taskId,
-                TaskName = request.TaskName,
-                Description = request.Description,
-                Priority = string.Empty,
-                TaskType = request.TaskType,
-                TaskData = request.TaskData,
-                PriorityAssigned = false,
-                CreatedAt = DateTime.UtcNow,
-                CorrelationId = correlationId
-            };
-
-            await _eventBus.PublishAsync(
-                taskCreatedEvent,
-                EventBusConstants.TaskSource,
-                EventBusConstants.TaskCreated,
-                correlationId);
-
-            _logger.LogInformation(
-                "Task creation initiated via API Gateway. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
-                taskId, correlationId);
-
-            // Return immediately with taskId only
-            return Accepted(new
-            {
-                taskId = taskId,
-                correlationId = correlationId,
-                message = "Task creation initiated. Processing asynchronously. Use GET /api/tasks/{taskId} to retrieve full details."
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error initiating task creation via API Gateway");
-            return StatusCode(500, new { error = "An error occurred while initiating task creation" });
-        }
     }
 
     /// <summary>

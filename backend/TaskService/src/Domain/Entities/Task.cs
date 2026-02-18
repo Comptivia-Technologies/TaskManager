@@ -41,6 +41,7 @@ public class Task
     public Guid? TaskOverdueEventId { get; set; }
     public Guid? TaskStageStartedEventId { get; set; }
     public Guid? TaskStageCompletedEventId { get; set; }
+    public Guid? TaskStageEscalatedEventId { get; set; }
     public Guid? TaskStageEscalationTriggeredEventId { get; set; }
     public Guid? TaskCompletedEventId { get; set; }
 }

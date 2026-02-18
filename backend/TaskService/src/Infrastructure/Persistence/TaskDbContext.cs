@@ -51,6 +51,7 @@ public class TaskDbContext : DbContext
             entity.HasIndex(e => e.TaskAssignedEventId);
             entity.HasIndex(e => e.TaskStageStartedEventId);
             entity.HasIndex(e => e.TaskStageCompletedEventId);
+            entity.HasIndex(e => e.TaskStageEscalatedEventId);
             entity.HasIndex(e => e.TaskStageEscalationTriggeredEventId);
             entity.HasIndex(e => e.TaskCompletedEventId);
         });

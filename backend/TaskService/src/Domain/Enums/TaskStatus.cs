@@ -12,6 +12,7 @@ public enum TaskStatus
     InProgress = 4,
     Completed = 5,
     Overdue = 6,
-    Cancelled = 7
+    Cancelled = 7,
+    Escalated = 8
 }
 
