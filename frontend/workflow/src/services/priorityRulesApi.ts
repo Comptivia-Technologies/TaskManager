@@ -11,5 +11,19 @@ const priorityRulesApi = axios.create({
   },
 });
 
+// Add API key interceptor
+priorityRulesApi.interceptors.request.use(
+  (config) => {
+    const apiKey = process.env.REACT_APP_API_KEY;
+    if (apiKey) {
+      config.headers['X-API-Key'] = apiKey;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 export default priorityRulesApi;
 
