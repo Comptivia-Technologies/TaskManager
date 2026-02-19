@@ -11,13 +11,20 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to add auth token
+// Request interceptor to add auth token and API key
 api.interceptors.request.use(
   async (config) => {
     const token = localStorage.getItem('authToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Add API key for all requests
+    const apiKey = process.env.REACT_APP_API_KEY;
+    if (apiKey) {
+      config.headers['X-API-Key'] = apiKey;
+    }
+    
     return config;
   },
   (error) => {
