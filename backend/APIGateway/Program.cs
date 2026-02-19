@@ -1,4 +1,5 @@
 using Shared.Messaging;
+using APIGateway.Infrastructure.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,6 +54,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAll");
 app.UseHttpsRedirection();
+
+// API Key Authentication Middleware (before authorization)
+app.UseMiddleware<ApiKeyMiddleware>();
+
 app.UseAuthorization();
 
 // Map controllers (for task creation endpoint that publishes to EventBus)
