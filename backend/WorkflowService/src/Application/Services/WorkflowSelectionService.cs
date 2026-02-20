@@ -114,51 +114,200 @@ public class WorkflowSelectionService : IWorkflowSelectionService
 
     /// <summary>
     /// Selects the best workflow based on task parameters
-    /// Matches workflows by task type (e.g., "ERP" task → "ERP Workflow")
-    /// Returns the selected workflow and the reason for selection
+    /// Priority: Keyword analysis → TaskType → Fallback
     /// </summary>
     private (Application.Interfaces.Workflow? Workflow, string Reason) SelectBestWorkflow(
         IEnumerable<Application.Interfaces.Workflow> workflows, 
         TaskCreatedEvent taskEvent)
     {
-        // Strategy 1: Match by workflow name containing task type
-        // Example: TaskType="ERP" → Match "ERP Workflow" or "ERP Development Workflow"
-        var nameMatch = workflows.FirstOrDefault(w => 
-            w.WorkflowName.Contains(taskEvent.TaskType, StringComparison.OrdinalIgnoreCase));
-        if (nameMatch != null)
+        var workflowsList = workflows.ToList();
+        
+        // Strategy 1: Keyword-based matching from TaskName and Description
+        var keywordMatch = MatchByKeywords(workflowsList, taskEvent);
+        if (keywordMatch.Workflow != null)
         {
-            var reason = $"Matched by workflow name: '{nameMatch.WorkflowName}' contains task type '{taskEvent.TaskType}'";
-            _logger.LogInformation(
-                "Matched workflow by name. TaskType: {TaskType}, WorkflowName: {WorkflowName}, WorkflowId: {WorkflowId}",
-                taskEvent.TaskType, nameMatch.WorkflowName, nameMatch.WorkflowId);
-            return (nameMatch, reason);
+            return keywordMatch;
         }
-
-        // Strategy 2: Match by workflow description containing task type
-        var descriptionMatch = workflows.FirstOrDefault(w => 
-            !string.IsNullOrEmpty(w.Description) && 
-            w.Description.Contains(taskEvent.TaskType, StringComparison.OrdinalIgnoreCase));
-        if (descriptionMatch != null)
+        
+        // Strategy 2: Match by TaskType (if provided)
+        if (!string.IsNullOrWhiteSpace(taskEvent.TaskType))
         {
-            var reason = $"Matched by workflow description: description contains task type '{taskEvent.TaskType}'";
-            _logger.LogInformation(
-                "Matched workflow by description. TaskType: {TaskType}, WorkflowName: {WorkflowName}, WorkflowId: {WorkflowId}",
-                taskEvent.TaskType, descriptionMatch.WorkflowName, descriptionMatch.WorkflowId);
-            return (descriptionMatch, reason);
-        }
+            // Match by workflow name containing task type
+            var nameMatch = workflowsList.FirstOrDefault(w => 
+                w.WorkflowName.Contains(taskEvent.TaskType, StringComparison.OrdinalIgnoreCase));
+            if (nameMatch != null)
+            {
+                var reason = $"Matched by TaskType: '{nameMatch.WorkflowName}' contains task type '{taskEvent.TaskType}'";
+                _logger.LogInformation(
+                    "Matched workflow by TaskType. TaskType: {TaskType}, WorkflowName: {WorkflowName}, WorkflowId: {WorkflowId}",
+                    taskEvent.TaskType, nameMatch.WorkflowName, nameMatch.WorkflowId);
+                return (nameMatch, reason);
+            }
 
+            // Match by workflow description containing task type
+            var descriptionMatch = workflowsList.FirstOrDefault(w => 
+                !string.IsNullOrEmpty(w.Description) && 
+                w.Description.Contains(taskEvent.TaskType, StringComparison.OrdinalIgnoreCase));
+            if (descriptionMatch != null)
+            {
+                var reason = $"Matched by TaskType in description: description contains '{taskEvent.TaskType}'";
+                _logger.LogInformation(
+                    "Matched workflow by TaskType in description. TaskType: {TaskType}, WorkflowName: {WorkflowName}, WorkflowId: {WorkflowId}",
+                    taskEvent.TaskType, descriptionMatch.WorkflowName, descriptionMatch.WorkflowId);
+                return (descriptionMatch, reason);
+            }
+        }
+        
         // Strategy 3: Fallback to first available workflow
-        var fallback = workflows.FirstOrDefault();
+        var fallback = workflowsList.FirstOrDefault();
         if (fallback != null)
         {
-            var reason = $"Fallback: No matching workflow found for task type '{taskEvent.TaskType}'. Selected first available workflow '{fallback.WorkflowName}'";
+            var reason = $"Fallback: No keyword or TaskType match found. Selected first available workflow '{fallback.WorkflowName}'";
             _logger.LogWarning(
-                "No specific workflow match found, using fallback. TaskType: {TaskType}, WorkflowName: {WorkflowName}, WorkflowId: {WorkflowId}",
-                taskEvent.TaskType, fallback.WorkflowName, fallback.WorkflowId);
+                "No specific workflow match found, using fallback. TaskName: {TaskName}, WorkflowName: {WorkflowName}, WorkflowId: {WorkflowId}",
+                taskEvent.TaskName, fallback.WorkflowName, fallback.WorkflowId);
             return (fallback, reason);
         }
         
         return (null, "No workflows available");
+    }
+
+    /// <summary>
+    /// Matches workflow by extracting keywords from TaskName and Description
+    /// </summary>
+    private (Application.Interfaces.Workflow? Workflow, string Reason) MatchByKeywords(
+        IEnumerable<Application.Interfaces.Workflow> workflows,
+        TaskCreatedEvent taskEvent)
+    {
+        // Combine TaskName and Description for analysis
+        var searchText = $"{taskEvent.TaskName} {taskEvent.Description ?? ""}".Trim();
+        
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            return (null, "No text available for keyword matching");
+        }
+        
+        // Extract keywords (remove common words, get meaningful terms)
+        var keywords = ExtractKeywords(searchText);
+        
+        if (!keywords.Any())
+        {
+            return (null, "No meaningful keywords extracted");
+        }
+        
+        _logger.LogInformation(
+            "Extracted keywords from task. TaskId: {TaskId}, Keywords: {Keywords}",
+            taskEvent.TaskId, string.Join(", ", keywords));
+        
+        // Score each workflow based on keyword matches
+        var scoredWorkflows = workflows.Select(w => new
+        {
+            Workflow = w,
+            Score = CalculateKeywordScore(w, keywords, searchText)
+        })
+        .Where(x => x.Score > 0)
+        .OrderByDescending(x => x.Score)
+        .ToList();
+        
+        if (scoredWorkflows.Any())
+        {
+            var bestMatch = scoredWorkflows.First();
+            var matchedKeywords = GetMatchedKeywords(bestMatch.Workflow, keywords, searchText);
+            var reason = $"Matched by keywords: '{string.Join(", ", matchedKeywords)}' found in workflow '{bestMatch.Workflow.WorkflowName}' (score: {bestMatch.Score})";
+            
+            _logger.LogInformation(
+                "Matched workflow by keywords. TaskId: {TaskId}, WorkflowName: {WorkflowName}, Score: {Score}, Keywords: {Keywords}",
+                taskEvent.TaskId, bestMatch.Workflow.WorkflowName, bestMatch.Score, string.Join(", ", matchedKeywords));
+            
+            return (bestMatch.Workflow, reason);
+        }
+        
+        return (null, "No keyword matches found");
+    }
+
+    /// <summary>
+    /// Extracts meaningful keywords from text
+    /// </summary>
+    private List<string> ExtractKeywords(string text)
+    {
+        // Common stop words to ignore
+        var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+            "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
+            "be", "have", "has", "had", "do", "does", "did", "will", "would",
+            "should", "could", "may", "might", "must", "can", "this", "that",
+            "these", "those", "i", "you", "he", "she", "it", "we", "they", "fix",
+            "update", "create", "add", "remove", "delete", "change", "modify", "task"
+        };
+        
+        // Normalize text: replace hyphens/underscores with spaces for better splitting
+        var normalizedText = text.Replace("-", " ").Replace("_", " ");
+        
+        // Split by whitespace and punctuation, convert to lowercase
+        var words = System.Text.RegularExpressions.Regex
+            .Split(normalizedText.ToLowerInvariant(), @"[\s\p{P}]+")
+            .Where(w => w.Length > 2 && !stopWords.Contains(w))
+            .Distinct()
+            .ToList();
+        
+        return words;
+    }
+
+    /// <summary>
+    /// Calculates a score for workflow based on keyword matches
+    /// </summary>
+    private int CalculateKeywordScore(Application.Interfaces.Workflow workflow, List<string> keywords, string searchText)
+    {
+        int score = 0;
+        // Normalize workflow name and description to lowercase for consistent case-insensitive matching
+        var workflowName = (workflow.WorkflowName ?? "").Trim().ToLowerInvariant();
+        var workflowDescription = (workflow.Description ?? "").Trim().ToLowerInvariant();
+        var workflowText = $"{workflowName} {workflowDescription}";
+        
+        foreach (var keyword in keywords)
+        {
+            // Keywords are already lowercase from extraction, but ensure it
+            var keywordLower = keyword.ToLowerInvariant();
+            
+            // Exact match in workflow name (higher weight)
+            if (workflowName.Contains(keywordLower))
+            {
+                score += 10;
+            }
+            
+            // Match in workflow description (medium weight) - can add even if name matched
+            if (!string.IsNullOrWhiteSpace(workflowDescription) && 
+                workflowDescription.Contains(keywordLower))
+            {
+                score += 5;
+            }
+        }
+        
+        return score;
+    }
+
+    /// <summary>
+    /// Gets the list of keywords that matched for a workflow
+    /// </summary>
+    private List<string> GetMatchedKeywords(Application.Interfaces.Workflow workflow, List<string> keywords, string searchText)
+    {
+        var matched = new List<string>();
+        // Normalize to lowercase for consistent case-insensitive matching
+        var workflowName = (workflow.WorkflowName ?? "").Trim().ToLowerInvariant();
+        var workflowDescription = (workflow.Description ?? "").Trim().ToLowerInvariant();
+        var workflowText = $"{workflowName} {workflowDescription}";
+        
+        foreach (var keyword in keywords)
+        {
+            var keywordLower = keyword.ToLowerInvariant();
+            if (workflowText.Contains(keywordLower))
+            {
+                matched.Add(keyword);
+            }
+        }
+        
+        return matched;
     }
 }
 
