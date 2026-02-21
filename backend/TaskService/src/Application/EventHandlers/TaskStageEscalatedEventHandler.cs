@@ -49,29 +49,24 @@ public class TaskStageEscalatedEventHandler
             }
 
             // Update task - clear current stage info (will be set by next TaskStageStartedEvent)
-            // Only clear CurrentStageId if NextStageId is NULL (last stage escalated)
-            // Otherwise, keep CurrentStageId as-is until TaskStageStartedEvent sets it to avoid race conditions
+            // Clear CurrentStageId immediately when escalation happens to allow next stage to start
+            task.CurrentStageId = null; // Always clear - next TaskStageStartedEvent will set it
+            task.CurrentStageStartedAt = null; // Will be set when next stage starts
+            task.StageTimeoutAt = null; // Will be set when next stage starts
+            task.TaskStageEscalatedEventId = correlationId; // Store CorrelationId for idempotency (unique per stage event)
+
             if (@event.NextStageId.HasValue)
             {
-                // Next stage exists - keep CurrentStageId as-is until TaskStageStartedEvent updates it
-                // This prevents race condition where CurrentStageId is set before stage actually starts
-                // The old stage ID will be replaced when TaskStageStartedEvent processes
                 _logger.LogInformation(
-                    "Stage escalated, waiting for next stage to start. TaskId: {TaskId}, EscalatedFromStageId: {EscalatedFromStageId}, NextStageId: {NextStageId}, CurrentStageId: {CurrentStageId}, Reason: {Reason}",
-                    task.TaskId, @event.CurrentStageId, @event.NextStageId, task.CurrentStageId, @event.EscalationReason);
+                    "Stage escalated, cleared CurrentStageId for next stage. TaskId: {TaskId}, EscalatedFromStageId: {EscalatedFromStageId}, NextStageId: {NextStageId}, Reason: {Reason}",
+                    task.TaskId, @event.CurrentStageId, @event.NextStageId, @event.EscalationReason);
             }
             else
             {
-                // Last stage escalated - clear CurrentStageId
-                task.CurrentStageId = null;
                 _logger.LogInformation(
                     "Last stage escalated. TaskId: {TaskId}, EscalatedFromStageId: {EscalatedFromStageId}, Reason: {Reason}",
                     task.TaskId, @event.CurrentStageId, @event.EscalationReason);
             }
-            
-            task.CurrentStageStartedAt = null; // Will be set when next stage starts
-            task.StageTimeoutAt = null; // Will be set when next stage starts
-            task.TaskStageEscalatedEventId = correlationId; // Store CorrelationId for idempotency (unique per stage event)
 
             await _repository.UpdateAsync(task);
 

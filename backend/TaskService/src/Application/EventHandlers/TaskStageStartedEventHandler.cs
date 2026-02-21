@@ -64,14 +64,16 @@ public class TaskStageStartedEventHandler
                 return;
             }
 
-            // CRITICAL: Skip if this event is for a stage that's OLDER than current stage
-            // This prevents old Stage 1 events from overwriting a newer Stage 2 status
-            // But allow processing if event stage equals current stage (this is the legitimate start event)
-            if (task.CurrentStageId.HasValue && @event.StageId < task.CurrentStageId.Value)
+            // CRITICAL: Only skip if this is the EXACT same stage (duplicate event)
+            // Allow if different stage (next stage from escalation/completion) or if CurrentStageId is null
+            // The idempotency check above already prevents duplicate processing of same event
+            if (task.CurrentStageId.HasValue && @event.StageId == task.CurrentStageId.Value)
             {
-                _logger.LogWarning(
-                    "Skipping TaskStageStartedEvent - stage is older than current. TaskId: {TaskId}, CurrentStageId: {CurrentStageId}, EventStageId: {EventStageId}, CorrelationId: {CorrelationId}",
-                    @event.TaskId, task.CurrentStageId.Value, @event.StageId, correlationId);
+                // Same stage - this is likely a duplicate event, but idempotency check should have caught it
+                // If we get here, it's safe to skip since we're already in this stage
+                _logger.LogInformation(
+                    "TaskStageStartedEvent for current stage (already in this stage). TaskId: {TaskId}, StageId: {StageId}, CorrelationId: {CorrelationId}",
+                    @event.TaskId, @event.StageId, correlationId);
                 return;
             }
 
