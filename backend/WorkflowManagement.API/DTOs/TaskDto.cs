@@ -24,6 +24,8 @@ public class TaskReadDto
 
 public class TaskCreateDto
 {
+    public Guid? TaskId { get; set; }  // Optional: allows TaskService to sync with same TaskId
+
     [Required]
     [StringLength(200)]
     public string TaskName { get; set; } = string.Empty;

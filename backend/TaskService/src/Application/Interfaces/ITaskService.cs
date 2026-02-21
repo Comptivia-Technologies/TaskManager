@@ -16,5 +16,6 @@ public interface ITaskService
     System.Threading.Tasks.Task CleanupOrphanedTasksAsync();
     System.Threading.Tasks.Task CompleteCurrentStageAsync(Guid taskId);
     System.Threading.Tasks.Task EscalateStageAsync(Guid taskId, string escalationReason);
+    System.Threading.Tasks.Task SyncAllTasksFromWorkflowManagementAsync();
 }
 

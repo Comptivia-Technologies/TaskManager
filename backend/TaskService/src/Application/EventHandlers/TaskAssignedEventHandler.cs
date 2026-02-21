@@ -286,6 +286,7 @@ public class TaskAssignedEventHandler
                 // CREATE new task
                 var taskCreateDto = new
                 {
+                    TaskId = task.TaskId,  // Preserve TaskId for sync
                     TaskName = task.TaskName,
                     Description = task.Description,
                     Status = statusString,

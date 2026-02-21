@@ -30,6 +30,69 @@ public class TaskService : ITaskService
         _mapper = mapper;
     }
 
+    public async Task<TaskReadDto> CreateTaskAsync(TaskCreateDto taskCreateDto)
+    {
+        if (!await _workflowRepository.ExistsAsync(taskCreateDto.WorkflowId))
+            throw new ArgumentException("Workflow does not exist");
+
+        if (taskCreateDto.StageId.HasValue && !await _stageRepository.ExistsAsync(taskCreateDto.StageId.Value))
+            throw new ArgumentException("Stage does not exist");
+
+        if (taskCreateDto.AssignedToMemberId.HasValue && !await _memberRepository.ExistsAsync(taskCreateDto.AssignedToMemberId.Value))
+            throw new ArgumentException("Member does not exist");
+
+        var task = _mapper.Map<Models.Task>(taskCreateDto);
+        
+        // Use provided TaskId if available (for sync from TaskService), otherwise generate new one
+        if (taskCreateDto.TaskId.HasValue)
+        {
+            task.TaskId = taskCreateDto.TaskId.Value;
+        }
+
+        // Ensure DueDate is UTC
+        if (task.DueDate.HasValue)
+        {
+            var dueDate = task.DueDate.Value;
+            if (dueDate.Kind == DateTimeKind.Unspecified)
+            {
+                task.DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc);
+            }
+            else if (dueDate.Kind != DateTimeKind.Utc)
+            {
+                task.DueDate = dueDate.ToUniversalTime();
+            }
+        }
+
+        task.CreatedAt = DateTime.UtcNow;
+        task.UpdatedAt = DateTime.UtcNow;
+
+        var createdTask = await _taskRepository.AddAsync(task);
+        
+        // Update workflow JSON after task creation
+        try
+        {
+            await _workflowService.UpdateWorkflowJsonAsync(createdTask.WorkflowId);
+        }
+        catch
+        {
+            // Log but don't fail task creation if JSON update fails
+        }
+
+        var tasks = await _taskRepository.GetTasksWithDetailsAsync();
+        var taskWithDetails = tasks.FirstOrDefault(t => t.TaskId == createdTask.TaskId);
+        
+        if (taskWithDetails == null)
+            return _mapper.Map<TaskReadDto>(createdTask);
+
+        var taskDto = _mapper.Map<TaskReadDto>(taskWithDetails);
+        if (taskWithDetails.Stage != null)
+            taskDto.StageName = taskWithDetails.Stage.StageName;
+        if (taskWithDetails.AssignedToMember != null)
+            taskDto.AssignedToMemberName = $"{taskWithDetails.AssignedToMember.FirstName} {taskWithDetails.AssignedToMember.LastName}";
+
+        return taskDto;
+    }
+
     public async Task<IEnumerable<TaskReadDto>> GetAllTasksAsync()
     {
         var tasks = await _taskRepository.GetTasksWithDetailsAsync();
@@ -61,51 +124,6 @@ public class TaskService : ITaskService
         var taskWithDetails = tasks.FirstOrDefault(t => t.TaskId == id);
         if (taskWithDetails == null)
             return null;
-
-        var taskDto = _mapper.Map<TaskReadDto>(taskWithDetails);
-        if (taskWithDetails.Stage != null)
-            taskDto.StageName = taskWithDetails.Stage.StageName;
-        if (taskWithDetails.AssignedToMember != null)
-            taskDto.AssignedToMemberName = $"{taskWithDetails.AssignedToMember.FirstName} {taskWithDetails.AssignedToMember.LastName}";
-
-        return taskDto;
-    }
-
-    public async Task<TaskReadDto> CreateTaskAsync(TaskCreateDto taskCreateDto)
-    {
-        if (!await _workflowRepository.ExistsAsync(taskCreateDto.WorkflowId))
-            throw new ArgumentException("Workflow does not exist");
-
-        if (taskCreateDto.StageId.HasValue && !await _stageRepository.ExistsAsync(taskCreateDto.StageId.Value))
-            throw new ArgumentException("Stage does not exist");
-
-        if (taskCreateDto.AssignedToMemberId.HasValue && !await _memberRepository.ExistsAsync(taskCreateDto.AssignedToMemberId.Value))
-            throw new ArgumentException("Member does not exist");
-
-        // Ensure DueDate is UTC before mapping
-        if (taskCreateDto.DueDate.HasValue)
-        {
-            var dueDate = taskCreateDto.DueDate.Value;
-            if (dueDate.Kind == DateTimeKind.Unspecified)
-            {
-                taskCreateDto.DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc);
-            }
-            else if (dueDate.Kind != DateTimeKind.Utc)
-            {
-                taskCreateDto.DueDate = dueDate.ToUniversalTime();
-            }
-        }
-
-        var task = _mapper.Map<Models.Task>(taskCreateDto);
-        task.CreatedAt = DateTime.UtcNow;
-        task.UpdatedAt = DateTime.UtcNow;
-
-        var createdTask = await _taskRepository.AddAsync(task);
-        var tasks = await _taskRepository.GetTasksWithDetailsAsync();
-        var taskWithDetails = tasks.FirstOrDefault(t => t.TaskId == createdTask.TaskId);
-        
-        if (taskWithDetails == null)
-            return _mapper.Map<TaskReadDto>(createdTask);
 
         var taskDto = _mapper.Map<TaskReadDto>(taskWithDetails);
         if (taskWithDetails.Stage != null)

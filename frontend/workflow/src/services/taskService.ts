@@ -12,11 +12,6 @@ export const taskService = {
     return response.data;
   },
 
-  create: async (task: TaskCreate): Promise<Task> => {
-    const response = await api.post<Task>('/api/tasks', task);
-    return response.data;
-  },
-
   update: async (id: string, task: TaskUpdate): Promise<Task> => {
     const response = await api.put<Task>(`/api/tasks/${id}`, task);
     return response.data;

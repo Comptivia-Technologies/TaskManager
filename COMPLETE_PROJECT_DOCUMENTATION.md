@@ -217,7 +217,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 **Purpose**: Single entry point for all frontend requests (pure routing layer)
 
 **Controllers**:
-- `TasksController` - Task details retrieval (GET endpoints only)
+- `TasksController` - Task details retrieval (GET endpoints only, enriches data from both TaskService and WorkflowManagement.API)
 
 **Reverse Proxy Configuration** (YARP):
 - Routes all frontend requests to backend services:
@@ -620,12 +620,13 @@ CREATE TABLE "PriorityRules" (
 |--------|----------|-------------|
 | GET | `/api/tasks` | Get all tasks |
 | GET | `/api/tasks/{id}` | Get task by ID |
-| POST | `/api/tasks` | Create task |
 | PUT | `/api/tasks/{id}` | Update task |
 | DELETE | `/api/tasks/{id}` | Delete task |
 | GET | `/api/tasks/workflow/{workflowId}` | Get tasks by workflow |
 | GET | `/api/tasks/stage/{stageId}` | Get tasks by stage |
 | GET | `/api/tasks/member/{memberId}` | Get tasks by member |
+
+**Note**: Task creation is handled exclusively through `POST /api/task-service` (TaskService) for proper event-driven orchestration. Direct task creation via WorkflowManagement.API is not supported.
 
 ### 5.2 SLAConfiguration.API (Port 5002)
 
@@ -682,11 +683,12 @@ CREATE TABLE "PriorityRules" (
 |--------|----------|-------------|
 | GET | `/api/task-service/{id}` | Get task by ID |
 | POST | `/api/task-service` | Create task (entry point for orchestration flow, returns taskId only) |
-| PUT | `/api/task-service/{id}/status` | Update task status |
+| PUT | `/api/task-service/status/{id}` | Update task status (accepts string status values: "Created", "WorkflowSelected", "SLAConfigured", "Assigned", "InProgress", "Completed", "Overdue", "Cancelled", "Escalated" or numeric 0-8) |
 | DELETE | `/api/task-service/{id}` | Delete task |
 | POST | `/api/task-service/complete-stage/{id}` | Complete current stage and transition to next |
 | POST | `/api/task-service/escalate-stage/{id}` | Manually escalate task to next stage |
 | POST | `/api/task-service/sync-overdue` | Sync all overdue tasks to WorkflowManagement.API |
+| POST | `/api/task-service/sync-from-workflow-management` | Sync all tasks from WorkflowManagement.API to TaskService |
 | POST | `/api/task-service/cleanup-orphaned` | Cleanup orphaned tasks from WorkflowManagement.API |
 
 ### 5.7 Error Handling
