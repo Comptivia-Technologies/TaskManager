@@ -4,9 +4,9 @@ namespace WorkflowManagement.API.Services;
 
 public interface ITaskService
 {
+    Task<TaskReadDto> CreateTaskAsync(TaskCreateDto taskCreateDto);
     Task<IEnumerable<TaskReadDto>> GetAllTasksAsync();
     Task<TaskReadDto?> GetTaskByIdAsync(Guid id);
-    Task<TaskReadDto> CreateTaskAsync(TaskCreateDto taskCreateDto);
     Task<TaskReadDto?> UpdateTaskAsync(Guid id, TaskUpdateDto taskUpdateDto);
     Task<bool> DeleteTaskAsync(Guid id);
     Task<IEnumerable<TaskReadDto>> GetTasksByWorkflowAsync(Guid workflowId);

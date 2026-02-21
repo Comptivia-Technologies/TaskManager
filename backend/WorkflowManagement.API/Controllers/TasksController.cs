@@ -17,6 +17,28 @@ public class TasksController : ControllerBase
         _logger = logger;
     }
 
+    [HttpPost]
+    public async Task<ActionResult<TaskReadDto>> CreateTask([FromBody] TaskCreateDto taskCreateDto)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var task = await _taskService.CreateTaskAsync(taskCreateDto);
+            return CreatedAtAction(nameof(GetTaskById), new { id = task.TaskId }, task);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating task");
+            return StatusCode(500, "An error occurred while creating the task");
+        }
+    }
+
     [HttpGet]
     public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetAllTasks()
     {
@@ -47,28 +69,6 @@ public class TasksController : ControllerBase
         {
             _logger.LogError(ex, "Error getting task by ID {TaskId}", id);
             return StatusCode(500, "An error occurred while retrieving the task");
-        }
-    }
-
-    [HttpPost]
-    public async Task<ActionResult<TaskReadDto>> CreateTask([FromBody] TaskCreateDto taskCreateDto)
-    {
-        try
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            var task = await _taskService.CreateTaskAsync(taskCreateDto);
-            return CreatedAtAction(nameof(GetTaskById), new { id = task.TaskId }, task);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating task");
-            return StatusCode(500, "An error occurred while creating the task");
         }
     }
 

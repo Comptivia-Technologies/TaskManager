@@ -569,6 +569,227 @@ public class TaskService : ITaskService
     }
 
     /// <summary>
+    /// Syncs all tasks from WorkflowManagement.API to TaskService
+    /// Useful for initial sync or fixing orphaned tasks
+    /// </summary>
+    public async System.Threading.Tasks.Task SyncAllTasksFromWorkflowManagementAsync()
+    {
+        try
+        {
+            var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
+
+            // Get all tasks from WorkflowManagement.API
+            var tasksResponse = await _httpClient.GetAsync($"{workflowManagementApiUrl}/tasks");
+            
+            if (!tasksResponse.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Could not fetch tasks from WorkflowManagement.API for sync. StatusCode: {StatusCode}",
+                    tasksResponse.StatusCode);
+                return;
+            }
+
+            var tasksJson = await tasksResponse.Content.ReadAsStringAsync();
+            using var jsonDoc = System.Text.Json.JsonDocument.Parse(tasksJson);
+            var tasksArray = jsonDoc.RootElement.EnumerateArray();
+
+            int syncedCount = 0;
+            int failedCount = 0;
+            int skippedCount = 0;
+
+            foreach (var taskElement in tasksArray)
+            {
+                try
+                {
+                    var taskId = GetGuidPropertyFromJson(taskElement, "taskId", "TaskId");
+                    var taskName = GetStringPropertyFromJson(taskElement, "taskName", "TaskName");
+                    var description = GetStringPropertyFromJson(taskElement, "description", "Description");
+                    var status = GetStringPropertyFromJson(taskElement, "status", "Status") ?? "Created";
+                    var priority = GetStringPropertyFromJson(taskElement, "priority", "Priority") ?? "Medium";
+                    var workflowId = GetGuidPropertyFromJson(taskElement, "workflowId", "WorkflowId");
+                    var stageId = GetGuidPropertyFromJson(taskElement, "stageId", "StageId");
+                    var assignedToMemberId = GetGuidPropertyFromJson(taskElement, "assignedToMemberId", "AssignedToMemberId");
+                    var dueDateStr = GetStringPropertyFromJson(taskElement, "dueDate", "DueDate");
+                    var isOverdue = GetBoolPropertyFromJson(taskElement, "isOverdue", "IsOverdue") ?? false;
+
+                    DateTime? dueDate = null;
+                    if (dueDateStr != null && DateTime.TryParse(dueDateStr, out var parsedDate))
+                    {
+                        dueDate = parsedDate.ToUniversalTime();
+                    }
+
+                    if (!taskId.HasValue || string.IsNullOrEmpty(taskName) || !workflowId.HasValue)
+                    {
+                        _logger.LogWarning("Skipping task sync - missing required fields. TaskId: {TaskId}, TaskName: {TaskName}, WorkflowId: {WorkflowId}",
+                            taskId, taskName, workflowId);
+                        skippedCount++;
+                        continue;
+                    }
+
+                    await SyncTaskFromWorkflowManagementAsync(
+                        taskId.Value,
+                        taskName,
+                        description,
+                        status,
+                        priority,
+                        workflowId.Value,
+                        stageId,
+                        assignedToMemberId,
+                        dueDate,
+                        isOverdue);
+
+                    syncedCount++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to sync task from WorkflowManagement.API");
+                    failedCount++;
+                }
+            }
+
+            _logger.LogInformation(
+                "Task sync from WorkflowManagement.API completed. Synced: {SyncedCount}, Failed: {FailedCount}, Skipped: {SkippedCount}",
+                syncedCount, failedCount, skippedCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing all tasks from WorkflowManagement.API");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Syncs task from WorkflowManagement.API to TaskService database
+    /// Creates task in TaskService if it doesn't exist, updates if it exists
+    /// </summary>
+    private async System.Threading.Tasks.Task SyncTaskFromWorkflowManagementAsync(
+        Guid taskId,
+        string taskName,
+        string? description,
+        string status,
+        string priority,
+        Guid workflowId,
+        Guid? stageId,
+        Guid? assignedToMemberId,
+        DateTime? dueDate,
+        bool isOverdue)
+    {
+        try
+        {
+            // Check if task already exists in TaskService
+            var existingTask = await _repository.GetByIdAsync(taskId);
+            
+            // Map status string to enum
+            DomainTaskStatus taskStatus;
+            if (Enum.TryParse<DomainTaskStatus>(status, ignoreCase: true, out var parsedStatus))
+            {
+                taskStatus = parsedStatus;
+            }
+            else if (status == "In Progress")
+            {
+                taskStatus = DomainTaskStatus.InProgress;
+            }
+            else
+            {
+                taskStatus = DomainTaskStatus.Created; // Default
+            }
+
+            if (existingTask == null)
+            {
+                // Create new task in TaskService
+                var newTask = new DomainTask
+                {
+                    TaskId = taskId,
+                    TaskName = taskName,
+                    Description = description,
+                    Priority = priority,
+                    TaskType = "Manual", // Indicates it was created manually
+                    Status = taskStatus,
+                    WorkflowId = workflowId,
+                    CurrentStageId = stageId,
+                    MemberId = assignedToMemberId,
+                    SLADeadline = dueDate,
+                    IsOverdue = isOverdue,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                await _repository.CreateAsync(newTask);
+                _logger.LogInformation(
+                    "Task synced from WorkflowManagement.API to TaskService. TaskId: {TaskId}, TaskName: {TaskName}",
+                    taskId, taskName);
+            }
+            else
+            {
+                // Update existing task
+                existingTask.TaskName = taskName;
+                existingTask.Description = description;
+                existingTask.Priority = priority;
+                existingTask.Status = taskStatus;
+                existingTask.WorkflowId = workflowId;
+                existingTask.CurrentStageId = stageId;
+                existingTask.MemberId = assignedToMemberId;
+                existingTask.SLADeadline = dueDate;
+                existingTask.IsOverdue = isOverdue;
+                existingTask.UpdatedAt = DateTime.UtcNow;
+
+                await _repository.UpdateAsync(existingTask);
+                _logger.LogInformation(
+                    "Task updated in TaskService from WorkflowManagement.API. TaskId: {TaskId}, TaskName: {TaskName}",
+                    taskId, taskName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error syncing task from WorkflowManagement.API to TaskService. TaskId: {TaskId}",
+                taskId);
+            throw;
+        }
+    }
+
+    // Helper methods for JSON parsing
+    private Guid? GetGuidPropertyFromJson(System.Text.Json.JsonElement element, string camelCase, string pascalCase)
+    {
+        if (element.TryGetProperty(camelCase, out var camelProp) && camelProp.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            if (Guid.TryParse(camelProp.GetString(), out var guid))
+                return guid;
+        }
+        if (element.TryGetProperty(pascalCase, out var pascalProp) && pascalProp.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            if (Guid.TryParse(pascalProp.GetString(), out var guid))
+                return guid;
+        }
+        return null;
+    }
+
+    private string? GetStringPropertyFromJson(System.Text.Json.JsonElement element, string camelCase, string pascalCase)
+    {
+        if (element.TryGetProperty(camelCase, out var camelProp) && camelProp.ValueKind == System.Text.Json.JsonValueKind.String)
+            return camelProp.GetString();
+        if (element.TryGetProperty(pascalCase, out var pascalProp) && pascalProp.ValueKind == System.Text.Json.JsonValueKind.String)
+            return pascalProp.GetString();
+        return null;
+    }
+
+    private bool? GetBoolPropertyFromJson(System.Text.Json.JsonElement element, string camelCase, string pascalCase)
+    {
+        if (element.TryGetProperty(camelCase, out var camelProp))
+        {
+            if (camelProp.ValueKind == System.Text.Json.JsonValueKind.True || camelProp.ValueKind == System.Text.Json.JsonValueKind.False)
+                return camelProp.GetBoolean();
+        }
+        if (element.TryGetProperty(pascalCase, out var pascalProp))
+        {
+            if (pascalProp.ValueKind == System.Text.Json.JsonValueKind.True || pascalProp.ValueKind == System.Text.Json.JsonValueKind.False)
+                return pascalProp.GetBoolean();
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Complete the current stage and move to the next stage
     /// Publishes TaskStageCompletedEvent which triggers stage orchestration
     /// </summary>

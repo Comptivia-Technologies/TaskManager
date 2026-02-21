@@ -1,0 +1,1779 @@
+openapi: 3.0.3
+info:
+  title: Task Management & Workflow Orchestration API
+  description: |
+    Comprehensive Task Management System with Generic Workflow Orchestration.
+    
+    **Architecture**: Hybrid REST + Event-driven microservices
+    
+    **Key Features**:
+    - Workflow creation and management
+    - Team and member management
+    - Task assignment and tracking
+    - Stage-based orchestration (Process & Escalation workflows)
+    - Automatic reassignment when stages change teams
+    - SLA configuration with dynamic priority levels
+    - Automated task orchestration (workflow selection, SLA configuration, member assignment)
+    - Workload-based task assignment
+    - Priority rule engine with condition-based evaluation
+    
+    **All endpoints are routed through API Gateway (Port 5004)**
+  version: 3.0.0
+  contact:
+    name: API Support
+    email: support@workflowautomation.enginuo.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:5004/api
+    description: Local Development (API Gateway)
+  - url: https://api.workflowautomation.enginuo.com/api
+    description: Production (API Gateway)
+
+tags:
+  - name: Teams
+    description: Team management operations
+  - name: Members
+    description: Member management operations
+  - name: Workflows
+    description: Workflow management operations
+  - name: Stages
+    description: Stage management operations
+  - name: Tasks
+    description: Task CRUD operations (WorkflowManagement.API)
+  - name: TaskService
+    description: Task orchestration and lifecycle management (TaskService)
+  - name: SLA
+    description: SLA configuration management
+  - name: PriorityRules
+    description: Priority rule management
+  - name: Workload
+    description: Workload queries
+
+paths:
+  # Teams
+  /teams:
+    get:
+      tags: [Teams]
+      summary: Get all teams
+      responses:
+        '200':
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Team'
+    post:
+      tags: [Teams]
+      summary: Create a new team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamCreate'
+      responses:
+        '201':
+          description: Team created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+
+  /teams/{id}:
+    get:
+      tags: [Teams]
+      summary: Get team by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Team details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Teams]
+      summary: Update team
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamUpdate'
+      responses:
+        '200':
+          description: Team updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+    delete:
+      tags: [Teams]
+      summary: Delete team
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Team deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /teams/{id}/members:
+    get:
+      tags: [Teams]
+      summary: Get team members
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of team members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Member'
+
+  /teams/{id}/workflows:
+    get:
+      tags: [Teams]
+      summary: Get team workflows
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of team workflows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Workflow'
+
+  # Members
+  /members:
+    get:
+      tags: [Members]
+      summary: Get all members
+      responses:
+        '200':
+          description: List of members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Member'
+    post:
+      tags: [Members]
+      summary: Create a new member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberCreate'
+      responses:
+        '201':
+          description: Member created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+
+  /members/{id}:
+    get:
+      tags: [Members]
+      summary: Get member by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Member details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Members]
+      summary: Update member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberUpdate'
+      responses:
+        '200':
+          description: Member updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+    delete:
+      tags: [Members]
+      summary: Delete member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Member deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /members/{id}/tasks:
+    get:
+      tags: [Members]
+      summary: Get member's tasks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of member's tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+  # Workflows
+  /workflows:
+    get:
+      tags: [Workflows]
+      summary: Get all workflows
+      responses:
+        '200':
+          description: List of workflows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Workflow'
+    post:
+      tags: [Workflows]
+      summary: Create a new workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowCreate'
+      responses:
+        '201':
+          description: Workflow created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+
+  /workflows/{id}:
+    get:
+      tags: [Workflows]
+      summary: Get workflow by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Workflow details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Workflows]
+      summary: Update workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowUpdate'
+      responses:
+        '200':
+          description: Workflow updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+    delete:
+      tags: [Workflows]
+      summary: Delete workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Workflow deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /workflows/{id}/stages:
+    get:
+      tags: [Workflows]
+      summary: Get workflow stages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of workflow stages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Stage'
+
+  /workflows/{id}/tasks:
+    get:
+      tags: [Workflows]
+      summary: Get workflow tasks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of workflow tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+  /workflows/{id}/json:
+    get:
+      tags: [Workflows]
+      summary: Get workflow JSON
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Workflow JSON
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /workflows/{id}/update-json:
+    post:
+      tags: [Workflows]
+      summary: Update workflow JSON
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Workflow JSON updated successfully
+
+  # Stages
+  /stages:
+    get:
+      tags: [Stages]
+      summary: Get all stages
+      responses:
+        '200':
+          description: List of stages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Stage'
+    post:
+      tags: [Stages]
+      summary: Create a new stage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StageCreate'
+      responses:
+        '201':
+          description: Stage created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stage'
+
+  /stages/{id}:
+    get:
+      tags: [Stages]
+      summary: Get stage by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Stage details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Stages]
+      summary: Update stage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StageUpdate'
+      responses:
+        '200':
+          description: Stage updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stage'
+    delete:
+      tags: [Stages]
+      summary: Delete stage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Stage deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /stages/workflow/{workflowId}:
+    get:
+      tags: [Stages]
+      summary: Get stages by workflow
+      parameters:
+        - name: workflowId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of stages for workflow
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Stage'
+
+  # Tasks (WorkflowManagement.API)
+  /tasks:
+    get:
+      tags: [Tasks]
+      summary: Get all tasks
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+  /tasks/{id}:
+    get:
+      tags: [Tasks]
+      summary: Get task by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Tasks]
+      summary: Update task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdate'
+      responses:
+        '200':
+          description: Task updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Tasks]
+      summary: Delete task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Task deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /tasks/workflow/{workflowId}:
+    get:
+      tags: [Tasks]
+      summary: Get tasks by workflow
+      parameters:
+        - name: workflowId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of tasks for workflow
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+  /tasks/stage/{stageId}:
+    get:
+      tags: [Tasks]
+      summary: Get tasks by stage
+      parameters:
+        - name: stageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of tasks for stage
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+  /tasks/member/{memberId}:
+    get:
+      tags: [Tasks]
+      summary: Get tasks by member
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of tasks for member
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+  # TaskService (Orchestration)
+  /task-service:
+    post:
+      tags: [TaskService]
+      summary: Create task (entry point for orchestration flow)
+      description: |
+        Creates a new task and initiates the event-driven orchestration flow.
+        Returns taskId immediately. Use GET /api/task-service/{id} to retrieve full details after processing.
+        
+        **Orchestration Flow**:
+        1. TaskCreatedEvent published
+        2. WorkflowService selects workflow
+        3. PriorityRuleEngine assigns priority
+        4. SLAManagerService configures SLA
+        5. WorkloadService assigns task to best member
+        6. WorkflowService starts task in first stage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreate'
+      responses:
+        '202':
+          description: Task creation initiated (processing asynchronously)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taskId:
+                    type: string
+                    format: uuid
+                  message:
+                    type: string
+                    example: "Task creation initiated. Processing asynchronously. Use GET /api/task-service/{taskId} to retrieve full details."
+
+  /task-service/{id}:
+    get:
+      tags: [TaskService]
+      summary: Get task by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskServiceTask'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [TaskService]
+      summary: Delete task
+      description: Deletes task from both TaskService database and WorkflowManagement database
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Task deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /task-service/status/{id}:
+    put:
+      tags: [TaskService]
+      summary: Update task status
+      description: |
+        Updates task status. Accepts string status values or numeric values (0-8) for backward compatibility.
+        
+        **Valid Status Values**:
+        - "Created" (0)
+        - "WorkflowSelected" (1)
+        - "SLAConfigured" (2)
+        - "Assigned" (3)
+        - "InProgress" (4)
+        - "Completed" (5)
+        - "Overdue" (6)
+        - "Cancelled" (7)
+        - "Escalated" (8)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskStatus'
+      responses:
+        '200':
+          description: Task status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Task status updated to Completed"
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /task-service/complete-stage/{id}:
+    post:
+      tags: [TaskService]
+      summary: Complete current stage and transition to next
+      description: |
+        Completes the current stage of a task and transitions to the next stage.
+        Publishes TaskStageCompletedEvent which triggers stage transition.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Stage completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Stage completed successfully. Task will transition to the next stage."
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          description: Cannot complete stage (e.g., no current stage, already completed)
+
+  /task-service/escalate-stage/{id}:
+    post:
+      tags: [TaskService]
+      summary: Manually escalate task to next stage
+      description: |
+        Escalates the current stage of a task to the next stage.
+        Unlike CompleteStage, this does NOT increment the member's completion count.
+        Used when a member cannot handle the task and needs to pass it to the next stage.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Reason for escalation
+      responses:
+        '200':
+          description: Stage escalated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Stage escalated successfully. Task will transition to the next stage."
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          description: Cannot escalate stage (e.g., no current stage, no next stage)
+
+  /task-service/sync-overdue:
+    post:
+      tags: [TaskService]
+      summary: Sync all overdue tasks to WorkflowManagement.API
+      description: Syncs existing overdue tasks that were marked overdue before the sync functionality was added
+      responses:
+        '200':
+          description: Overdue tasks sync completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Overdue tasks sync completed. Check logs for details."
+
+  /task-service/sync-from-workflow-management:
+    post:
+      tags: [TaskService]
+      summary: Sync all tasks from WorkflowManagement.API to TaskService
+      description: Ensures tasks created directly in WorkflowManagement.API are synced to TaskService
+      responses:
+        '200':
+          description: Tasks synced successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Tasks synced from WorkflowManagement.API to TaskService. Check logs for details."
+
+  /task-service/cleanup-orphaned:
+    post:
+      tags: [TaskService]
+      summary: Cleanup orphaned tasks from WorkflowManagement.API
+      description: Removes tasks that exist in WorkflowManagement but not in TaskService database
+      responses:
+        '200':
+          description: Orphaned tasks cleanup completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Orphaned tasks cleanup completed. Check logs for details."
+
+  # SLA Configuration
+  /sla-configurations:
+    get:
+      tags: [SLA]
+      summary: Get all SLA configurations
+      responses:
+        '200':
+          description: List of SLA configurations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SLAConfiguration'
+
+  /sla-configurations/workflow/{workflowId}:
+    get:
+      tags: [SLA]
+      summary: Get SLA configuration for workflow
+      parameters:
+        - name: workflowId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: SLA configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SLAConfiguration'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [SLA]
+      summary: Create SLA configuration
+      parameters:
+        - name: workflowId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SLAConfigurationCreate'
+      responses:
+        '201':
+          description: SLA configuration created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SLAConfiguration'
+    put:
+      tags: [SLA]
+      summary: Update SLA configuration
+      parameters:
+        - name: workflowId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SLAConfigurationUpdate'
+      responses:
+        '200':
+          description: SLA configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SLAConfiguration'
+    delete:
+      tags: [SLA]
+      summary: Delete SLA configuration
+      parameters:
+        - name: workflowId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: SLA configuration deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Priority Rules
+  /priority-rules:
+    get:
+      tags: [PriorityRules]
+      summary: Get all priority rules
+      responses:
+        '200':
+          description: List of priority rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PriorityRule'
+    post:
+      tags: [PriorityRules]
+      summary: Create priority rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriorityRuleCreate'
+      responses:
+        '201':
+          description: Priority rule created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriorityRule'
+
+  /priority-rules/{id}:
+    get:
+      tags: [PriorityRules]
+      summary: Get priority rule by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Priority rule details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriorityRule'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [PriorityRules]
+      summary: Update priority rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriorityRuleUpdate'
+      responses:
+        '200':
+          description: Priority rule updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriorityRule'
+    delete:
+      tags: [PriorityRules]
+      summary: Delete priority rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Priority rule deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /priority-rules/workflow/{workflowId}:
+    get:
+      tags: [PriorityRules]
+      summary: Get priority rules for workflow
+      parameters:
+        - name: workflowId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of priority rules for workflow
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PriorityRule'
+
+  # Workload
+  /workload/{memberId}:
+    get:
+      tags: [Workload]
+      summary: Get workload summary for member
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Workload summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  schemas:
+    Team:
+      type: object
+      properties:
+        teamId:
+          type: integer
+        teamName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        workflowNames:
+          type: array
+          items:
+            type: string
+          nullable: true
+
+    TeamCreate:
+      type: object
+      required: [teamName]
+      properties:
+        teamName:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+
+    TeamUpdate:
+      type: object
+      required: [teamName]
+      properties:
+        teamName:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+
+    Member:
+      type: object
+      properties:
+        memberId:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        teamId:
+          type: integer
+          nullable: true
+        teamName:
+          type: string
+          nullable: true
+        role:
+          type: string
+        skillLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: "1=Beginner, 5=Expert"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    MemberCreate:
+      type: object
+      required: [firstName, lastName, email, role, skillLevel]
+      properties:
+        firstName:
+          type: string
+          maxLength: 100
+        lastName:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          maxLength: 200
+        teamId:
+          type: integer
+          nullable: true
+        role:
+          type: string
+          maxLength: 100
+        skillLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+
+    MemberUpdate:
+      type: object
+      required: [firstName, lastName, email, role, skillLevel]
+      properties:
+        firstName:
+          type: string
+          maxLength: 100
+        lastName:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          maxLength: 200
+        teamId:
+          type: integer
+          nullable: true
+        role:
+          type: string
+          maxLength: 100
+        skillLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+
+    Workflow:
+      type: object
+      properties:
+        workflowId:
+          type: integer
+        workflowName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        teamId:
+          type: integer
+          nullable: true
+        teamName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Stage'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+
+    WorkflowCreate:
+      type: object
+      required: [workflowName]
+      properties:
+        workflowName:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+        teamId:
+          type: integer
+          nullable: true
+
+    WorkflowUpdate:
+      type: object
+      required: [workflowName]
+      properties:
+        workflowName:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+
+    Stage:
+      type: object
+      properties:
+        stageId:
+          type: integer
+        stageName:
+          type: string
+        stageOrder:
+          type: integer
+        workflowId:
+          type: integer
+        teamId:
+          type: integer
+        teamName:
+          type: string
+        stageType:
+          type: string
+          enum: [Process, Escalation]
+          description: "Process = ERP-style (manual completion), Escalation = Ticketing (automatic timeout)"
+        transitionPolicy:
+          type: string
+          enum: [OnComplete, OnTimeout, Manual]
+          description: "OnComplete = transition on completion, OnTimeout = transition on timeout, Manual = manual transition only"
+        timeoutMinutes:
+          type: integer
+          nullable: true
+          description: "Required for Escalation stages"
+        createdAt:
+          type: string
+          format: date-time
+
+    StageCreate:
+      type: object
+      required: [stageName, stageOrder, workflowId, teamId, stageType, transitionPolicy]
+      properties:
+        stageName:
+          type: string
+          maxLength: 200
+        stageOrder:
+          type: integer
+        workflowId:
+          type: integer
+        teamId:
+          type: integer
+        stageType:
+          type: string
+          enum: [Process, Escalation]
+        transitionPolicy:
+          type: string
+          enum: [OnComplete, OnTimeout, Manual]
+        timeoutMinutes:
+          type: integer
+          nullable: true
+
+    StageUpdate:
+      type: object
+      required: [stageName, teamId, stageType, transitionPolicy]
+      properties:
+        stageName:
+          type: string
+          maxLength: 200
+        teamId:
+          type: integer
+        stageType:
+          type: string
+          enum: [Process, Escalation]
+        transitionPolicy:
+          type: string
+          enum: [OnComplete, OnTimeout, Manual]
+        timeoutMinutes:
+          type: integer
+          nullable: true
+
+    Task:
+      type: object
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        taskName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [Created, WorkflowSelected, SLAConfigured, Assigned, InProgress, Completed, Overdue, Cancelled, Escalated]
+        priority:
+          type: string
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        workflowId:
+          type: integer
+        stageId:
+          type: integer
+          nullable: true
+        stageName:
+          type: string
+          nullable: true
+        assignedToMemberId:
+          type: integer
+          nullable: true
+        assignedToMemberName:
+          type: string
+          nullable: true
+        isOverdue:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TaskUpdate:
+      type: object
+      required: [taskName, status, priority]
+      properties:
+        taskName:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+        status:
+          type: string
+        priority:
+          type: string
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        stageId:
+          type: integer
+          nullable: true
+        assignedToMemberId:
+          type: integer
+          nullable: true
+
+    TaskCreate:
+      type: object
+      required: [taskName, priority, taskType]
+      properties:
+        taskName:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+        priority:
+          type: string
+        taskType:
+          type: string
+        taskData:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    TaskServiceTask:
+      type: object
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        taskName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        priority:
+          type: string
+        taskType:
+          type: string
+        status:
+          type: integer
+          enum: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+          description: "0=Created, 1=WorkflowSelected, 2=SLAConfigured, 3=Assigned, 4=InProgress, 5=Completed, 6=Overdue, 7=Cancelled, 8=Escalated"
+        workflowId:
+          type: integer
+          nullable: true
+        memberId:
+          type: integer
+          nullable: true
+        slaConfigurationId:
+          type: string
+          format: uuid
+          nullable: true
+        slaStartTime:
+          type: string
+          format: date-time
+          nullable: true
+        slaDeadline:
+          type: string
+          format: date-time
+          nullable: true
+        isOverdue:
+          type: boolean
+        currentStageId:
+          type: integer
+          nullable: true
+        currentStageStartedAt:
+          type: string
+          format: date-time
+          nullable: true
+        stageTimeoutAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UpdateTaskStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          oneOf:
+            - type: string
+              enum: [Created, WorkflowSelected, SLAConfigured, Assigned, InProgress, Completed, Overdue, Cancelled, Escalated]
+            - type: integer
+              enum: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+          description: "String status name or numeric value (0-8) for backward compatibility"
+
+    SLAConfiguration:
+      type: object
+      properties:
+        workflowId:
+          type: integer
+        workflowName:
+          type: string
+        priorityLevels:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              responseTime:
+                type: integer
+                description: "Response time in minutes"
+
+    SLAConfigurationCreate:
+      type: object
+      required: [workflowId, priorityLevels]
+      properties:
+        workflowId:
+          type: integer
+        priorityLevels:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              responseTime:
+                type: integer
+
+    SLAConfigurationUpdate:
+      type: object
+      required: [priorityLevels]
+      properties:
+        priorityLevels:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              responseTime:
+                type: integer
+
+    PriorityRule:
+      type: object
+      properties:
+        ruleId:
+          type: integer
+        ruleName:
+          type: string
+        priority:
+          type: string
+        salience:
+          type: integer
+        isActive:
+          type: boolean
+        conditionsJson:
+          type: string
+        maxWorkloadScore:
+          type: integer
+          nullable: true
+        teamName:
+          type: string
+          nullable: true
+        workflowId:
+          type: integer
+          nullable: true
+          description: "NULL = global rule, specific ID = workflow-specific rule"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PriorityRuleCreate:
+      type: object
+      required: [ruleName, priority, salience, isActive, conditionsJson]
+      properties:
+        ruleName:
+          type: string
+          maxLength: 200
+        priority:
+          type: string
+        salience:
+          type: integer
+        isActive:
+          type: boolean
+        conditionsJson:
+          type: string
+        maxWorkloadScore:
+          type: integer
+          nullable: true
+        teamName:
+          type: string
+          nullable: true
+        workflowId:
+          type: integer
+          nullable: true
+
+    PriorityRuleUpdate:
+      type: object
+      required: [ruleName, priority, salience, isActive, conditionsJson]
+      properties:
+        ruleName:
+          type: string
+          maxLength: 200
+        priority:
+          type: string
+        salience:
+          type: integer
+        isActive:
+          type: boolean
+        conditionsJson:
+          type: string
+        maxWorkloadScore:
+          type: integer
+          nullable: true
+        teamName:
+          type: string
+          nullable: true
+        workflowId:
+          type: integer
+          nullable: true
+
+    WorkloadResponse:
+      type: object
+      properties:
+        memberId:
+          type: integer
+        memberName:
+          type: string
+        memberEmail:
+          type: string
+        workloadScore:
+          type: number
+          description: "Lower score = more available"
+        workloadStatus:
+          type: string
+          enum: [Available, PartiallyLoaded, FullyLoaded, Overloaded]
+        metrics:
+          type: object
+          properties:
+            efficiency:
+              type: number
+            skillLevel:
+              type: integer
+            taskCompletionRate:
+              type: number
+            activeTaskCount:
+              type: integer
+            pendingTaskCount:
+              type: integer
+            completedTaskCount:
+              type: integer
+            overdueTaskCount:
+              type: integer
+            escalatedTaskCount:
+              type: integer
+            totalTaskCount:
+              type: integer
+            isAvailable:
+              type: boolean
+        breakdown:
+          type: object
+          properties:
+            efficiencyScore:
+              type: number
+            skillLevelScore:
+              type: number
+            taskCompletionScore:
+              type: number
+            activeTaskLoadScore:
+              type: number
+            availabilityScore:
+              type: number
+        calculatedAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - ApiKey: []
+  - BearerAuth: []

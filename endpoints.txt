@@ -1,0 +1,383 @@
+================================================================================
+                    TASK OPERATIONS API DOCUMENTATION
+================================================================================
+
+Complete guide for task creation, update, escalation, completion, and retrieval.
+
+================================================================================
+1. CREATE TASK
+================================================================================
+
+Local Endpoint:
+POST http://localhost:5004/api/task-service
+
+Deployed Endpoint:
+POST https://api.workflowautomation.enginuo.com/api/task-service
+
+Payload:
+{
+  "taskName": "Fix login bug",
+  "description": "Users cannot login with email",
+  "priority": "High",
+  "taskType": "Bug",
+  "taskData": {
+    "customField": "value"
+  }
+}
+
+Payload Fields:
+- taskName (required): Task name
+- description (optional): Task description
+- priority (required): Priority level (e.g., "High", "Medium", "Low", "Critical")
+- taskType (required): Type of task (e.g., "Bug", "Feature", "Task")
+- taskData (optional): Additional custom data as key-value pairs
+
+Output:
+{
+  "taskId": "d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb",
+  "message": "Task creation initiated. Processing asynchronously. Use GET /api/task-service/{taskId} to retrieve full details."
+}
+
+Status Code: 202 Accepted
+
+Note: 
+- Task creation triggers event-driven orchestration (workflow selection, SLA configuration, assignment)
+- Wait a few seconds after creation before retrieving full details
+- Use the returned taskId to get task details
+
+================================================================================
+2. UPDATE TASK STATUS
+================================================================================
+
+Local Endpoint:
+PUT http://localhost:5004/api/task-service/status/{taskId}
+
+Deployed Endpoint:
+PUT https://api.workflowautomation.enginuo.com/api/task-service/status/{taskId}
+
+Example:
+PUT http://localhost:5004/api/task-service/status/d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb
+
+Payload (String - Recommended):
+{
+  "status": "Completed"
+}
+
+Payload (Numeric - Backward Compatible):
+{
+  "status": 5
+}
+
+Valid Status Values:
+
+String          Numeric    Description
+------------------------------------------------------------------------
+"Created"       0          Task created, awaiting workflow selection
+"WorkflowSelected" 1       Workflow has been selected
+"SLAConfigured" 2          SLA has been configured
+"Assigned"      3          Task assigned to a member
+"InProgress"    4          Task is in progress
+"Completed"     5          Task is completed
+"Overdue"       6          Task has passed SLA deadline
+"Cancelled"     7          Task has been cancelled
+"Escalated"     8          Task has been escalated
+
+Output:
+{
+  "message": "Task status updated to Completed"
+}
+
+Status Code: 200 OK
+
+Error Responses:
+- 404 Not Found: Task with ID not found
+- 400 Bad Request: Invalid status value
+- 500 Internal Server Error: Server error
+
+================================================================================
+3. COMPLETE STAGE
+================================================================================
+
+Local Endpoint:
+POST http://localhost:5004/api/task-service/complete-stage/{taskId}
+
+Deployed Endpoint:
+POST https://api.workflowautomation.enginuo.com/api/task-service/complete-stage/{taskId}
+
+Example:
+POST http://localhost:5004/api/task-service/complete-stage/d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb
+
+Payload: None
+
+Output:
+{
+  "message": "Stage completed successfully. Task will transition to the next stage."
+}
+
+Status Code: 200 OK
+
+Note:
+- Completes the current stage and transitions to the next stage
+- Publishes TaskStageCompletedEvent which triggers stage transition
+- Increments member's completion count
+- If no next stage exists, task is marked as completed
+
+Error Responses:
+- 404 Not Found: Task with ID not found
+- 400 Bad Request: Cannot complete stage (e.g., no current stage, already completed, no next stage)
+- 500 Internal Server Error: Server error
+
+================================================================================
+4. ESCALATE STAGE
+================================================================================
+
+Local Endpoint:
+POST http://localhost:5004/api/task-service/escalate-stage/{taskId}
+
+Deployed Endpoint:
+POST https://api.workflowautomation.enginuo.com/api/task-service/escalate-stage/{taskId}
+
+Example:
+POST http://localhost:5004/api/task-service/escalate-stage/d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb
+
+Payload (Optional):
+{
+  "reason": "Unable to resolve issue, needs expert review"
+}
+
+Output:
+{
+  "message": "Stage escalated successfully. Task will transition to the next stage."
+}
+
+Status Code: 200 OK
+
+Note:
+- Escalates the current stage to the next stage
+- Unlike CompleteStage, this does NOT increment member's completion count
+- Used when a member cannot handle the task and needs to pass it to the next stage
+- If no next stage exists, task is marked as completed
+
+Error Responses:
+- 404 Not Found: Task with ID not found
+- 400 Bad Request: Cannot escalate stage (e.g., no current stage, no next stage)
+- 500 Internal Server Error: Server error
+
+================================================================================
+5. GET ENRICHED TASK BY ID
+================================================================================
+
+Local Endpoint:
+GET http://localhost:5004/api/tasks/{taskId}
+
+Deployed Endpoint:
+GET https://api.workflowautomation.enginuo.com/api/tasks/{taskId}
+
+Example:
+GET http://localhost:5004/api/tasks/d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb
+
+Payload: None
+
+Output:
+{
+  "taskId": "d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb",
+  "taskName": "Fix login bug",
+  "description": "Users cannot login with email",
+  "status": "InProgress",
+  "priority": "High",
+  "workflowId": 1,
+  "workflowName": "Bug Fix Workflow",
+  "stageName": "L1 Support",
+  "assignedToMemberId": 25,
+  "assignedToMemberName": "John Doe",
+  "createdAt": "2026-01-21T10:00:00Z"
+}
+
+Status Code: 200 OK
+
+Output Fields:
+- taskId: Unique task identifier (UUID)
+- taskName: Name of the task
+- description: Task description
+- status: Task status (string format: "Created", "InProgress", "Completed", etc.)
+- priority: Task priority level
+- workflowId: ID of the assigned workflow
+- workflowName: Name of the assigned workflow (enriched from WorkflowManagement.API)
+- stageName: Name of the current stage (enriched from WorkflowManagement.API)
+- assignedToMemberId: ID of the assigned member
+- assignedToMemberName: Full name of the assigned member (enriched from WorkflowManagement.API)
+- createdAt: Task creation timestamp
+
+Note:
+- This endpoint enriches task data from both TaskService and WorkflowManagement.API
+- Includes workflow name, assignee name, and stage name for better readability
+- Status is returned as string (not numeric)
+
+Error Responses:
+- 404 Not Found: Task with ID not found
+- 500 Internal Server Error: Server error
+
+================================================================================
+6. GET ALL TASKS
+================================================================================
+
+Local Endpoint:
+GET http://localhost:5004/api/tasks
+
+Deployed Endpoint:
+GET https://api.workflowautomation.enginuo.com/api/tasks
+
+Payload: None
+
+Output:
+[
+  {
+    "taskId": "d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb",
+    "taskName": "Fix login bug",
+    "description": "Users cannot login with email",
+    "status": "InProgress",
+    "priority": "High",
+    "dueDate": "2026-01-22T10:00:00Z",
+    "workflowId": 1,
+    "stageId": 2,
+    "stageName": "L1 Support",
+    "assignedToMemberId": 25,
+    "assignedToMemberName": "John Doe",
+    "completedByMemberIds": null,
+    "escalatedByMemberIds": null,
+    "isOverdue": false,
+    "createdAt": "2026-01-21T10:00:00Z",
+    "updatedAt": "2026-01-21T10:05:00Z"
+  },
+  {
+    "taskId": "c3f1d5c3-0036-4e0d-8050-16e3fb283ffb",
+    "taskName": "Implement new feature",
+    "description": "Add user authentication",
+    "status": "Completed",
+    "priority": "Medium",
+    "dueDate": "2026-01-20T10:00:00Z",
+    "workflowId": 1,
+    "stageId": 3,
+    "stageName": "L2 Review",
+    "assignedToMemberId": 26,
+    "assignedToMemberName": "Jane Smith",
+    "completedByMemberIds": "25,26",
+    "escalatedByMemberIds": null,
+    "isOverdue": false,
+    "createdAt": "2026-01-19T10:00:00Z",
+    "updatedAt": "2026-01-20T15:30:00Z"
+  }
+]
+
+Status Code: 200 OK
+
+Output Fields:
+- taskId: Unique task identifier (UUID)
+- taskName: Name of the task
+- description: Task description
+- status: Task status (string format)
+- priority: Task priority level
+- dueDate: Task due date (nullable)
+- workflowId: ID of the assigned workflow
+- stageId: ID of the current stage (nullable)
+- stageName: Name of the current stage (enriched)
+- assignedToMemberId: ID of the assigned member (nullable)
+- assignedToMemberName: Full name of the assigned member (enriched)
+- completedByMemberIds: Comma-separated member IDs who completed stages (nullable)
+- escalatedByMemberIds: Comma-separated member IDs who escalated stages (nullable)
+- isOverdue: Whether task is overdue
+- createdAt: Task creation timestamp
+- updatedAt: Task last update timestamp
+
+Note:
+- Returns all tasks from WorkflowManagement database
+- Tasks are enriched with stage names and member names
+- Returns empty array [] if no tasks exist
+
+Error Responses:
+- 500 Internal Server Error: Server error
+
+================================================================================
+COMPLETE TASK LIFECYCLE EXAMPLE
+================================================================================
+
+Step 1: Create Task
+POST http://localhost:5004/api/task-service
+{
+  "taskName": "Fix login bug",
+  "description": "Users cannot login",
+  "priority": "High",
+  "taskType": "Bug"
+}
+
+Response: { "taskId": "d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb", ... }
+
+Step 2: Wait for Orchestration (2-5 seconds)
+The system automatically:
+- Selects workflow
+- Configures SLA
+- Assigns to member
+- Starts in first stage
+
+Step 3: Get Enriched Task Details
+GET http://localhost:5004/api/tasks/d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb
+
+Response: { "taskId": "...", "status": "InProgress", "workflowName": "...", ... }
+
+Step 4: Update Status (if needed)
+PUT http://localhost:5004/api/task-service/status/d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb
+{
+  "status": "InProgress"
+}
+
+Step 5: Complete Stage (when work is done)
+POST http://localhost:5004/api/task-service/complete-stage/d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb
+
+Task transitions to next stage automatically
+
+Step 6: Escalate Stage (if cannot handle)
+POST http://localhost:5004/api/task-service/escalate-stage/d1a4a98a-57fc-4442-a7cd-95c4c0fe7ecb
+{
+  "reason": "Needs expert review"
+}
+
+Task transitions to next stage without incrementing completion count
+
+Step 7: Get All Tasks
+GET http://localhost:5004/api/tasks
+
+Returns all tasks with enriched data
+
+================================================================================
+ERROR RESPONSE FORMAT
+================================================================================
+
+All endpoints return errors in this format:
+
+{
+  "error": "Error message here"
+}
+
+Common Status Codes:
+- 200 OK - Success
+- 202 Accepted - Task creation initiated (async processing)
+- 204 No Content - Success (no response body)
+- 400 Bad Request - Invalid input
+- 404 Not Found - Resource not found
+- 500 Internal Server Error - Server error
+
+================================================================================
+AUTHENTICATION
+================================================================================
+
+Local Development:
+- Usually no authentication required
+- Check appsettings.Development.json for API key requirements
+
+Production:
+- Include API Key header: X-API-Key: YOUR_API_KEY
+- Include Bearer Token: Authorization: Bearer YOUR_TOKEN
+
+================================================================================
+Last Updated: January 2026
+================================================================================

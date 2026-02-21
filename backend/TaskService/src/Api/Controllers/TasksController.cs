@@ -82,6 +82,25 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
+    /// Sync all tasks from WorkflowManagement.API to TaskService
+    /// This ensures tasks created directly in WorkflowManagement.API are synced to TaskService
+    /// </summary>
+    [HttpPost("sync-from-workflow-management")]
+    public async Task<ActionResult> SyncTasksFromWorkflowManagement()
+    {
+        try
+        {
+            await _taskService.SyncAllTasksFromWorkflowManagementAsync();
+            return Ok(new { message = "Tasks synced from WorkflowManagement.API to TaskService. Check logs for details." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing tasks from WorkflowManagement.API");
+            return StatusCode(500, new { error = "An error occurred while syncing tasks" });
+        }
+    }
+
+    /// <summary>
     /// Get task by ID
     /// </summary>
     [HttpGet("{id}")]
@@ -105,7 +124,7 @@ public class TasksController : ControllerBase
     /// <summary>
     /// Update task status (e.g., mark as Completed, InProgress, etc.)
     /// </summary>
-    [HttpPut("{id}/status")]
+    [HttpPut("status/{id}")]
     public async Task<ActionResult> UpdateTaskStatus(Guid id, [FromBody] UpdateTaskStatusDto statusDto)
     {
         try
