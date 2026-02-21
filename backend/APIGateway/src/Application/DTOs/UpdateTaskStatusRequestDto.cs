@@ -2,9 +2,10 @@ namespace APIGateway.Application.DTOs;
 
 /// <summary>
 /// DTO for updating task status via API Gateway
-/// Status values: 0=Created, 1=WorkflowSelected, 2=SLAConfigured, 3=Assigned, 4=InProgress, 5=Completed, 6=Overdue, 7=Cancelled
+/// Status values: "Created", "WorkflowSelected", "SLAConfigured", "Assigned", "InProgress", "Completed", "Overdue", "Cancelled", "Escalated"
+/// Also accepts numeric values (0-8) for backward compatibility
 /// </summary>
 public class UpdateTaskStatusRequestDto
 {
-    public int Status { get; set; }  // Enum value (0-7)
+    public string Status { get; set; } = string.Empty;
 }

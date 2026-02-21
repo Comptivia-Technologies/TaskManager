@@ -14,6 +14,20 @@ public class StatusController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly ILogger<StatusController> _logger;
 
+    // Valid status values
+    private static readonly Dictionary<string, int> StatusMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "Created", 0 },
+        { "WorkflowSelected", 1 },
+        { "SLAConfigured", 2 },
+        { "Assigned", 3 },
+        { "InProgress", 4 },
+        { "Completed", 5 },
+        { "Overdue", 6 },
+        { "Cancelled", 7 },
+        { "Escalated", 8 }
+    };
+
     public StatusController(
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
@@ -37,14 +51,31 @@ public class StatusController : ControllerBase
             var httpClient = _httpClientFactory.CreateClient();
             httpClient.Timeout = TimeSpan.FromSeconds(30);
 
-            // Validate status value (0-7)
-            if (request.Status < 0 || request.Status > 7)
+            // Parse status string to numeric value (supports both string and numeric)
+            int statusValue;
+            if (int.TryParse(request.Status, out int statusNumber))
             {
-                return BadRequest(new { error = "Status must be between 0 and 7" });
+                // Numeric input (backward compatibility)
+                if (statusNumber < 0 || statusNumber > 8)
+                {
+                    return BadRequest(new { error = "Status must be between 0 and 8" });
+                }
+                statusValue = statusNumber;
+            }
+            else
+            {
+                // String input - case-insensitive lookup
+                if (!StatusMap.TryGetValue(request.Status, out statusValue))
+                {
+                    var validStatuses = string.Join(", ", StatusMap.Keys);
+                    return BadRequest(new { 
+                        error = $"Invalid status '{request.Status}'. Valid values are: {validStatuses} (or numeric 0-8)" 
+                    });
+                }
             }
 
             // Create DTO for TaskService
-            var updateDto = new { Status = request.Status };
+            var updateDto = new { Status = statusValue };
 
             var response = await httpClient.PutAsJsonAsync(
                 $"{taskServiceApiUrl}/task-service/{taskId}/status",
@@ -64,10 +95,11 @@ public class StatusController : ControllerBase
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
+            var statusName = StatusMap.FirstOrDefault(kvp => kvp.Value == statusValue).Key ?? statusValue.ToString();
             _logger.LogInformation("Task status updated successfully. TaskId: {TaskId}, Status: {Status}", 
-                taskId, request.Status);
+                taskId, statusName);
 
-            return Ok(new { message = "Task status updated successfully", taskId = taskId, status = request.Status });
+            return Ok(new { message = "Task status updated successfully", taskId = taskId, status = statusName });
         }
         catch (Exception ex)
         {
