@@ -79,9 +79,96 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+
+// Ensure database and tables are created before starting event consumers
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<WorkflowDbContext>();
+    try
+    {
+        logger.LogInformation("Ensuring database and tables are created...");
+        bool tableExists = true;
+        try
+        {
+            await dbContext.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"WorkflowSelections\" LIMIT 1");
+            logger.LogInformation("WorkflowSelections table exists.");
+        }
+        catch
+        {
+            tableExists = false;
+            logger.LogInformation("WorkflowSelections table does not exist. Creating...");
+        }
+        if (!tableExists)
+        {
+            var createTableSql = @"
+                CREATE TABLE IF NOT EXISTS ""WorkflowSelections"" (
+                    ""SelectionId"" UUID PRIMARY KEY,
+                    ""OrganizationId"" UUID NOT NULL,
+                    ""TaskId"" UUID NOT NULL,
+                    ""WorkflowId"" UUID NOT NULL,
+                    ""WorkflowName"" VARCHAR(200) NOT NULL,
+                    ""SelectionReason"" VARCHAR(500),
+                    ""SelectedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
+                    ""TaskCreatedEventId"" UUID,
+                    ""StageOrchestrationStarted"" BOOLEAN NOT NULL DEFAULT FALSE,
+                    ""StageOrchestrationStartedAt"" TIMESTAMP WITH TIME ZONE NULL
+                )";
+            await dbContext.Database.ExecuteSqlRawAsync(createTableSql);
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_OrganizationId"" ON ""WorkflowSelections"" (""OrganizationId"")");
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_WorkflowSelections_TaskId"" ON ""WorkflowSelections"" (""TaskId"")");
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_WorkflowId"" ON ""WorkflowSelections"" (""WorkflowId"")");
+            logger.LogInformation("WorkflowSelections table created successfully.");
+        }
+        else
+        {
+            try
+            {
+                var connection = dbContext.Database.GetDbConnection();
+                var wasOpen = connection.State == System.Data.ConnectionState.Open;
+                if (!wasOpen)
+                    await connection.OpenAsync();
+                try
+                {
+                    using var command = connection.CreateCommand();
+                    command.CommandText = @"
+                        SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'WorkflowSelections' AND column_name = 'OrganizationId'";
+                    var orgColumnExists = Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+                    if (!orgColumnExists)
+                    {
+                        logger.LogInformation("OrganizationId column does not exist on WorkflowSelections. Adding...");
+                        await dbContext.Database.ExecuteSqlRawAsync(@"
+                            ALTER TABLE ""WorkflowSelections""
+                            ADD COLUMN ""OrganizationId"" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'");
+                        await dbContext.Database.ExecuteSqlRawAsync(@"
+                            CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_OrganizationId"" ON ""WorkflowSelections"" (""OrganizationId"")");
+                        logger.LogInformation("OrganizationId column added to WorkflowSelections.");
+                    }
+                }
+                finally
+                {
+                    if (!wasOpen)
+                        await connection.CloseAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not verify/add OrganizationId on WorkflowSelections. It may already exist.");
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error creating database: {Message}", ex.Message);
+    }
+}
+
 // Start EventBus consumers
 var eventBus = app.Services.GetRequiredService<IEventBus>();
-var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
@@ -171,103 +258,6 @@ try
 catch (Exception ex)
 {
     logger.LogError(ex, "✗ Failed to start TaskStageEscalationTriggeredEvent consumer");
-}
-
-// Ensure database and tables are created
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<WorkflowDbContext>();
-    
-    try
-    {
-        logger.LogInformation("Ensuring database and tables are created...");
-        
-        // Check if WorkflowSelections table exists
-        bool tableExists = true;
-        try
-        {
-            await dbContext.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"WorkflowSelections\" LIMIT 1");
-            logger.LogInformation("WorkflowSelections table exists.");
-        }
-        catch
-        {
-            tableExists = false;
-            logger.LogInformation("WorkflowSelections table does not exist. Creating...");
-        }
-        
-        if (!tableExists)
-        {
-            // Create table manually using raw SQL
-            var createTableSql = @"
-                CREATE TABLE IF NOT EXISTS ""WorkflowSelections"" (
-                    ""SelectionId"" UUID PRIMARY KEY,
-                    ""OrganizationId"" UUID NOT NULL,
-                    ""TaskId"" UUID NOT NULL,
-                    ""WorkflowId"" UUID NOT NULL,
-                    ""WorkflowName"" VARCHAR(200) NOT NULL,
-                    ""SelectionReason"" VARCHAR(500),
-                    ""SelectedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
-                    ""TaskCreatedEventId"" UUID,
-                    ""StageOrchestrationStarted"" BOOLEAN NOT NULL DEFAULT FALSE,
-                    ""StageOrchestrationStartedAt"" TIMESTAMP WITH TIME ZONE NULL
-                )";
-            
-            await dbContext.Database.ExecuteSqlRawAsync(createTableSql);
-            
-            // Create indexes
-            await dbContext.Database.ExecuteSqlRawAsync(@"
-                CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_OrganizationId"" ON ""WorkflowSelections"" (""OrganizationId"")");
-            await dbContext.Database.ExecuteSqlRawAsync(@"
-                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_WorkflowSelections_TaskId"" ON ""WorkflowSelections"" (""TaskId"")");
-            await dbContext.Database.ExecuteSqlRawAsync(@"
-                CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_WorkflowId"" ON ""WorkflowSelections"" (""WorkflowId"")");
-            
-            logger.LogInformation("WorkflowSelections table created successfully.");
-        }
-        else
-        {
-            // Table exists - add OrganizationId column if missing
-            try
-            {
-                var connection = dbContext.Database.GetDbConnection();
-                var wasOpen = connection.State == System.Data.ConnectionState.Open;
-                if (!wasOpen)
-                    await connection.OpenAsync();
-                try
-                {
-                    using var command = connection.CreateCommand();
-                    command.CommandText = @"
-                        SELECT COUNT(*) FROM information_schema.columns
-                        WHERE table_schema = 'public' AND table_name = 'WorkflowSelections' AND column_name = 'OrganizationId'";
-                    var orgColumnExists = Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
-                    if (!orgColumnExists)
-                    {
-                        logger.LogInformation("OrganizationId column does not exist on WorkflowSelections. Adding...");
-                        await dbContext.Database.ExecuteSqlRawAsync(@"
-                            ALTER TABLE ""WorkflowSelections""
-                            ADD COLUMN ""OrganizationId"" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'");
-                        await dbContext.Database.ExecuteSqlRawAsync(@"
-                            CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_OrganizationId"" ON ""WorkflowSelections"" (""OrganizationId"")");
-                        logger.LogInformation("OrganizationId column added to WorkflowSelections.");
-                    }
-                }
-                finally
-                {
-                    if (!wasOpen)
-                        await connection.CloseAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Could not verify/add OrganizationId on WorkflowSelections. It may already exist.");
-            }
-        }
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Error creating database: {Message}", ex.Message);
-        // Don't throw - let the service start and handle errors gracefully
-    }
 }
 
 app.Run();
