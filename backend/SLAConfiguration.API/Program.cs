@@ -37,6 +37,9 @@ builder.Services.AddDbContext<SLAConfigurationDbContext>(options =>
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program));
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentOrganizationAccessor, CurrentOrganizationAccessor>();
+
 // Repositories
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<ISLARepository, SLARepository>();
@@ -112,12 +115,16 @@ using (var scope = app.Services.CreateScope())
                 createCommand.CommandText = @"
                     CREATE TABLE ""SLAConfigurations"" (
                         ""SLAConfigurationId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        ""OrganizationId"" UUID NOT NULL,
                         ""WorkflowId"" UUID NOT NULL,
                         ""PriorityLevelsJson"" JSONB NOT NULL DEFAULT '{}',
                         ""CreatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
                         ""UpdatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
                         CONSTRAINT ""UQ_SLAConfigurations_WorkflowId"" UNIQUE (""WorkflowId"")
                     );
+                    
+                    CREATE INDEX ""IX_SLAConfigurations_OrganizationId"" 
+                    ON ""SLAConfigurations"" (""OrganizationId"");
                     
                     CREATE INDEX ""IX_SLAConfigurations_WorkflowId"" 
                     ON ""SLAConfigurations"" (""WorkflowId"");
@@ -128,6 +135,25 @@ using (var scope = app.Services.CreateScope())
             else
             {
                 logger.LogInformation("SLAConfigurations table already exists.");
+                
+                // Check if OrganizationId column exists and add if missing
+                using var orgCheckCommand = connection.CreateCommand();
+                orgCheckCommand.CommandText = @"
+                    SELECT COUNT(*) 
+                    FROM information_schema.columns 
+                    WHERE table_schema = 'public' AND table_name = 'SLAConfigurations' AND column_name = 'OrganizationId'
+                ";
+                var orgColumnExists = Convert.ToInt32(await orgCheckCommand.ExecuteScalarAsync()) > 0;
+                if (!orgColumnExists)
+                {
+                    await dbContext.Database.ExecuteSqlRawAsync(@"
+                        ALTER TABLE ""SLAConfigurations"" 
+                        ADD COLUMN ""OrganizationId"" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'");
+                    await dbContext.Database.ExecuteSqlRawAsync(@"
+                        CREATE INDEX IF NOT EXISTS ""IX_SLAConfigurations_OrganizationId"" 
+                        ON ""SLAConfigurations"" (""OrganizationId"")");
+                    logger.LogInformation("OrganizationId column added to SLAConfigurations.");
+                }
                 
                 // Check if columns need to be updated to timestamp with time zone
                 using var checkCommand = connection.CreateCommand();

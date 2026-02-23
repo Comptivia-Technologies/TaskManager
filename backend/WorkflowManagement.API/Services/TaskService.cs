@@ -12,6 +12,7 @@ public class TaskService : ITaskService
     private readonly IStageRepository _stageRepository;
     private readonly IMemberRepository _memberRepository;
     private readonly IWorkflowService _workflowService;
+    private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly IMapper _mapper;
 
     public TaskService(
@@ -20,6 +21,7 @@ public class TaskService : ITaskService
         IStageRepository stageRepository,
         IMemberRepository memberRepository,
         IWorkflowService workflowService,
+        ICurrentOrganizationAccessor orgAccessor,
         IMapper mapper)
     {
         _taskRepository = taskRepository;
@@ -27,21 +29,33 @@ public class TaskService : ITaskService
         _stageRepository = stageRepository;
         _memberRepository = memberRepository;
         _workflowService = workflowService;
+        _orgAccessor = orgAccessor;
         _mapper = mapper;
     }
 
     public async Task<TaskReadDto> CreateTaskAsync(TaskCreateDto taskCreateDto)
     {
-        if (!await _workflowRepository.ExistsAsync(taskCreateDto.WorkflowId))
-            throw new ArgumentException("Workflow does not exist");
-
-        if (taskCreateDto.StageId.HasValue && !await _stageRepository.ExistsAsync(taskCreateDto.StageId.Value))
-            throw new ArgumentException("Stage does not exist");
-
-        if (taskCreateDto.AssignedToMemberId.HasValue && !await _memberRepository.ExistsAsync(taskCreateDto.AssignedToMemberId.Value))
-            throw new ArgumentException("Member does not exist");
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+        var workflow = await _workflowRepository.GetByIdAsync(taskCreateDto.WorkflowId);
+        if (workflow == null || workflow.OrganizationId != orgId.Value)
+            throw new ArgumentException("Workflow does not exist or does not belong to your organization.");
+        if (taskCreateDto.StageId.HasValue)
+        {
+            var stage = await _stageRepository.GetByIdAsync(taskCreateDto.StageId.Value);
+            if (stage == null || stage.OrganizationId != orgId.Value)
+                throw new ArgumentException("Stage does not exist or does not belong to your organization.");
+        }
+        if (taskCreateDto.AssignedToMemberId.HasValue)
+        {
+            var member = await _memberRepository.GetByIdAsync(taskCreateDto.AssignedToMemberId.Value);
+            if (member == null || member.OrganizationId != orgId.Value)
+                throw new ArgumentException("Member does not exist or does not belong to your organization.");
+        }
 
         var task = _mapper.Map<Models.Task>(taskCreateDto);
+        task.OrganizationId = orgId.Value;
         
         // Use provided TaskId if available (for sync from TaskService), otherwise generate new one
         if (taskCreateDto.TaskId.HasValue)
@@ -67,18 +81,14 @@ public class TaskService : ITaskService
         task.UpdatedAt = DateTime.UtcNow;
 
         var createdTask = await _taskRepository.AddAsync(task);
-        
-        // Update workflow JSON after task creation
+
         try
         {
             await _workflowService.UpdateWorkflowJsonAsync(createdTask.WorkflowId);
         }
-        catch
-        {
-            // Log but don't fail task creation if JSON update fails
-        }
+        catch { }
 
-        var tasks = await _taskRepository.GetTasksWithDetailsAsync();
+        var tasks = await _taskRepository.GetTasksWithDetailsByOrganizationAsync(orgId.Value);
         var taskWithDetails = tasks.FirstOrDefault(t => t.TaskId == createdTask.TaskId);
         
         if (taskWithDetails == null)
@@ -95,7 +105,10 @@ public class TaskService : ITaskService
 
     public async Task<IEnumerable<TaskReadDto>> GetAllTasksAsync()
     {
-        var tasks = await _taskRepository.GetTasksWithDetailsAsync();
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+        var tasks = await _taskRepository.GetTasksWithDetailsByOrganizationAsync(orgId.Value);
         var tasksDto = _mapper.Map<IEnumerable<TaskReadDto>>(tasks);
         var tasksList = tasksDto.ToList();
 
@@ -116,11 +129,14 @@ public class TaskService : ITaskService
 
     public async Task<TaskReadDto?> GetTaskByIdAsync(Guid id)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var task = await _taskRepository.GetByIdAsync(id);
-        if (task == null)
+        if (task == null || task.OrganizationId != orgId.Value)
             return null;
 
-        var tasks = await _taskRepository.GetTasksWithDetailsAsync();
+        var tasks = await _taskRepository.GetTasksWithDetailsByOrganizationAsync(orgId.Value);
         var taskWithDetails = tasks.FirstOrDefault(t => t.TaskId == id);
         if (taskWithDetails == null)
             return null;
@@ -136,15 +152,24 @@ public class TaskService : ITaskService
 
     public async Task<TaskReadDto?> UpdateTaskAsync(Guid id, TaskUpdateDto taskUpdateDto)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var task = await _taskRepository.GetByIdAsync(id);
-        if (task == null)
+        if (task == null || task.OrganizationId != orgId.Value)
             return null;
-
-        if (taskUpdateDto.StageId.HasValue && !await _stageRepository.ExistsAsync(taskUpdateDto.StageId.Value))
-            throw new ArgumentException("Stage does not exist");
-
-        if (taskUpdateDto.AssignedToMemberId.HasValue && !await _memberRepository.ExistsAsync(taskUpdateDto.AssignedToMemberId.Value))
-            throw new ArgumentException("Member does not exist");
+        if (taskUpdateDto.StageId.HasValue)
+        {
+            var stage = await _stageRepository.GetByIdAsync(taskUpdateDto.StageId.Value);
+            if (stage == null || stage.OrganizationId != orgId.Value)
+                throw new ArgumentException("Stage does not exist or does not belong to your organization.");
+        }
+        if (taskUpdateDto.AssignedToMemberId.HasValue)
+        {
+            var member = await _memberRepository.GetByIdAsync(taskUpdateDto.AssignedToMemberId.Value);
+            if (member == null || member.OrganizationId != orgId.Value)
+                throw new ArgumentException("Member does not exist or does not belong to your organization.");
+        }
 
         // Ensure DueDate is UTC before mapping
         if (taskUpdateDto.DueDate.HasValue)
@@ -203,8 +228,11 @@ public class TaskService : ITaskService
 
     public async Task<bool> DeleteTaskAsync(Guid id)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var task = await _taskRepository.GetByIdAsync(id);
-        if (task == null)
+        if (task == null || task.OrganizationId != orgId.Value)
             return false;
 
         var workflowId = task.WorkflowId;

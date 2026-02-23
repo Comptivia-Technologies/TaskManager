@@ -12,19 +12,24 @@ public class TeamService : ITeamService
     private readonly ITeamRepository _teamRepository;
     private readonly IStageRepository _stageRepository;
     private readonly ApplicationDbContext _context;
+    private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly IMapper _mapper;
 
-    public TeamService(ITeamRepository teamRepository, IStageRepository stageRepository, ApplicationDbContext context, IMapper mapper)
+    public TeamService(ITeamRepository teamRepository, IStageRepository stageRepository, ApplicationDbContext context, ICurrentOrganizationAccessor orgAccessor, IMapper mapper)
     {
         _teamRepository = teamRepository;
         _stageRepository = stageRepository;
         _context = context;
+        _orgAccessor = orgAccessor;
         _mapper = mapper;
     }
 
     public async Task<IEnumerable<TeamReadDto>> GetAllTeamsAsync()
     {
-        var teams = await _teamRepository.GetAllAsync();
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+        var teams = await _teamRepository.GetTeamsByOrganizationAsync(orgId.Value);
         var teamDtos = _mapper.Map<IEnumerable<TeamReadDto>>(teams).ToList();
         
         // Get all team IDs
@@ -32,9 +37,8 @@ public class TeamService : ITeamService
         
         if (teamIds.Any())
         {
-            // Load all stages with their workflows for the teams
             var stages = await _context.Stages
-                .Where(s => teamIds.Contains(s.TeamId))
+                .Where(s => teamIds.Contains(s.TeamId) && s.OrganizationId == orgId.Value)
                 .Include(s => s.Workflow)
                 .ToListAsync();
             
@@ -68,13 +72,22 @@ public class TeamService : ITeamService
 
     public async Task<TeamReadDto?> GetTeamByIdAsync(Guid id)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var team = await _teamRepository.GetByIdAsync(id);
-        return team == null ? null : _mapper.Map<TeamReadDto>(team);
+        if (team == null || team.OrganizationId != orgId.Value)
+            return null;
+        return _mapper.Map<TeamReadDto>(team);
     }
 
     public async Task<TeamReadDto> CreateTeamAsync(TeamCreateDto teamCreateDto)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var team = _mapper.Map<Team>(teamCreateDto);
+        team.OrganizationId = orgId.Value;
         team.CreatedAt = DateTime.UtcNow;
         team.UpdatedAt = DateTime.UtcNow;
 
@@ -84,8 +97,11 @@ public class TeamService : ITeamService
 
     public async Task<TeamReadDto?> UpdateTeamAsync(Guid id, TeamUpdateDto teamUpdateDto)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var team = await _teamRepository.GetByIdAsync(id);
-        if (team == null)
+        if (team == null || team.OrganizationId != orgId.Value)
             return null;
 
         _mapper.Map(teamUpdateDto, team);
@@ -106,8 +122,11 @@ public class TeamService : ITeamService
 
     public async System.Threading.Tasks.Task<bool> DeleteTeamAsync(Guid id)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var team = await _teamRepository.GetByIdAsync(id);
-        if (team == null)
+        if (team == null || team.OrganizationId != orgId.Value)
             return false;
 
         // Check for dependencies

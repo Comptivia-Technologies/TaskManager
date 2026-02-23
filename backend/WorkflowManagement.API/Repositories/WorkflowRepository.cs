@@ -54,5 +54,14 @@ public class WorkflowRepository : Repository<Workflow>, IWorkflowRepository
             .Where(w => w.TeamId == teamId)
             .ToListAsync();
     }
+
+    public async Task<IEnumerable<Workflow>> GetWorkflowsByOrganizationAsync(Guid organizationId)
+    {
+        return await _context.Workflows
+            .Include(w => w.Team)
+            .Include(w => w.Stages)
+            .Where(w => w.OrganizationId == organizationId)
+            .ToListAsync();
+    }
 }
 

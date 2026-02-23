@@ -3,10 +3,13 @@ import { User } from 'firebase/auth';
 import { authService } from '../services/authService';
 import { auth } from '../firebase/config';
 import { fetchTenantIdByEmail } from '../services/tenantService';
+import { getOrganizationIdFromToken } from '../utils/tokenUtils';
+import { setOrganizationIdCookie, getOrganizationIdFromCookie, clearOrganizationIdCookie } from '../utils/cookieUtils';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  organizationId: string | null;
   signIn: (email: string, password: string, tenantId?: string | null) => Promise<void>;
   signUp: (email: string, password: string, tenantId?: string | null) => Promise<void>;
   signOut: () => Promise<void>;
@@ -36,21 +39,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(null);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load tenant from localStorage if exists and restore on auth instance
+    // Load tenant and org from storage if exists and restore on auth instance
     const savedTenant = localStorage.getItem('currentTenantId');
     if (savedTenant) {
       setCurrentTenantId(savedTenant);
       (auth as any).tenantId = savedTenant;
     }
+    const savedOrgId = getOrganizationIdFromCookie();
+    if (savedOrgId) setOrganizationId(savedOrgId);
 
     // Listen for auth state changes
     const unsubscribe = authService.onAuthStateChange(async (user) => {
       setUser(user);
       setLoading(false);
 
-      // Load tenant for current user if exists
       if (user) {
         const userTenant = localStorage.getItem(`tenant_${user.uid}`);
         if (userTenant) {
@@ -58,17 +63,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           (auth as any).tenantId = userTenant;
         }
 
-        // Store/refresh auth token when user is authenticated
         try {
           const idToken = await user.getIdToken();
           localStorage.setItem('authToken', idToken);
-          localStorage.setItem('authTokenExpiry', String(Date.now() + 3600000)); // 1 hour expiry
+          localStorage.setItem('authTokenExpiry', String(Date.now() + 3600000));
+          const orgId = getOrganizationIdFromToken(idToken);
+          if (orgId) {
+            setOrganizationId(orgId);
+            setOrganizationIdCookie(orgId);
+          }
         } catch (error) {
           console.error('Error storing auth token:', error);
         }
       } else {
         setCurrentTenantId(null);
+        setOrganizationId(null);
         (auth as any).tenantId = null;
+        clearOrganizationIdCookie();
         localStorage.removeItem('authToken');
         localStorage.removeItem('authTokenExpiry');
       }
@@ -94,6 +105,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const handleSignOut = async () => {
     await authService.signOut();
     setCurrentTenantId(null);
+    setOrganizationId(null);
+    clearOrganizationIdCookie();
   };
 
   const resetPassword = async (email: string, tenantId?: string | null) => {
@@ -125,6 +138,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value: AuthContextType = {
     user,
     loading,
+    organizationId,
     signIn,
     signUp,
     signOut: handleSignOut,

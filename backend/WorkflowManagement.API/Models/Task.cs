@@ -3,6 +3,7 @@ namespace WorkflowManagement.API.Models;
 public class Task
 {
     public Guid TaskId { get; set; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
     public string TaskName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string Status { get; set; } = "Pending";

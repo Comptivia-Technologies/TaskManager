@@ -1,12 +1,32 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using Shared.Messaging;
 using APIGateway.Infrastructure.Middleware;
+using APIGateway.Infrastructure.Transforms;
+using Yarp.ReverseProxy.Transforms.Builder;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var firebaseProjectId = builder.Configuration["Firebase:ProjectId"] ?? "product-hub-478006";
 
 // Add services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.Authority = $"https://securetoken.google.com/{firebaseProjectId}";
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidIssuer = $"https://securetoken.google.com/{firebaseProjectId}",
+            ValidAudience = firebaseProjectId,
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+        };
+    });
 
 // Event Bus - Register all providers (factory pattern allows switching via config) for EventBus
 builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
@@ -27,7 +47,11 @@ builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFa
 // ReverseProxy__Clusters__{cluster-name}__Destinations__{destination-name}__Address
 var reverseProxyConfig = builder.Configuration.GetSection("ReverseProxy");
 builder.Services.AddReverseProxy()
-    .LoadFromConfig(reverseProxyConfig);
+    .LoadFromConfig(reverseProxyConfig)
+    .AddTransforms(transformBuilderContext =>
+    {
+        transformBuilderContext.RequestTransforms.Add(new ForwardOrganizationIdTransform());
+    });
 
 // HttpClient for proxy
 builder.Services.AddHttpClient();
@@ -55,9 +79,8 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 app.UseHttpsRedirection();
 
-// API Key Authentication Middleware (before authorization)
-app.UseMiddleware<ApiKeyMiddleware>();
-
+app.UseAuthentication();
+app.UseMiddleware<OrganizationAuthMiddleware>();
 app.UseAuthorization();
 
 // Map controllers (for task creation endpoint that publishes to EventBus)

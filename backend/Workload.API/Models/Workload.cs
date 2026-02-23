@@ -6,6 +6,7 @@ namespace Workload.API.Models;
 public class Workload
 {
     public Guid WorkloadId { get; set; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
     public Guid MemberId { get; set; }
     public double WorkloadScore { get; set; }
     public string WorkloadStatus { get; set; } = string.Empty; // Available, PartiallyLoaded, FullyLoaded, Overloaded

@@ -25,6 +25,8 @@ public class WorkloadDbContext : DbContext
         {
             entity.ToTable("Workloads");
             entity.HasKey(e => e.WorkloadId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.MemberId).IsRequired();
             entity.Property(e => e.WorkloadScore).IsRequired();
             entity.Property(e => e.WorkloadStatus).IsRequired().HasMaxLength(50);
@@ -46,6 +48,8 @@ public class WorkloadDbContext : DbContext
         {
             entity.ToTable("Members");
             entity.HasKey(e => e.MemberId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
@@ -59,6 +63,8 @@ public class WorkloadDbContext : DbContext
         {
             entity.ToTable("Tasks");
             entity.HasKey(e => e.TaskId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.TaskName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Status).HasMaxLength(50);
             entity.Property(e => e.Priority).HasMaxLength(50);

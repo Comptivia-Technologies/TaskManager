@@ -5,6 +5,7 @@ namespace SLAConfiguration.API.Models;
 public class SLAConfiguration
 {
     public Guid SLAConfigurationId { get; set; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
     public Guid WorkflowId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -18,6 +19,7 @@ public class SLAConfiguration
 public class Workflow
 {
     public Guid WorkflowId { get; set; }
+    public Guid OrganizationId { get; set; }
     public string WorkflowName { get; set; } = string.Empty;
 }
 

@@ -6,6 +6,7 @@ namespace Shared.Contracts.EventContracts;
 public class TaskCreatedEvent
 {
     public Guid TaskId { get; set; }
+    public Guid OrganizationId { get; set; }
     public string TaskName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string Priority { get; set; } = string.Empty;  // Will be assigned by rule engine

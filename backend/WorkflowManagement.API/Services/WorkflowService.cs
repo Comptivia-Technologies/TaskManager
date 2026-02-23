@@ -13,23 +13,24 @@ public class WorkflowService : IWorkflowService
     private readonly IWorkflowRepository _workflowRepository;
     private readonly ITeamRepository _teamRepository;
     private readonly ApplicationDbContext _context;
+    private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly IMapper _mapper;
 
-    public WorkflowService(IWorkflowRepository workflowRepository, ITeamRepository teamRepository, ApplicationDbContext context, IMapper mapper)
+    public WorkflowService(IWorkflowRepository workflowRepository, ITeamRepository teamRepository, ApplicationDbContext context, ICurrentOrganizationAccessor orgAccessor, IMapper mapper)
     {
         _workflowRepository = workflowRepository;
         _teamRepository = teamRepository;
         _context = context;
+        _orgAccessor = orgAccessor;
         _mapper = mapper;
     }
 
     public async System.Threading.Tasks.Task<IEnumerable<WorkflowReadDto>> GetAllWorkflowsAsync()
     {
-        // Load workflows with stages included
-        var workflows = await _context.Workflows
-            .Include(w => w.Stages)
-            .Include(w => w.Team)
-            .ToListAsync();
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+        var workflows = await _workflowRepository.GetWorkflowsByOrganizationAsync(orgId.Value);
         
         var workflowsDto = new List<WorkflowReadDto>();
 
@@ -66,8 +67,11 @@ public class WorkflowService : IWorkflowService
 
     public async System.Threading.Tasks.Task<WorkflowReadDto?> GetWorkflowByIdAsync(Guid id)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var workflow = await _workflowRepository.GetWorkflowWithStagesAndTasksAsync(id);
-        if (workflow == null)
+        if (workflow == null || workflow.OrganizationId != orgId.Value)
             return null;
 
         var workflowDto = _mapper.Map<WorkflowReadDto>(workflow);
@@ -90,16 +94,20 @@ public class WorkflowService : IWorkflowService
 
     public async System.Threading.Tasks.Task<WorkflowReadDto> CreateWorkflowAsync(WorkflowCreateDto workflowCreateDto)
     {
-        // Treat teamId Guid.Empty as null (workflows don't need teams, stages have teams)
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         if (workflowCreateDto.TeamId.HasValue && workflowCreateDto.TeamId.Value == Guid.Empty)
-        {
             workflowCreateDto.TeamId = null;
+        if (workflowCreateDto.TeamId.HasValue)
+        {
+            var team = await _teamRepository.GetByIdAsync(workflowCreateDto.TeamId.Value);
+            if (team == null || team.OrganizationId != orgId.Value)
+                throw new ArgumentException("Team does not exist or does not belong to your organization.");
         }
 
-        if (workflowCreateDto.TeamId.HasValue && !await _teamRepository.ExistsAsync(workflowCreateDto.TeamId.Value))
-            throw new ArgumentException("Team does not exist");
-
         var workflow = _mapper.Map<Workflow>(workflowCreateDto);
+        workflow.OrganizationId = orgId.Value;
         workflow.CreatedAt = DateTime.UtcNow;
         workflow.UpdatedAt = DateTime.UtcNow;
 
@@ -128,8 +136,11 @@ public class WorkflowService : IWorkflowService
 
     public async System.Threading.Tasks.Task<WorkflowReadDto?> UpdateWorkflowAsync(Guid id, WorkflowUpdateDto workflowUpdateDto)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var workflow = await _workflowRepository.GetByIdAsync(id);
-        if (workflow == null)
+        if (workflow == null || workflow.OrganizationId != orgId.Value)
             return null;
 
         _mapper.Map(workflowUpdateDto, workflow);
@@ -149,6 +160,12 @@ public class WorkflowService : IWorkflowService
 
     public async System.Threading.Tasks.Task<bool> DeleteWorkflowAsync(Guid id)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+        var workflow = await _workflowRepository.GetByIdAsync(id);
+        if (workflow == null || workflow.OrganizationId != orgId.Value)
+            return false;
         return await _workflowRepository.DeleteAsync(id);
     }
 

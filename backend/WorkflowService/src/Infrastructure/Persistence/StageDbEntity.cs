@@ -6,6 +6,7 @@ namespace WorkflowService.Infrastructure.Persistence;
 public class StageDbEntity
 {
     public Guid StageId { get; set; }
+    public Guid OrganizationId { get; set; }
     public string StageName { get; set; } = string.Empty;
     public int StageOrder { get; set; }
     public Guid WorkflowId { get; set; }

@@ -8,5 +8,6 @@ public interface ITaskRepository : IRepository<Models.Task>
     System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksByStageAsync(Guid stageId);
     System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksByMemberAsync(Guid memberId);
     System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksWithDetailsAsync();
+    System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksWithDetailsByOrganizationAsync(Guid organizationId);
 }
 

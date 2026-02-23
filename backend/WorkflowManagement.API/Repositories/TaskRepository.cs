@@ -48,5 +48,15 @@ public class TaskRepository : Repository<Models.Task>, ITaskRepository
             .Include(t => t.AssignedToMember)
             .ToListAsync();
     }
+
+    public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksWithDetailsByOrganizationAsync(Guid organizationId)
+    {
+        return await _context.Tasks
+            .Include(t => t.Workflow)
+            .Include(t => t.Stage)
+            .Include(t => t.AssignedToMember)
+            .Where(t => t.OrganizationId == organizationId)
+            .ToListAsync();
+    }
 }
 

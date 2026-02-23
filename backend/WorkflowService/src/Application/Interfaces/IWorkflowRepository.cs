@@ -21,6 +21,7 @@ public interface IWorkflowRepository
 public class Workflow
 {
     public Guid WorkflowId { get; set; }
+    public Guid OrganizationId { get; set; }
     public string WorkflowName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public Guid? TeamId { get; set; }

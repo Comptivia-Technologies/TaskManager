@@ -3,6 +3,7 @@ namespace WorkflowManagement.API.Models;
 public class Team
 {
     public Guid TeamId { get; set; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
     public string TeamName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public DateTime CreatedAt { get; set; }

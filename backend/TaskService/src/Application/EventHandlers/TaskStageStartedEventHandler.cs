@@ -110,7 +110,7 @@ public class TaskStageStartedEventHandler
                     WorkflowId = @event.WorkflowId,
                     NewTeamId = @event.TeamId,
                     PreviousMemberId = task.MemberId,
-                    PreviousTeamId = needsReassignment ? await GetMemberTeamIdAsync(task.MemberId) : null,
+                    PreviousTeamId = needsReassignment ? await GetMemberTeamIdAsync(task.MemberId, task.OrganizationId) : null,
                     TaskPriority = task.Priority,
                     RequestedAt = DateTime.UtcNow,
                     CorrelationId = correlationId
@@ -151,7 +151,7 @@ public class TaskStageStartedEventHandler
         }
 
         // Get current member's team
-        var currentMemberTeamId = await GetMemberTeamIdAsync(task.MemberId);
+        var currentMemberTeamId = await GetMemberTeamIdAsync(task.MemberId, task.OrganizationId);
         
         if (!currentMemberTeamId.HasValue)
         {
@@ -183,7 +183,7 @@ public class TaskStageStartedEventHandler
     /// <summary>
     /// Gets the team ID for a member from WorkflowManagement.API
     /// </summary>
-    private async Task<Guid?> GetMemberTeamIdAsync(Guid? memberId)
+    private async Task<Guid?> GetMemberTeamIdAsync(Guid? memberId, Guid organizationId)
     {
         if (!memberId.HasValue)
             return null;
@@ -193,7 +193,7 @@ public class TaskStageStartedEventHandler
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"]
                 ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
-            var response = await _httpClient.GetAsync($"{workflowManagementApiUrl}/members/{memberId.Value}");
+            var response = await GetWithOrgHeaderAsync($"{workflowManagementApiUrl}/members/{memberId.Value}", organizationId);
             
             if (!response.IsSuccessStatusCode)
             {
@@ -243,8 +243,9 @@ public class TaskStageStartedEventHandler
             for (int retry = 0; retry < maxRetries; retry++)
             {
                 // First, find the task in WorkflowManagement.API by name and workflowId
-                var searchResponse = await _httpClient.GetAsync(
-                    $"{workflowManagementApiUrl}/tasks/workflow/{@event.WorkflowId}");
+                var searchResponse = await GetWithOrgHeaderAsync(
+                    $"{workflowManagementApiUrl}/tasks/workflow/{@event.WorkflowId}",
+                    task.OrganizationId);
 
                 if (!searchResponse.IsSuccessStatusCode)
                 {
@@ -326,9 +327,10 @@ public class TaskStageStartedEventHandler
                 isOverdue = task.IsOverdue
             };
 
-            var updateResponse = await _httpClient.PutAsJsonAsync(
+            var updateResponse = await PutWithOrgHeaderAsync(
                 $"{workflowManagementApiUrl}/tasks/{workflowTask.TaskId}",
-                updatePayload);
+                updatePayload,
+                task.OrganizationId);
 
             if (updateResponse.IsSuccessStatusCode)
             {
@@ -351,6 +353,21 @@ public class TaskStageStartedEventHandler
                 "Error syncing task stage to WorkflowManagement.API. TaskId: {TaskId}",
                 task.TaskId);
         }
+    }
+
+    private async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> GetWithOrgHeaderAsync(string url, Guid organizationId)
+    {
+        var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, url);
+        request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
+        return await _httpClient.SendAsync(request);
+    }
+
+    private async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> PutWithOrgHeaderAsync(string url, object content, Guid organizationId)
+    {
+        var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Put, url);
+        request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
+        request.Content = System.Net.Http.Json.JsonContent.Create(content);
+        return await _httpClient.SendAsync(request);
     }
 
     private class WorkflowTaskInfo

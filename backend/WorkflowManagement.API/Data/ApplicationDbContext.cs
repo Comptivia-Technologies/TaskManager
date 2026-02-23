@@ -23,6 +23,8 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Team>(entity =>
         {
             entity.HasKey(e => e.TeamId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.TeamName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.CreatedAt).IsRequired();
@@ -33,6 +35,8 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Member>(entity =>
         {
             entity.HasKey(e => e.MemberId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Email).IsRequired().HasMaxLength(200);
@@ -53,6 +57,8 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Workflow>(entity =>
         {
             entity.HasKey(e => e.WorkflowId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.WorkflowName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.TeamId).IsRequired(false);
@@ -75,6 +81,8 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Stage>(entity =>
         {
             entity.HasKey(e => e.StageId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.StageName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.StageOrder).IsRequired();
             entity.Property(e => e.TeamId).IsRequired();
@@ -109,6 +117,8 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Models.Task>(entity =>
         {
             entity.HasKey(e => e.TaskId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.TaskName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
