@@ -87,7 +87,7 @@ using (var scope = app.Services.CreateScope())
     var dbContext = scope.ServiceProvider.GetRequiredService<WorkflowDbContext>();
     try
     {
-        logger.LogInformation("Ensuring database and tables are created...");
+        logger.LogInformation("Ensuring WorkflowSelections table exists...");
         bool tableExists = true;
         try
         {
@@ -101,27 +101,36 @@ using (var scope = app.Services.CreateScope())
         }
         if (!tableExists)
         {
-            var createTableSql = @"
-                CREATE TABLE IF NOT EXISTS ""WorkflowSelections"" (
-                    ""SelectionId"" UUID PRIMARY KEY,
-                    ""OrganizationId"" UUID NOT NULL,
-                    ""TaskId"" UUID NOT NULL,
-                    ""WorkflowId"" UUID NOT NULL,
-                    ""WorkflowName"" VARCHAR(200) NOT NULL,
-                    ""SelectionReason"" VARCHAR(500),
-                    ""SelectedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
-                    ""TaskCreatedEventId"" UUID,
-                    ""StageOrchestrationStarted"" BOOLEAN NOT NULL DEFAULT FALSE,
-                    ""StageOrchestrationStartedAt"" TIMESTAMP WITH TIME ZONE NULL
-                )";
-            await dbContext.Database.ExecuteSqlRawAsync(createTableSql);
-            await dbContext.Database.ExecuteSqlRawAsync(@"
-                CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_OrganizationId"" ON ""WorkflowSelections"" (""OrganizationId"")");
-            await dbContext.Database.ExecuteSqlRawAsync(@"
-                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_WorkflowSelections_TaskId"" ON ""WorkflowSelections"" (""TaskId"")");
-            await dbContext.Database.ExecuteSqlRawAsync(@"
-                CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_WorkflowId"" ON ""WorkflowSelections"" (""WorkflowId"")");
-            logger.LogInformation("WorkflowSelections table created successfully.");
+            await dbContext.Database.BeginTransactionAsync();
+            try
+            {
+                await dbContext.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE IF NOT EXISTS ""WorkflowSelections"" (
+                        ""SelectionId"" UUID PRIMARY KEY,
+                        ""OrganizationId"" UUID NOT NULL,
+                        ""TaskId"" UUID NOT NULL,
+                        ""WorkflowId"" UUID NOT NULL,
+                        ""WorkflowName"" VARCHAR(200) NOT NULL,
+                        ""SelectionReason"" VARCHAR(500),
+                        ""SelectedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
+                        ""TaskCreatedEventId"" UUID,
+                        ""StageOrchestrationStarted"" BOOLEAN NOT NULL DEFAULT FALSE,
+                        ""StageOrchestrationStartedAt"" TIMESTAMP WITH TIME ZONE NULL
+                    )");
+                await dbContext.Database.ExecuteSqlRawAsync(@"
+                    CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_OrganizationId"" ON ""WorkflowSelections"" (""OrganizationId"")");
+                await dbContext.Database.ExecuteSqlRawAsync(@"
+                    CREATE UNIQUE INDEX IF NOT EXISTS ""IX_WorkflowSelections_TaskId"" ON ""WorkflowSelections"" (""TaskId"")");
+                await dbContext.Database.ExecuteSqlRawAsync(@"
+                    CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_WorkflowId"" ON ""WorkflowSelections"" (""WorkflowId"")");
+                await dbContext.Database.CommitTransactionAsync();
+                logger.LogInformation("WorkflowSelections table created successfully.");
+            }
+            catch
+            {
+                await dbContext.Database.RollbackTransactionAsync();
+                throw;
+            }
         }
         else
         {
@@ -163,7 +172,8 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Error creating database: {Message}", ex.Message);
+        logger.LogError(ex, "WorkflowSelections table could not be created. Application will not start. Ensure the database user has CREATE permission on the schema. Error: {Message}", ex.Message);
+        throw;
     }
 }
 
