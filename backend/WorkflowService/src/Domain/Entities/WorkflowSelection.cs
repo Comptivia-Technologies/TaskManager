@@ -6,6 +6,7 @@ namespace WorkflowService.Domain.Entities;
 public class WorkflowSelection
 {
     public Guid SelectionId { get; set; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
     public Guid TaskId { get; set; }
     public Guid WorkflowId { get; set; }
     public string WorkflowName { get; set; } = string.Empty;

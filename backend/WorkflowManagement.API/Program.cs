@@ -12,6 +12,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentOrganizationAccessor, CurrentOrganizationAccessor>();
+
 // Database configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrEmpty(connectionString))
@@ -123,6 +126,7 @@ using (var scope = app.Services.CreateScope())
                     -- Create Teams table
                     CREATE TABLE IF NOT EXISTS ""Teams"" (
                         ""TeamId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        ""OrganizationId"" UUID NOT NULL,
                         ""TeamName"" VARCHAR(200) NOT NULL,
                         ""Description"" VARCHAR(1000),
                         ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -132,6 +136,7 @@ using (var scope = app.Services.CreateScope())
                     -- Create Members table
                     CREATE TABLE IF NOT EXISTS ""Members"" (
                         ""MemberId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        ""OrganizationId"" UUID NOT NULL,
                         ""FirstName"" VARCHAR(100) NOT NULL,
                         ""LastName"" VARCHAR(100) NOT NULL,
                         ""Email"" VARCHAR(200) NOT NULL,
@@ -149,6 +154,7 @@ using (var scope = app.Services.CreateScope())
                     -- Create Workflows table
                     CREATE TABLE IF NOT EXISTS ""Workflows"" (
                         ""WorkflowId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        ""OrganizationId"" UUID NOT NULL,
                         ""WorkflowName"" VARCHAR(200) NOT NULL,
                         ""Description"" VARCHAR(1000),
                         ""TeamId"" UUID,
@@ -162,6 +168,7 @@ using (var scope = app.Services.CreateScope())
                     -- Create Stages table
                     CREATE TABLE IF NOT EXISTS ""Stages"" (
                         ""StageId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        ""OrganizationId"" UUID NOT NULL,
                         ""StageName"" VARCHAR(200) NOT NULL,
                         ""StageOrder"" INTEGER NOT NULL,
                         ""WorkflowId"" UUID NOT NULL,
@@ -179,6 +186,7 @@ using (var scope = app.Services.CreateScope())
                     -- Create Tasks table
                     CREATE TABLE IF NOT EXISTS ""Tasks"" (
                         ""TaskId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        ""OrganizationId"" UUID NOT NULL,
                         ""TaskName"" VARCHAR(200) NOT NULL,
                         ""Description"" VARCHAR(1000),
                         ""Status"" VARCHAR(50) NOT NULL,
@@ -201,11 +209,16 @@ using (var scope = app.Services.CreateScope())
                     );
                     
                     -- Create indexes
+                    CREATE INDEX IF NOT EXISTS ""IX_Teams_OrganizationId"" ON ""Teams"" (""OrganizationId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Members_OrganizationId"" ON ""Members"" (""OrganizationId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Members_SkillLevel"" ON ""Members"" (""SkillLevel"");
                     CREATE INDEX IF NOT EXISTS ""IX_Members_TeamId"" ON ""Members"" (""TeamId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Workflows_OrganizationId"" ON ""Workflows"" (""OrganizationId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Workflows_TeamId"" ON ""Workflows"" (""TeamId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Stages_OrganizationId"" ON ""Stages"" (""OrganizationId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Stages_WorkflowId"" ON ""Stages"" (""WorkflowId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Stages_TeamId"" ON ""Stages"" (""TeamId"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Tasks_OrganizationId"" ON ""Tasks"" (""OrganizationId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Tasks_WorkflowId"" ON ""Tasks"" (""WorkflowId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Tasks_StageId"" ON ""Tasks"" (""StageId"");
                     CREATE INDEX IF NOT EXISTS ""IX_Tasks_AssignedToMemberId"" ON ""Tasks"" (""AssignedToMemberId"");

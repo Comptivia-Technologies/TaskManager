@@ -24,6 +24,22 @@ public class MemberRepository : Repository<Member>, IMemberRepository
             .Include(m => m.Team)
             .ToListAsync();
     }
+
+    public async Task<IEnumerable<Member>> GetMembersWithTeamByOrganizationAsync(Guid organizationId)
+    {
+        return await _context.Members
+            .Include(m => m.Team)
+            .Where(m => m.OrganizationId == organizationId)
+            .ToListAsync();
+    }
+
+    public async Task<IEnumerable<Member>> GetMembersByTeamAsync(Guid teamId, Guid organizationId)
+    {
+        return await _context.Members
+            .Include(m => m.Team)
+            .Where(m => m.TeamId == teamId && m.OrganizationId == organizationId)
+            .ToListAsync();
+    }
 }
 
 

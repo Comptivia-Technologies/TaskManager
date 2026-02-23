@@ -5,6 +5,7 @@ namespace WorkflowManagement.API.Models;
 public class Workflow
 {
     public Guid WorkflowId { get; set; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
     public string WorkflowName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public Guid? TeamId { get; set; }

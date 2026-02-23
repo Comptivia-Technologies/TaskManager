@@ -40,9 +40,11 @@ public class WorkflowSelectionService : IWorkflowSelectionService
                 return;
             }
 
-            // Get all available workflows
+            // Get workflows for the task's organization only
             var workflows = await _repository.GetAllWorkflowsAsync();
-            var workflowsList = workflows.ToList();
+            var workflowsList = workflows
+                .Where(w => w.OrganizationId == taskCreatedEvent.OrganizationId)
+                .ToList();
 
             if (!workflowsList.Any())
             {
@@ -66,6 +68,7 @@ public class WorkflowSelectionService : IWorkflowSelectionService
             // Persist selection
             var selection = new WorkflowSelection
             {
+                OrganizationId = taskCreatedEvent.OrganizationId,
                 TaskId = taskCreatedEvent.TaskId,
                 WorkflowId = selectedWorkflow.WorkflowId,
                 WorkflowName = selectedWorkflow.WorkflowName,

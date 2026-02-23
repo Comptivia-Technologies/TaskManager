@@ -38,6 +38,9 @@ if (string.IsNullOrEmpty(connectionString))
 builder.Services.AddDbContext<PriorityRuleDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<PriorityRuleEngine.API.Services.ICurrentOrganizationAccessor, PriorityRuleEngine.API.Services.CurrentOrganizationAccessor>();
+
 // Event Bus - Register all providers
 builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
 builder.Services.AddSingleton<AwsEventBus>();
@@ -195,6 +198,7 @@ using (var scope = app.Services.CreateScope())
             var createTableSql = @"
                 CREATE TABLE IF NOT EXISTS ""PriorityRules"" (
                     ""RuleId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    ""OrganizationId"" UUID NOT NULL,
                     ""RuleName"" VARCHAR(200) NOT NULL,
                     ""Priority"" VARCHAR(50) NOT NULL,
                     ""Salience"" INTEGER NOT NULL DEFAULT 0,
@@ -211,6 +215,10 @@ using (var scope = app.Services.CreateScope())
             
             // Create indexes
             await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE INDEX IF NOT EXISTS ""IX_PriorityRules_OrganizationId"" 
+                ON ""PriorityRules"" (""OrganizationId"")");
+            
+            await dbContext.Database.ExecuteSqlRawAsync(@"
                 CREATE INDEX IF NOT EXISTS ""IX_PriorityRules_IsActive_Salience"" 
                 ON ""PriorityRules"" (""IsActive"", ""Salience"" DESC)");
             
@@ -222,41 +230,67 @@ using (var scope = app.Services.CreateScope())
         }
         else
         {
-            // Table exists - check if WorkflowId column exists and add it if missing
+            // Table exists - use single connection for both column checks to avoid ObjectDisposedException
             try
             {
-                // Check if column exists using information_schema
-                using var connection = dbContext.Database.GetDbConnection();
-                await connection.OpenAsync();
-                using var command = connection.CreateCommand();
-                command.CommandText = @"
-                    SELECT COUNT(*) 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'PriorityRules' AND column_name = 'WorkflowId'";
-                var columnExists = Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
-                
-                if (!columnExists)
+                var connection = dbContext.Database.GetDbConnection();
+                var wasOpen = connection.State == System.Data.ConnectionState.Open;
+                if (!wasOpen)
+                    await connection.OpenAsync();
+                try
                 {
-                    scopeLogger.LogInformation("WorkflowId column does not exist. Adding...");
-                    await dbContext.Database.ExecuteSqlRawAsync(@"
-                        ALTER TABLE ""PriorityRules"" 
-                        ADD COLUMN ""WorkflowId"" UUID");
-                    
-                    // Create index for WorkflowId
-                    await dbContext.Database.ExecuteSqlRawAsync(@"
-                        CREATE INDEX IF NOT EXISTS ""IX_PriorityRules_WorkflowId_IsActive"" 
-                        ON ""PriorityRules"" (""WorkflowId"", ""IsActive"")");
-                    
-                    scopeLogger.LogInformation("WorkflowId column added successfully.");
+                    // Check OrganizationId and add if missing
+                    using (var cmd = connection.CreateCommand())
+                    {
+                        cmd.CommandText = @"
+                            SELECT COUNT(*) FROM information_schema.columns
+                            WHERE table_schema = 'public' AND table_name = 'PriorityRules' AND column_name = 'OrganizationId'";
+                        var orgColumnExists = Convert.ToInt32(await cmd.ExecuteScalarAsync()) > 0;
+                        if (!orgColumnExists)
+                        {
+                            scopeLogger.LogInformation("OrganizationId column does not exist. Adding...");
+                            await dbContext.Database.ExecuteSqlRawAsync(@"
+                                ALTER TABLE ""PriorityRules""
+                                ADD COLUMN ""OrganizationId"" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'");
+                            await dbContext.Database.ExecuteSqlRawAsync(@"
+                                CREATE INDEX IF NOT EXISTS ""IX_PriorityRules_OrganizationId""
+                                ON ""PriorityRules"" (""OrganizationId"")");
+                            scopeLogger.LogInformation("OrganizationId column added successfully.");
+                        }
+                    }
+
+                    // Check WorkflowId and add if missing
+                    using (var cmd = connection.CreateCommand())
+                    {
+                        cmd.CommandText = @"
+                            SELECT COUNT(*) FROM information_schema.columns
+                            WHERE table_schema = 'public' AND table_name = 'PriorityRules' AND column_name = 'WorkflowId'";
+                        var workflowIdExists = Convert.ToInt32(await cmd.ExecuteScalarAsync()) > 0;
+                        if (!workflowIdExists)
+                        {
+                            scopeLogger.LogInformation("WorkflowId column does not exist. Adding...");
+                            await dbContext.Database.ExecuteSqlRawAsync(@"
+                                ALTER TABLE ""PriorityRules"" ADD COLUMN ""WorkflowId"" UUID");
+                            await dbContext.Database.ExecuteSqlRawAsync(@"
+                                CREATE INDEX IF NOT EXISTS ""IX_PriorityRules_WorkflowId_IsActive""
+                                ON ""PriorityRules"" (""WorkflowId"", ""IsActive"")");
+                            scopeLogger.LogInformation("WorkflowId column added successfully.");
+                        }
+                        else
+                        {
+                            scopeLogger.LogInformation("WorkflowId column already exists.");
+                        }
+                    }
                 }
-                else
+                finally
                 {
-                    scopeLogger.LogInformation("WorkflowId column already exists.");
+                    if (!wasOpen)
+                        await connection.CloseAsync();
                 }
             }
             catch (Exception ex)
             {
-                scopeLogger.LogWarning(ex, "Could not verify/add WorkflowId column. It may already exist or there was an error.");
+                scopeLogger.LogWarning(ex, "Could not verify/add PriorityRules columns. They may already exist or there was an error.");
             }
         }
     }

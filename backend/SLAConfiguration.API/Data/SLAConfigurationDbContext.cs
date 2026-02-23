@@ -23,6 +23,8 @@ public class SLAConfigurationDbContext : DbContext
         {
             entity.ToTable("SLAConfigurations");
             entity.HasKey(e => e.SLAConfigurationId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.WorkflowId).IsRequired();
             
             // Configure DateTime properties to use timestamp with time zone (PostgreSQL recommended)
@@ -50,6 +52,8 @@ public class SLAConfigurationDbContext : DbContext
         {
             entity.ToTable("Workflows");
             entity.HasKey(e => e.WorkflowId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.WorkflowName).IsRequired().HasMaxLength(200);
             // This entity is read-only, used only for joining data
         });

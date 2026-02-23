@@ -201,6 +201,7 @@ using (var scope = app.Services.CreateScope())
             var createTableSql = @"
                 CREATE TABLE IF NOT EXISTS ""WorkflowSelections"" (
                     ""SelectionId"" UUID PRIMARY KEY,
+                    ""OrganizationId"" UUID NOT NULL,
                     ""TaskId"" UUID NOT NULL,
                     ""WorkflowId"" UUID NOT NULL,
                     ""WorkflowName"" VARCHAR(200) NOT NULL,
@@ -215,11 +216,51 @@ using (var scope = app.Services.CreateScope())
             
             // Create indexes
             await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_OrganizationId"" ON ""WorkflowSelections"" (""OrganizationId"")");
+            await dbContext.Database.ExecuteSqlRawAsync(@"
                 CREATE UNIQUE INDEX IF NOT EXISTS ""IX_WorkflowSelections_TaskId"" ON ""WorkflowSelections"" (""TaskId"")");
             await dbContext.Database.ExecuteSqlRawAsync(@"
                 CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_WorkflowId"" ON ""WorkflowSelections"" (""WorkflowId"")");
             
             logger.LogInformation("WorkflowSelections table created successfully.");
+        }
+        else
+        {
+            // Table exists - add OrganizationId column if missing
+            try
+            {
+                var connection = dbContext.Database.GetDbConnection();
+                var wasOpen = connection.State == System.Data.ConnectionState.Open;
+                if (!wasOpen)
+                    await connection.OpenAsync();
+                try
+                {
+                    using var command = connection.CreateCommand();
+                    command.CommandText = @"
+                        SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'WorkflowSelections' AND column_name = 'OrganizationId'";
+                    var orgColumnExists = Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+                    if (!orgColumnExists)
+                    {
+                        logger.LogInformation("OrganizationId column does not exist on WorkflowSelections. Adding...");
+                        await dbContext.Database.ExecuteSqlRawAsync(@"
+                            ALTER TABLE ""WorkflowSelections""
+                            ADD COLUMN ""OrganizationId"" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'");
+                        await dbContext.Database.ExecuteSqlRawAsync(@"
+                            CREATE INDEX IF NOT EXISTS ""IX_WorkflowSelections_OrganizationId"" ON ""WorkflowSelections"" (""OrganizationId"")");
+                        logger.LogInformation("OrganizationId column added to WorkflowSelections.");
+                    }
+                }
+                finally
+                {
+                    if (!wasOpen)
+                        await connection.CloseAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not verify/add OrganizationId on WorkflowSelections. It may already exist.");
+            }
         }
     }
     catch (Exception ex)

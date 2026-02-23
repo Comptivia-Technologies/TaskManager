@@ -372,10 +372,9 @@ AUTHENTICATION
 
 Local Development:
 - Usually no authentication required
-- Check appsettings.Development.json for API key requirements
+- Bearer token required for authenticated endpoints
 
 Production:
-- Include API Key header: X-API-Key: YOUR_API_KEY
 - Include Bearer Token: Authorization: Bearer YOUR_TOKEN
 
 ================================================================================

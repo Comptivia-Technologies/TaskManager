@@ -11,38 +11,53 @@ public class StageService : IStageService
     private readonly IWorkflowRepository _workflowRepository;
     private readonly ITeamRepository _teamRepository;
     private readonly IWorkflowService _workflowService;
+    private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly IMapper _mapper;
 
-    public StageService(IStageRepository stageRepository, IWorkflowRepository workflowRepository, ITeamRepository teamRepository, IWorkflowService workflowService, IMapper mapper)
+    public StageService(IStageRepository stageRepository, IWorkflowRepository workflowRepository, ITeamRepository teamRepository, IWorkflowService workflowService, ICurrentOrganizationAccessor orgAccessor, IMapper mapper)
     {
         _stageRepository = stageRepository;
         _workflowRepository = workflowRepository;
         _teamRepository = teamRepository;
         _workflowService = workflowService;
+        _orgAccessor = orgAccessor;
         _mapper = mapper;
     }
 
     public async Task<IEnumerable<StageReadDto>> GetAllStagesAsync()
     {
-        var stages = await _stageRepository.GetAllAsync();
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+        var stages = await _stageRepository.GetStagesWithTeamByOrganizationAsync(orgId.Value);
         return _mapper.Map<IEnumerable<StageReadDto>>(stages);
     }
 
     public async Task<StageReadDto?> GetStageByIdAsync(Guid id)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var stage = await _stageRepository.GetByIdAsync(id);
-        return stage == null ? null : _mapper.Map<StageReadDto>(stage);
+        if (stage == null || stage.OrganizationId != orgId.Value)
+            return null;
+        return _mapper.Map<StageReadDto>(stage);
     }
 
     public async Task<StageReadDto> CreateStageAsync(StageCreateDto stageCreateDto)
     {
-        if (!await _workflowRepository.ExistsAsync(stageCreateDto.WorkflowId))
-            throw new ArgumentException("Workflow does not exist");
-
-        if (!await _teamRepository.ExistsAsync(stageCreateDto.TeamId))
-            throw new ArgumentException("Team does not exist");
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+        var workflow = await _workflowRepository.GetByIdAsync(stageCreateDto.WorkflowId);
+        if (workflow == null || workflow.OrganizationId != orgId.Value)
+            throw new ArgumentException("Workflow does not exist or does not belong to your organization.");
+        var team = await _teamRepository.GetByIdAsync(stageCreateDto.TeamId);
+        if (team == null || team.OrganizationId != orgId.Value)
+            throw new ArgumentException("Team does not exist or does not belong to your organization.");
 
         var stage = _mapper.Map<Stage>(stageCreateDto);
+        stage.OrganizationId = orgId.Value;
         stage.CreatedAt = DateTime.UtcNow;
 
         var createdStage = await _stageRepository.AddAsync(stage);
@@ -71,8 +86,11 @@ public class StageService : IStageService
 
     public async Task<StageReadDto?> UpdateStageAsync(Guid id, StageUpdateDto stageUpdateDto)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var stage = await _stageRepository.GetByIdAsync(id);
-        if (stage == null)
+        if (stage == null || stage.OrganizationId != orgId.Value)
             return null;
 
         var workflowId = stage.WorkflowId;
@@ -95,8 +113,11 @@ public class StageService : IStageService
 
     public async Task<bool> DeleteStageAsync(Guid id)
     {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
         var stage = await _stageRepository.GetByIdAsync(id);
-        if (stage == null)
+        if (stage == null || stage.OrganizationId != orgId.Value)
             return false;
 
         var workflowId = stage.WorkflowId;

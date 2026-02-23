@@ -97,11 +97,7 @@ jobs:
                 {"name":"ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address","value":"http://task-service.workflow-automation:80"},
                 {"name":"TaskServiceApi__BaseUrl","value":"http://task-service.workflow-automation/api"},
                 {"name":"WorkflowManagementApi__BaseUrl","value":"http://workflow-management-api-service.workflow-automation/api"},
-                {"name":"AuthService__BaseUrl","value":"https://api-1008640724491.us-central1.run.app"},
-                {"name":"ApiKeys__ValidKeys__0","value":"${{ secrets.API_KEY_1 }}"},
-                {"name":"ApiKeys__ValidKeys__1","value":"${{ secrets.API_KEY_2 }}"},
-                {"name":"ApiKeys__ExcludedPaths__0","value":"/health"},
-                {"name":"ApiKeys__ExcludedPaths__1","value":"/api/auth"}
+                {"name":"AuthService__BaseUrl","value":"https://api-1008640724491.us-central1.run.app"}
               ]')
             fi
             

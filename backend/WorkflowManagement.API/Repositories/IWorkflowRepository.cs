@@ -8,6 +8,7 @@ public interface IWorkflowRepository : IRepository<Workflow>
     Task<Workflow?> GetWorkflowWithTasksAsync(Guid workflowId);
     Task<Workflow?> GetWorkflowWithStagesAndTasksAsync(Guid workflowId);
     Task<IEnumerable<Workflow>> GetWorkflowsByTeamAsync(Guid teamId);
+    Task<IEnumerable<Workflow>> GetWorkflowsByOrganizationAsync(Guid organizationId);
 }
 
 

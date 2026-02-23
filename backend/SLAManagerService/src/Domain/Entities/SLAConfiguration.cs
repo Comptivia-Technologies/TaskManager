@@ -6,6 +6,7 @@ namespace SLAManagerService.Domain.Entities;
 public class SLAConfiguration
 {
     public Guid SLAConfigurationId { get; set; }
+    public Guid OrganizationId { get; set; }
     public Guid WorkflowId { get; set; }
     public string PriorityLevelsJson { get; set; } = "{}"; // JSONB: { "Critical": { "responseTime": 30 }, ... }
 }

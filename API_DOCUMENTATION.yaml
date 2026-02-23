@@ -1765,15 +1765,10 @@ components:
             $ref: '#/components/schemas/Error'
 
   securitySchemes:
-    ApiKey:
-      type: apiKey
-      in: header
-      name: X-API-Key
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
 
 security:
-  - ApiKey: []
   - BearerAuth: []
