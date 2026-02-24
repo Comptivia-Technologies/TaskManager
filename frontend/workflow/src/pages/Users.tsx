@@ -29,7 +29,7 @@ const Users = () => {
   });
 
   const loadUsers = useCallback(async () => {
-    if (!organizationId || !process.env.REACT_APP_AUTH_API_URL) {
+    if (!organizationId) {
       setLoading(false);
       setActiveUsers([]);
       setPendingUsers([]);

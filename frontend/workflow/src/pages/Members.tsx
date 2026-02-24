@@ -39,7 +39,7 @@ const Members = () => {
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | 'all'>('all');
 
   const loadProductHubUsers = useCallback(async () => {
-    if (!organizationId || !process.env.REACT_APP_AUTH_API_URL) return;
+    if (!organizationId) return;
     try {
       const users = await userService.getByOrganization(organizationId, 'Active');
       setProductHubUsers(users);
