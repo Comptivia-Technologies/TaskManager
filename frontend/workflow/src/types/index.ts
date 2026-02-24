@@ -281,3 +281,23 @@ export interface RuleConditions {
   any?: RuleCondition[];
 }
 
+export type UserStatus = 'Active' | 'Pending' | 'Archived';
+
+export interface User {
+  userId: string;
+  fullName: string;
+  email: string;
+  organisationId: string;
+  role: string;
+  status: UserStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserCreate {
+  fullName: string;
+  email: string;
+  organisationId: string;
+  role: string;
+}
+
