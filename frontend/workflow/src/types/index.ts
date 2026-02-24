@@ -301,3 +301,16 @@ export interface UserCreate {
   role: string;
 }
 
+export interface Role {
+  roleId: string;
+  name: string;
+  description?: string;
+  permissions?: string[];
+}
+
+export interface RoleCreate {
+  name: string;
+  description?: string;
+  permissions?: string[];
+}
+
