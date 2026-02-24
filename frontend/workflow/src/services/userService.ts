@@ -1,4 +1,4 @@
-import authApi from './authApi';
+import api from './api';
 import { User, UserStatus } from '../types';
 
 type ApiStatus = 'active' | 'pending' | 'archived';
@@ -77,26 +77,20 @@ export const userService = {
     organizationId: string,
     status: UserStatus
   ): Promise<User[]> => {
-    if (!process.env.REACT_APP_AUTH_API_URL) {
-      return [];
-    }
     if (status === 'Archived') {
       return [];
     }
     const statusParam: ApiStatus = status === 'Active' ? 'active' : 'pending';
-    const response = await authApi.get<UsersResponse>(
-      `/api/users/organization/${organizationId}?status=${statusParam}`
+    const response = await api.get<UsersResponse>(
+      `/api/auth/users/organization/${organizationId}?status=${statusParam}`
     );
     const list = response.data?.data?.users ?? [];
     return list.map((u) => mapApiUserToUser(u, organizationId));
   },
 
   getPendingInvitations: async (organizationId: string): Promise<User[]> => {
-    if (!process.env.REACT_APP_AUTH_API_URL) {
-      return [];
-    }
-    const response = await authApi.get<InvitationsResponse>(
-      `/api/invitations/organization/${organizationId}?status=pending`
+    const response = await api.get<InvitationsResponse>(
+      `/api/auth/invitations/organization/${organizationId}?status=pending`
     );
     const data = response.data?.data;
     const list = data?.invitations ?? data?.users ?? [];
