@@ -14,6 +14,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<Workflow> Workflows { get; set; }
     public DbSet<Stage> Stages { get; set; }
     public DbSet<Models.Task> Tasks { get; set; }
+    public DbSet<Permission> Permissions { get; set; }
+    public DbSet<Role> Roles { get; set; }
+    public DbSet<RolePermission> RolePermissions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -140,6 +143,49 @@ public class ApplicationDbContext : DbContext
                 .WithMany(m => m.AssignedTasks)
                 .HasForeignKey(t => t.AssignedToMemberId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Permission configuration
+        modelBuilder.Entity<Permission>(entity =>
+        {
+            entity.HasKey(e => e.PermissionId);
+            entity.Property(e => e.Code).IsRequired().HasMaxLength(100);
+            entity.HasIndex(e => e.Code).IsUnique();
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.Category).HasMaxLength(100);
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.UpdatedAt).IsRequired();
+        });
+
+        // Role configuration
+        modelBuilder.Entity<Role>(entity =>
+        {
+            entity.HasKey(e => e.RoleId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.HasIndex(e => e.OrganizationId);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.UpdatedAt).IsRequired();
+            entity.HasMany(e => e.RolePermissions)
+                .WithOne(rp => rp.Role)
+                .HasForeignKey(rp => rp.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // RolePermission configuration (many-to-many)
+        modelBuilder.Entity<RolePermission>(entity =>
+        {
+            entity.HasKey(e => new { e.RoleId, e.PermissionId });
+            entity.HasOne(e => e.Role)
+                .WithMany(r => r.RolePermissions)
+                .HasForeignKey(e => e.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Permission)
+                .WithMany()
+                .HasForeignKey(e => e.PermissionId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

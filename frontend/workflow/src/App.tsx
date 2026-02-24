@@ -14,6 +14,8 @@ import SLAConfiguration from './pages/SLAConfiguration';
 import WorkloadConfiguration from './pages/WorkloadConfiguration';
 import Tasks from './pages/Tasks';
 import PriorityRules from './pages/PriorityRules';
+import Users from './pages/Users';
+import RolesPermissions from './pages/RolesPermissions';
 
 function App() {
   return (
@@ -146,6 +148,32 @@ function App() {
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
                     <PriorityRules />
+                  </div>
+                </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute>
+                <div className="flex min-h-screen bg-white font-sans">
+                  <Sidebar />
+                  <div className="flex-1 ml-64 font-sans bg-white">
+                    <Users />
+                  </div>
+                </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/roles-permissions"
+            element={
+              <ProtectedRoute>
+                <div className="flex min-h-screen bg-white font-sans">
+                  <Sidebar />
+                  <div className="flex-1 ml-64 font-sans bg-white">
+                    <RolesPermissions />
                   </div>
                 </div>
               </ProtectedRoute>

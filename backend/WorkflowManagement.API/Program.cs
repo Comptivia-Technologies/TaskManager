@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using System.Linq;
 using WorkflowManagement.API.Data;
 using WorkflowManagement.API.Middleware;
@@ -49,6 +50,7 @@ builder.Services.AddScoped<IMemberService, MemberService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IStageService, StageService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
+builder.Services.AddScoped<IRoleService, RoleService>();
 
 // CORS
 var allowedOrigin = builder.Configuration["Cors:AllowedOrigin"] 
@@ -137,6 +139,7 @@ using (var scope = app.Services.CreateScope())
                     CREATE TABLE IF NOT EXISTS ""Members"" (
                         ""MemberId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         ""OrganizationId"" UUID NOT NULL,
+                        ""UserId"" VARCHAR(128),
                         ""FirstName"" VARCHAR(100) NOT NULL,
                         ""LastName"" VARCHAR(100) NOT NULL,
                         ""Email"" VARCHAR(200) NOT NULL,
@@ -326,6 +329,101 @@ using (var scope = app.Services.CreateScope())
             {
                 logger.LogInformation("All required columns exist in Tasks table.");
             }
+
+            // Ensure Permissions table exists and seed default permissions
+            using (var permTableCmd = connection.CreateCommand())
+            {
+                permTableCmd.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS ""Permissions"" (
+                        ""PermissionId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        ""Code"" VARCHAR(100) NOT NULL,
+                        ""Name"" VARCHAR(200) NOT NULL,
+                        ""Description"" VARCHAR(500),
+                        ""Category"" VARCHAR(100),
+                        ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT ""UQ_Permissions_Code"" UNIQUE (""Code"")
+                    );
+                    CREATE INDEX IF NOT EXISTS ""IX_Permissions_Code"" ON ""Permissions"" (""Code"");
+                    CREATE INDEX IF NOT EXISTS ""IX_Permissions_Category"" ON ""Permissions"" (""Category"");
+                ";
+                await permTableCmd.ExecuteNonQueryAsync();
+                logger.LogInformation("Permissions table ensured.");
+            }
+
+            // Ensure Roles table exists
+            using (var rolesTableCmd = connection.CreateCommand())
+            {
+                rolesTableCmd.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS ""Roles"" (
+                        ""RoleId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        ""Name"" VARCHAR(200) NOT NULL,
+                        ""Description"" VARCHAR(1000),
+                        ""OrganizationId"" UUID NOT NULL,
+                        ""CreatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                    CREATE INDEX IF NOT EXISTS ""IX_Roles_OrganizationId"" ON ""Roles"" (""OrganizationId"");
+                ";
+                await rolesTableCmd.ExecuteNonQueryAsync();
+                logger.LogInformation("Roles table ensured.");
+            }
+
+            // Ensure RolePermissions table exists
+            using (var rpTableCmd = connection.CreateCommand())
+            {
+                rpTableCmd.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS ""RolePermissions"" (
+                        ""RoleId"" UUID NOT NULL,
+                        ""PermissionId"" UUID NOT NULL,
+                        PRIMARY KEY (""RoleId"", ""PermissionId""),
+                        CONSTRAINT ""FK_RolePermissions_Roles"" FOREIGN KEY (""RoleId"") REFERENCES ""Roles""(""RoleId"") ON DELETE CASCADE,
+                        CONSTRAINT ""FK_RolePermissions_Permissions"" FOREIGN KEY (""PermissionId"") REFERENCES ""Permissions""(""PermissionId"") ON DELETE CASCADE
+                    );
+                ";
+                await rpTableCmd.ExecuteNonQueryAsync();
+                logger.LogInformation("RolePermissions table ensured.");
+            }
+
+            // Option A: view + manage per area (~20 permissions)
+            var seedPermissions = new (string Code, string Name, string? Category)[]
+            {
+                ("users.view", "View Users", "Users"),
+                ("users.manage", "Manage Users", "Users"),
+                ("roles.view", "View Roles", "Roles"),
+                ("roles.manage", "Manage Roles", "Roles"),
+                ("permissions.view", "View Permissions", "Permissions"),
+                ("permissions.manage", "Manage Permissions", "Permissions"),
+                ("workflows.view", "View Workflows", "Workflows"),
+                ("workflows.manage", "Manage Workflows", "Workflows"),
+                ("tasks.view", "View Tasks", "Tasks"),
+                ("tasks.manage", "Manage Tasks", "Tasks"),
+                ("teams.view", "View Teams", "Teams"),
+                ("teams.manage", "Manage Teams", "Teams"),
+                ("members.view", "View Members", "Members"),
+                ("members.manage", "Manage Members", "Members"),
+                ("sla.view", "View SLA", "SLA"),
+                ("sla.manage", "Manage SLA", "SLA"),
+                ("workload.view", "View Workload", "Workload"),
+                ("workload.manage", "Manage Workload", "Workload"),
+                ("priority_rules.view", "View Priority Rules", "Priority Rules"),
+                ("priority_rules.manage", "Manage Priority Rules", "Priority Rules"),
+            };
+
+            var npgsqlConnection = (NpgsqlConnection)connection;
+            foreach (var p in seedPermissions)
+            {
+                await using var seedCmd = new NpgsqlCommand(
+                    @"INSERT INTO ""Permissions"" (""PermissionId"", ""Code"", ""Name"", ""Category"", ""CreatedAt"", ""UpdatedAt"")
+                      VALUES (gen_random_uuid(), @code, @name, @category, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                      ON CONFLICT (""Code"") DO NOTHING",
+                    npgsqlConnection);
+                seedCmd.Parameters.AddWithValue("code", p.Code);
+                seedCmd.Parameters.AddWithValue("name", p.Name);
+                seedCmd.Parameters.AddWithValue("category", (object?)p.Category ?? DBNull.Value);
+                await seedCmd.ExecuteNonQueryAsync();
+            }
+            logger.LogInformation("Permissions seed completed.");
         }
         finally
         {

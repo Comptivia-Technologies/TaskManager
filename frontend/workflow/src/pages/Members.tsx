@@ -1,17 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { useMembers } from '../hooks/useMembers';
 import { useTeams } from '../hooks/useTeams';
 import { memberService } from '../services/memberService';
-import { Member } from '../types';
+import { userService } from '../services/userService';
+import { Member, User } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { FiEdit, FiTrash2, FiFilter, FiSearch, FiPlus, FiUser } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
+function splitFullName(fullName: string): { firstName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/);
+  return {
+    firstName: parts[0] ?? '',
+    lastName: parts.slice(1).join(' ') ?? '',
+  };
+}
+
 const Members = () => {
+  const { organizationId } = useAuth();
   const { members, loading, refetch } = useMembers();
   const { teams } = useTeams();
   const navigate = useNavigate();
+  const [productHubUsers, setProductHubUsers] = useState<User[]>([]);
+  const [selectedProductHubUser, setSelectedProductHubUser] = useState<User | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -25,6 +38,20 @@ const Members = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | 'all'>('all');
 
+  const loadProductHubUsers = useCallback(async () => {
+    if (!organizationId || !process.env.REACT_APP_AUTH_API_URL) return;
+    try {
+      const users = await userService.getByOrganization(organizationId, 'Active');
+      setProductHubUsers(users);
+    } catch {
+      setProductHubUsers([]);
+    }
+  }, [organizationId]);
+
+  useEffect(() => {
+    loadProductHubUsers();
+  }, [loadProductHubUsers]);
+
 
   const handleOpenModal = (member?: Member) => {
     if (member) {
@@ -37,6 +64,7 @@ const Members = () => {
         role: member.role,
         skillLevel: member.skillLevel,
       });
+      setSelectedProductHubUser(null);
     } else {
       setIsEditMode(false);
       setFormData({
@@ -47,6 +75,7 @@ const Members = () => {
         skillLevel: 1,
       });
       setSelectedMember(null);
+      setSelectedProductHubUser(null);
     }
     setIsModalOpen(true);
   };
@@ -55,6 +84,7 @@ const Members = () => {
     setIsModalOpen(false);
     setIsEditMode(false);
     setSelectedMember(null);
+    setSelectedProductHubUser(null);
     setFormData({
       firstName: '',
       lastName: '',
@@ -62,6 +92,20 @@ const Members = () => {
       role: '',
       skillLevel: 1,
     });
+  };
+
+  const handleProductHubUserSelect = (email: string) => {
+    const user = productHubUsers.find((u) => u.email === email);
+    if (!user) return;
+    setSelectedProductHubUser(user);
+    const { firstName, lastName } = splitFullName(user.fullName);
+    setFormData((prev) => ({
+      ...prev,
+      email: user.email,
+      firstName: firstName || prev.firstName,
+      lastName: lastName || prev.lastName,
+      role: user.role || prev.role,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,9 +121,14 @@ const Members = () => {
         handleCloseModal();
         refetch();
       } else {
-        // Create new member without team (team will be assigned from Teams page)
-        // Explicitly omit teamId from the request
-        const { teamId, ...createData } = formData as any;
+        const createData = {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          role: formData.role,
+          skillLevel: formData.skillLevel,
+          userId: selectedProductHubUser?.userId,
+        };
         await memberService.create(createData);
         toast.success('Member created successfully');
         handleCloseModal();
@@ -277,48 +326,105 @@ const Members = () => {
               {isEditMode ? 'Edit Member' : 'Create Member'}
             </h2>
             <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  First Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.firstName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, firstName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Last Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.lastName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lastName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                />
-              </div>
+              {isEditMode ? (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.firstName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, firstName: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                      required
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.lastName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, lastName: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                      required
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      readOnly
+                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm bg-gray-50 text-sm font-sans cursor-not-allowed"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                      Email <span className="text-xs text-black/60 font-normal">(from Product Hub)</span>
+                    </label>
+                    <select
+                      value={formData.email}
+                      onChange={(e) => handleProductHubUserSelect(e.target.value)}
+                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                      required
+                    >
+                      <option value="">Select a user...</option>
+                      {productHubUsers
+                        .filter(
+                          (u) =>
+                            !members.some(
+                              (m) => m.email === u.email || (m.userId && m.userId === u.userId)
+                            )
+                        )
+                        .map((u) => (
+                          <option key={u.userId} value={u.email}>
+                            {u.fullName} ({u.email})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.firstName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, firstName: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                      required
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.lastName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, lastName: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                      required
+                    />
+                  </div>
+                </>
+              )}
               {/* Team - Show only in edit mode, read-only */}
               {isEditMode && selectedMember && (
                 <div className="mb-4">
