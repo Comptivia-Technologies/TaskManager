@@ -139,6 +139,7 @@ using (var scope = app.Services.CreateScope())
                     CREATE TABLE IF NOT EXISTS ""Members"" (
                         ""MemberId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         ""OrganizationId"" UUID NOT NULL,
+                        ""UserId"" VARCHAR(128),
                         ""FirstName"" VARCHAR(100) NOT NULL,
                         ""LastName"" VARCHAR(100) NOT NULL,
                         ""Email"" VARCHAR(200) NOT NULL,

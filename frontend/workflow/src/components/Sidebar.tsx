@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FiLayers, FiUsers, FiUser, FiClock, FiActivity, FiCheckSquare, FiSettings, FiLogOut, FiChevronDown, FiChevronRight } from 'react-icons/fi';
+import { FiLayers, FiUsers, FiUser, FiUserCheck, FiClock, FiActivity, FiCheckSquare, FiSettings, FiLogOut, FiChevronDown, FiChevronRight } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 
 type MenuLink = { path: string; label: string; icon: React.ComponentType<{ className?: string }> };
@@ -42,7 +42,7 @@ const Sidebar = () => {
     { path: '/priority-rules', label: 'Priority Rules', icon: FiSettings },
     {
       label: 'User Management',
-      icon: FiUser,
+      icon: FiUserCheck,
       children: [
         { path: '/users', label: 'Users' },
         { path: '/roles-permissions', label: 'Roles & Permissions' },
