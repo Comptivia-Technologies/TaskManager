@@ -73,6 +73,22 @@ function mapInvitationToUser(inv: ApiInvitation, organisationId: string): User {
 }
 
 export const userService = {
+  getActiveOrganizationUsers: async (organizationId: string): Promise<User[]> => {
+    const productId = process.env.REACT_APP_PRODUCT_ID;
+    if (!productId) return [];
+    const response = await api.get<UsersResponse | { data?: ApiUser[]; users?: ApiUser[] }>(
+      `/api/auth/organizationuser?product_id=${encodeURIComponent(productId)}`
+    );
+    const body = response.data as { data?: { users?: ApiUser[] } | ApiUser[]; users?: ApiUser[] } | undefined;
+    const list =
+      body?.data && typeof body.data === 'object' && 'users' in body.data
+        ? body.data.users ?? []
+        : Array.isArray(body?.data)
+          ? (body?.data ?? [])
+          : body?.users ?? [];
+    return list.map((u: ApiUser) => mapApiUserToUser(u, organizationId));
+  },
+
   getByOrganization: async (
     organizationId: string,
     status: UserStatus

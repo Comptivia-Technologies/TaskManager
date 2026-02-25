@@ -75,7 +75,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
   const loadProductHubUsers = useCallback(async () => {
     if (!organizationId) return;
     try {
-      const users = await userService.getByOrganization(organizationId, 'Active');
+      const users = await userService.getActiveOrganizationUsers(organizationId);
       setProductHubUsers(users);
     } catch {
       setProductHubUsers([]);

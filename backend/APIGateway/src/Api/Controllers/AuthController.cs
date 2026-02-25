@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using APIGateway.Infrastructure.Middleware;
 
 namespace APIGateway.Api.Controllers;
 
@@ -73,6 +74,36 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error looking up tenant for email: {Email}", email);
+            return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+        }
+    }
+
+    [HttpGet("organizationuser")]
+    public async Task<IActionResult> GetOrganizationUsers([FromQuery] string product_id)
+    {
+        if (string.IsNullOrEmpty(product_id))
+            return BadRequest(new { error = "product_id is required" });
+
+        var tenantId = HttpContext.Items[OrganizationAuthMiddleware.TenantIdItemKey]?.ToString();
+        if (string.IsNullOrEmpty(tenantId))
+            return BadRequest(new { error = "tenant_id could not be determined from token" });
+
+        try
+        {
+            var baseUrl = GetAuthServiceBaseUrl();
+            var requestUrl = $"{baseUrl}/api/organizationuser?product_id={Uri.EscapeDataString(product_id)}&tenant_id={Uri.EscapeDataString(tenantId)}";
+            var request = CreateRequest(HttpMethod.Get, requestUrl);
+            var httpClient = _httpClientFactory.CreateClient();
+            var response = await httpClient.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+                return StatusCode((int)response.StatusCode, content);
+            var jsonData = JsonSerializer.Deserialize<JsonElement>(content);
+            return Ok(jsonData);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error proxying organization users for product_id {ProductId}", product_id);
             return StatusCode(500, new { error = "Internal server error", message = ex.Message });
         }
     }

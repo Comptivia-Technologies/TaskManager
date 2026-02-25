@@ -18,7 +18,7 @@ info:
     - Priority rule engine with condition-based evaluation
     
     **All endpoints are routed through API Gateway (Port 5004)**
-  version: 3.0.0
+  version: 3.1.0
   contact:
     name: API Support
     email: support@workflowautomation.enginuo.com
@@ -50,8 +50,46 @@ tags:
     description: Priority rule management
   - name: Workload
     description: Workload queries
+  - name: Auth
+    description: Auth proxy (organization users, tenant lookup; gateway adds tenant_id from JWT)
 
 paths:
+  # Auth (API Gateway proxy to external Auth service)
+  /auth/organizationuser:
+    get:
+      tags: [Auth]
+      summary: Get active organization users
+      description: |
+        Returns active users for the current product and tenant.
+        **product_id** is passed as query parameter (from frontend env REACT_APP_PRODUCT_ID).
+        **tenant_id** is added by the gateway from the JWT (claim tenant_id or firebase.tenant).
+        Gateway proxies to Auth service: GET {AuthService:BaseUrl}/api/organizationuser?product_id=...&tenant_id=...
+        Used by Users page, Members page, and Workflow Wizard for loading Product Hub users.
+        Requires Bearer token.
+      parameters:
+        - name: product_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product ID (e.g. from REACT_APP_PRODUCT_ID)
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationUsersResponse'
+        '400':
+          description: Missing product_id or tenant_id could not be determined from token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized (valid Bearer token required)
+
   # Teams
   /teams:
     get:
@@ -1743,6 +1781,63 @@ components:
       properties:
         error:
           type: string
+
+    OrganizationUsersResponse:
+      type: object
+      description: Response from GET /auth/organizationuser (Auth service)
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+          example: "Users retrieved successfully."
+        data:
+          type: object
+          properties:
+            users:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  user_id:
+                    type: string
+                  username:
+                    type: string
+                  email:
+                    type: string
+                  full_name:
+                    type: string
+                  user_type:
+                    type: string
+                  organization_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [active, pending]
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+                  organization:
+                    type: object
+                    nullable: true
+            pagination:
+              type: object
+              properties:
+                page:
+                  type: integer
+                limit:
+                  type: integer
+                total:
+                  type: integer
+                pages:
+                  type: integer
 
   responses:
     NotFound:

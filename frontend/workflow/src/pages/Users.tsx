@@ -38,7 +38,7 @@ const Users = () => {
     setLoading(true);
     try {
       const [active, pending] = await Promise.all([
-        userService.getByOrganization(organizationId, 'Active'),
+        userService.getActiveOrganizationUsers(organizationId),
         userService.getPendingInvitations(organizationId),
       ]);
       setActiveUsers(active);
