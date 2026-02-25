@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { useTeams } from '../hooks/useTeams';
 import { useMembers } from '../hooks/useMembers';
 import { teamService } from '../services/teamService';
 import { memberService } from '../services/memberService';
+import { userService } from '../services/userService';
 import { workflowService } from '../services/workflowService';
 import { stageService } from '../services/stageService';
 import { toast } from 'react-toastify';
@@ -10,8 +12,13 @@ import { FiChevronLeft, FiChevronRight, FiX, FiPlus, FiEdit2, FiPlay, FiUserPlus
 import Select from 'react-select';
 import SLAConfigure from './SLAConfigure';
 import ConditionBuilder from './ConditionBuilder';
-import { PriorityRuleCreate } from '../types';
+import { PriorityRuleCreate, User } from '../types';
 import { priorityRulesService } from '../services/priorityRulesService';
+
+function splitFullName(fullName: string): { firstName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/);
+  return { firstName: parts[0] ?? '', lastName: parts.slice(1).join(' ') ?? '' };
+}
 
 interface WorkflowWizardProps {
   onSuccess: (workflowId: string) => void;
@@ -29,7 +36,7 @@ interface MemberForm {
   email: string;
   role: string;
   skillLevel: number;
-  // Members will be assigned to first available team when created
+  userId?: string;
 }
 
 interface StageForm {
@@ -43,6 +50,7 @@ interface StageForm {
 }
 
 const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
+  const { organizationId } = useAuth();
   const { teams, refetch: refetchTeams } = useTeams();
   const { members: existingMembers, refetch: refetchMembers } = useMembers();
   const [currentStep, setCurrentStep] = useState(1);
@@ -53,6 +61,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
 
   // Step 1: Get Started (intro)
   // Step 2: Add Members (new members to be created)
+  const [productHubUsers, setProductHubUsers] = useState<User[]>([]);
   const [newMembers, setNewMembers] = useState<MemberForm[]>([]);
   const [memberForm, setMemberForm] = useState<MemberForm>({
     firstName: '',
@@ -62,6 +71,20 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
     skillLevel: 1,
   });
   const [skipMemberCreation, setSkipMemberCreation] = useState(false);
+
+  const loadProductHubUsers = useCallback(async () => {
+    if (!organizationId) return;
+    try {
+      const users = await userService.getByOrganization(organizationId, 'Active');
+      setProductHubUsers(users);
+    } catch {
+      setProductHubUsers([]);
+    }
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (currentStep === 2) loadProductHubUsers();
+  }, [currentStep, loadProductHubUsers]);
 
   // Step 3: Create Team
   const [teamForm, setTeamForm] = useState<TeamForm>({
@@ -245,7 +268,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
           email: member.email,
           role: member.role,
           skillLevel: member.skillLevel,
-          // Don't assign teamId - members will be assigned in Step 3 when team is created
+          userId: member.userId,
         });
       }
       
@@ -485,6 +508,40 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
             {!skipMemberCreation && (
               <>
                 <div className="mb-6 p-4 border border-[#434E78]/30 rounded-azure-sm bg-[#434E78]/5">
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Email (from Product Hub) *</label>
+                    <select
+                      value={memberForm.email}
+                      onChange={(e) => {
+                        const user = productHubUsers.find((u) => u.email === e.target.value);
+                        if (user) {
+                          const { firstName, lastName } = splitFullName(user.fullName);
+                          setMemberForm({
+                            ...memberForm,
+                            email: user.email,
+                            firstName: firstName || memberForm.firstName,
+                            lastName: lastName || memberForm.lastName,
+                            role: user.role || memberForm.role,
+                            userId: user.userId,
+                          });
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
+                    >
+                      <option value="">Select a user...</option>
+                      {productHubUsers
+                        .filter(
+                          (u) =>
+                            !existingMembers.some((m) => m.email === u.email || (m.userId && m.userId === u.userId)) &&
+                            !newMembers.some((nm) => nm.email === u.email)
+                        )
+                        .map((u) => (
+                          <option key={u.userId} value={u.email}>
+                            {u.fullName} ({u.email})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div>
                       <label className="block text-black text-sm font-semibold mb-2 font-sans">First Name *</label>
@@ -505,26 +562,15 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="block text-black text-sm font-semibold mb-2 font-sans">Email *</label>
-                      <input
-                        type="email"
-                        value={memberForm.email}
-                        onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
-                        className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-black text-sm font-semibold mb-2 font-sans">Role *</label>
-                      <input
-                        type="text"
-                        value={memberForm.role}
-                        onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}
-                        className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                        placeholder="e.g., Developer, Manager"
-                      />
-                    </div>
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Role *</label>
+                    <input
+                      type="text"
+                      value={memberForm.role}
+                      onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}
+                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
+                      placeholder="e.g., Developer, Manager"
+                    />
                   </div>
                   <div className="mb-4">
                     <label className="block text-black text-sm font-semibold mb-2 font-sans">Skill Level *</label>
