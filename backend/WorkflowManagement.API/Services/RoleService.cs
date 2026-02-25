@@ -25,6 +25,16 @@ public class RoleService : IRoleService
         _logger = logger;
     }
 
+    public async Task<IEnumerable<RoleReadDto>> GetAllAsync()
+    {
+        var roles = await _context.Roles
+            .Include(r => r.RolePermissions)
+            .ThenInclude(rp => rp.Permission)
+            .OrderBy(r => r.Name)
+            .ToListAsync();
+        return roles.Select(MapToReadDto).ToList();
+    }
+
     public async Task<IEnumerable<RoleReadDto>> GetByOrganizationAsync(Guid organizationId)
     {
         var roles = await _context.Roles

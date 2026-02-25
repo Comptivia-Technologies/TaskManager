@@ -18,7 +18,7 @@ info:
     - Priority rule engine with condition-based evaluation
     
     **All endpoints are routed through API Gateway (Port 5004)**
-  version: 3.1.0
+  version: 3.2.0
   contact:
     name: API Support
     email: support@workflowautomation.enginuo.com
@@ -52,6 +52,8 @@ tags:
     description: Workload queries
   - name: Auth
     description: Auth proxy (organization users, tenant lookup; gateway adds tenant_id from JWT)
+  - name: Roles
+    description: Role management (WorkflowManagement.API). GET /roles/all is API-key-only; other endpoints require JWT.
 
 paths:
   # Auth (API Gateway proxy to external Auth service)
@@ -1166,6 +1168,143 @@ paths:
                 items:
                   $ref: '#/components/schemas/PriorityRule'
 
+  # Roles (WorkflowManagement.API; /roles/all is API-key-only, no JWT)
+  /roles/all:
+    get:
+      tags: [Roles]
+      summary: Get all roles
+      description: |
+        Returns all roles from the database (unfiltered by organization).
+        **Authentication**: API key only via header `X-Api-Key`. No Bearer token.
+        Gateway path is in Auth:ExcludedPathPrefixes; WorkflowManagement.API validates ApiKeys:GetAllRoles.
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: List of all roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+        '401':
+          description: Missing or invalid X-Api-Key
+        '500':
+          description: Server error
+
+  /roles/organization/{organizationId}:
+    get:
+      tags: [Roles]
+      summary: Get roles by organization
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of roles for organization
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+        '500':
+          description: Server error
+
+  /roles/{id}:
+    get:
+      tags: [Roles]
+      summary: Get role by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Role details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          description: Server error
+    put:
+      tags: [Roles]
+      summary: Update role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpdate'
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          description: Server error
+    delete:
+      tags: [Roles]
+      summary: Delete role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Role deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          description: Server error
+
+  /roles:
+    post:
+      tags: [Roles]
+      summary: Create role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreate'
+      responses:
+        '201':
+          description: Role created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '400':
+          description: Invalid request body
+        '500':
+          description: Server error
+
   # Workload
   /workload/{memberId}:
     get:
@@ -1189,6 +1328,60 @@ paths:
 
 components:
   schemas:
+    Role:
+      type: object
+      properties:
+        roleId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        organizationId:
+          type: string
+          format: uuid
+        permissionCodes:
+          type: array
+          items:
+            type: string
+
+    RoleCreate:
+      type: object
+      required: [name, organizationId]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+        organizationId:
+          type: string
+          format: uuid
+        permissionCodes:
+          type: array
+          items:
+            type: string
+
+    RoleUpdate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+        permissionCodes:
+          type: array
+          items:
+            type: string
+
     Team:
       type: object
       properties:
@@ -1864,6 +2057,11 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: API key for GET /roles/all (ApiKeys:GetAllRoles / ROLES_API_KEY)
 
 security:
   - BearerAuth: []

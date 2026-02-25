@@ -61,6 +61,7 @@ jobs:
         working-directory: ./backend
         env:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          ROLES_API_KEY: ${{ secrets.ROLES_API_KEY }}
         run: |
           # Deploy each service
           # Format: service_dir:family_name:container_name:port:db_name:actual_service_name
@@ -130,6 +131,13 @@ jobs:
             if [ "$service_dir" = "WorkflowService" ]; then
               ENV_JSON=$(echo "$ENV_JSON" | jq '. += [
                 {"name":"TaskServiceApi__BaseUrl","value":"http://task-service.workflow-automation/api"}
+              ]')
+            fi
+            
+            # Add ApiKeys__GetAllRoles for WorkflowManagement.API (GET /api/roles/all)
+            if [ "$service_dir" = "WorkflowManagement.API" ]; then
+              ENV_JSON=$(echo "$ENV_JSON" | jq --arg apiKey "$ROLES_API_KEY" '. += [
+                {"name":"ApiKeys__GetAllRoles","value":$apiKey}
               ]')
             fi
             
