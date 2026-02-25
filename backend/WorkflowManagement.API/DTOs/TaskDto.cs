@@ -2,6 +2,13 @@ using System.ComponentModel.DataAnnotations;
 
 namespace WorkflowManagement.API.DTOs;
 
+public class MemberTaskSummaryDto
+{
+    public IEnumerable<TaskReadDto> AssignedToMe { get; set; } = new List<TaskReadDto>();
+    public IEnumerable<TaskReadDto> CompletedByMe { get; set; } = new List<TaskReadDto>();
+    public IEnumerable<TaskReadDto> EscalatedByMe { get; set; } = new List<TaskReadDto>();
+}
+
 public class TaskReadDto
 {
     public Guid TaskId { get; set; }
@@ -11,6 +18,7 @@ public class TaskReadDto
     public string Priority { get; set; } = string.Empty;
     public DateTime? DueDate { get; set; }
     public Guid WorkflowId { get; set; }
+    public string? WorkflowName { get; set; }
     public Guid? StageId { get; set; }
     public string? StageName { get; set; }
     public Guid? AssignedToMemberId { get; set; }

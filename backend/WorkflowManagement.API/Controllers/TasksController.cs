@@ -159,6 +159,21 @@ public class TasksController : ControllerBase
             return StatusCode(500, "An error occurred while retrieving tasks");
         }
     }
+
+    [HttpGet("member/summary/{memberId}")]
+    public async Task<ActionResult<MemberTaskSummaryDto>> GetMemberTaskSummary(Guid memberId)
+    {
+        try
+        {
+            var summary = await _taskService.GetMemberTaskSummaryAsync(memberId);
+            return Ok(summary);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting task summary for member {MemberId}", memberId);
+            return StatusCode(500, "An error occurred while retrieving the task summary");
+        }
+    }
 }
 
 

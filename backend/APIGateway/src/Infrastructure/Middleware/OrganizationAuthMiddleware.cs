@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 
 namespace APIGateway.Infrastructure.Middleware;
@@ -12,6 +13,7 @@ public class OrganizationAuthMiddleware
     private readonly string[] _excludedPathPrefixes;
 
     public const string OrganizationIdItemKey = "OrganizationId";
+    public const string TenantIdItemKey = "TenantId";
 
     public OrganizationAuthMiddleware(RequestDelegate next, IConfiguration configuration)
     {
@@ -42,6 +44,25 @@ public class OrganizationAuthMiddleware
 
         if (!string.IsNullOrEmpty(orgIdClaim))
             context.Items[OrganizationIdItemKey] = orgIdClaim;
+
+        var tenantIdClaim = context.User.FindFirst("tenant_id")?.Value
+            ?? context.User.FindFirst("firebase.tenant")?.Value;
+        if (string.IsNullOrEmpty(tenantIdClaim))
+        {
+            var firebaseClaim = context.User.FindFirst("firebase")?.Value;
+            if (!string.IsNullOrEmpty(firebaseClaim))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(firebaseClaim);
+                    if (doc.RootElement.TryGetProperty("tenant", out var tenantProp))
+                        tenantIdClaim = tenantProp.GetString();
+                }
+                catch { /* ignore */ }
+            }
+        }
+        if (!string.IsNullOrEmpty(tenantIdClaim))
+            context.Items[TenantIdItemKey] = tenantIdClaim;
 
         await _next(context);
     }

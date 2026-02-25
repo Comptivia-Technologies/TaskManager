@@ -9,12 +9,35 @@ namespace WorkflowManagement.API.Controllers;
 public class RolesController : ControllerBase
 {
     private readonly IRoleService _roleService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<RolesController> _logger;
 
-    public RolesController(IRoleService roleService, ILogger<RolesController> logger)
+    public RolesController(IRoleService roleService, IConfiguration configuration, ILogger<RolesController> logger)
     {
         _roleService = roleService;
+        _configuration = configuration;
         _logger = logger;
+    }
+
+    [HttpGet("all")]
+    public async Task<ActionResult<IEnumerable<RoleReadDto>>> GetAll([FromHeader(Name = "X-Api-Key")] string? apiKey)
+    {
+        var expectedKey = _configuration["ApiKeys:GetAllRoles"];
+        if (string.IsNullOrEmpty(expectedKey) || string.IsNullOrEmpty(apiKey) || !string.Equals(apiKey, expectedKey, StringComparison.Ordinal))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var roles = await _roleService.GetAllAsync();
+            return Ok(roles);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing all roles");
+            return StatusCode(500, "An error occurred while retrieving roles");
+        }
     }
 
     [HttpGet("organization/{organizationId:guid}")]

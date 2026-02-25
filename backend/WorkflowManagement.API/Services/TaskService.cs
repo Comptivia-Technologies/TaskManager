@@ -97,6 +97,8 @@ public class TaskService : ITaskService
         var taskDto = _mapper.Map<TaskReadDto>(taskWithDetails);
         if (taskWithDetails.Stage != null)
             taskDto.StageName = taskWithDetails.Stage.StageName;
+        if (taskWithDetails.Workflow != null)
+            taskDto.WorkflowName = taskWithDetails.Workflow.WorkflowName;
         if (taskWithDetails.AssignedToMember != null)
             taskDto.AssignedToMemberName = $"{taskWithDetails.AssignedToMember.FirstName} {taskWithDetails.AssignedToMember.LastName}";
 
@@ -119,6 +121,8 @@ public class TaskService : ITaskService
             {
                 if (task.Stage != null)
                     taskDto.StageName = task.Stage.StageName;
+                if (task.Workflow != null)
+                    taskDto.WorkflowName = task.Workflow.WorkflowName;
                 if (task.AssignedToMember != null)
                     taskDto.AssignedToMemberName = $"{task.AssignedToMember.FirstName} {task.AssignedToMember.LastName}";
             }
@@ -144,6 +148,8 @@ public class TaskService : ITaskService
         var taskDto = _mapper.Map<TaskReadDto>(taskWithDetails);
         if (taskWithDetails.Stage != null)
             taskDto.StageName = taskWithDetails.Stage.StageName;
+        if (taskWithDetails.Workflow != null)
+            taskDto.WorkflowName = taskWithDetails.Workflow.WorkflowName;
         if (taskWithDetails.AssignedToMember != null)
             taskDto.AssignedToMemberName = $"{taskWithDetails.AssignedToMember.FirstName} {taskWithDetails.AssignedToMember.LastName}";
 
@@ -210,6 +216,8 @@ public class TaskService : ITaskService
         var taskDto = _mapper.Map<TaskReadDto>(taskWithDetails);
         if (taskWithDetails.Stage != null)
             taskDto.StageName = taskWithDetails.Stage.StageName;
+        if (taskWithDetails.Workflow != null)
+            taskDto.WorkflowName = taskWithDetails.Workflow.WorkflowName;
         if (taskWithDetails.AssignedToMember != null)
             taskDto.AssignedToMemberName = $"{taskWithDetails.AssignedToMember.FirstName} {taskWithDetails.AssignedToMember.LastName}";
 
@@ -267,6 +275,8 @@ public class TaskService : ITaskService
             {
                 if (task.Stage != null)
                     taskDto.StageName = task.Stage.StageName;
+                if (task.Workflow != null)
+                    taskDto.WorkflowName = task.Workflow.WorkflowName;
                 if (task.AssignedToMember != null)
                     taskDto.AssignedToMemberName = $"{task.AssignedToMember.FirstName} {task.AssignedToMember.LastName}";
             }
@@ -288,6 +298,8 @@ public class TaskService : ITaskService
             {
                 if (task.Stage != null)
                     taskDto.StageName = task.Stage.StageName;
+                if (task.Workflow != null)
+                    taskDto.WorkflowName = task.Workflow.WorkflowName;
                 if (task.AssignedToMember != null)
                     taskDto.AssignedToMemberName = $"{task.AssignedToMember.FirstName} {task.AssignedToMember.LastName}";
             }
@@ -309,12 +321,52 @@ public class TaskService : ITaskService
             {
                 if (task.Stage != null)
                     taskDto.StageName = task.Stage.StageName;
+                if (task.Workflow != null)
+                    taskDto.WorkflowName = task.Workflow.WorkflowName;
                 if (task.AssignedToMember != null)
                     taskDto.AssignedToMemberName = $"{task.AssignedToMember.FirstName} {task.AssignedToMember.LastName}";
             }
         }
 
         return tasksList;
+    }
+
+    public async Task<MemberTaskSummaryDto> GetMemberTaskSummaryAsync(Guid memberId)
+    {
+        var assigned = await GetTasksByMemberAsync(memberId);
+        var completedTasks = await _taskRepository.GetTasksCompletedByMemberAsync(memberId);
+        var escalatedTasks = await _taskRepository.GetTasksEscalatedByMemberAsync(memberId);
+
+        var completedDto = _mapper.Map<IEnumerable<TaskReadDto>>(completedTasks).ToList();
+        foreach (var taskDto in completedDto)
+        {
+            var task = completedTasks.FirstOrDefault(t => t.TaskId == taskDto.TaskId);
+            if (task != null)
+            {
+                if (task.Stage != null) taskDto.StageName = task.Stage.StageName;
+                if (task.Workflow != null) taskDto.WorkflowName = task.Workflow.WorkflowName;
+                if (task.AssignedToMember != null) taskDto.AssignedToMemberName = $"{task.AssignedToMember.FirstName} {task.AssignedToMember.LastName}";
+            }
+        }
+
+        var escalatedDto = _mapper.Map<IEnumerable<TaskReadDto>>(escalatedTasks).ToList();
+        foreach (var taskDto in escalatedDto)
+        {
+            var task = escalatedTasks.FirstOrDefault(t => t.TaskId == taskDto.TaskId);
+            if (task != null)
+            {
+                if (task.Stage != null) taskDto.StageName = task.Stage.StageName;
+                if (task.Workflow != null) taskDto.WorkflowName = task.Workflow.WorkflowName;
+                if (task.AssignedToMember != null) taskDto.AssignedToMemberName = $"{task.AssignedToMember.FirstName} {task.AssignedToMember.LastName}";
+            }
+        }
+
+        return new MemberTaskSummaryDto
+        {
+            AssignedToMe = assigned,
+            CompletedByMe = completedDto,
+            EscalatedByMe = escalatedDto
+        };
     }
 }
 

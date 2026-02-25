@@ -194,6 +194,7 @@ public class WorkflowService : IWorkflowService
             {
                 if (task.Stage != null)
                     taskDto.StageName = task.Stage.StageName;
+                taskDto.WorkflowName = workflow.WorkflowName;
                 if (task.AssignedToMember != null)
                     taskDto.AssignedToMemberName = $"{task.AssignedToMember.FirstName} {task.AssignedToMember.LastName}";
             }

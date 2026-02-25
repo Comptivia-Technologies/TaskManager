@@ -231,6 +231,8 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
   - `/api/priority-rules/*` → PriorityRuleEngine.API (5010)
   - `/api/workload/*` → Workload.API (5003)
 
+**Auth proxy** (AuthController): Proxies auth-related requests to external Auth service (`AuthService:BaseUrl`). For `GET /api/auth/organizationuser`, gateway reads `tenant_id` from JWT (claims `tenant_id` or `firebase.tenant`, or `firebase` JSON claim) and forwards request with `product_id` (query) and `tenant_id` to Auth service.
+
 **Responsibilities**:
 - **Reverse Proxy**: Routes all requests to appropriate backend services
 - **No Business Logic**: Gateway is a thin routing layer only
@@ -626,6 +628,16 @@ CREATE TABLE "PriorityRules" (
 | GET | `/api/tasks/stage/{stageId}` | Get tasks by stage |
 | GET | `/api/tasks/member/{memberId}` | Get tasks by member |
 
+#### Roles
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/roles/all` | Get all roles (unfiltered). **API key only**: requires `X-Api-Key` header; no JWT. Gateway path `/api/roles/all` is in `Auth:ExcludedPathPrefixes`; WorkflowManagement.API validates `ApiKeys:GetAllRoles`. |
+| GET | `/api/roles/organization/{organizationId}` | Get roles by organization (JWT) |
+| GET | `/api/roles/{id}` | Get role by ID |
+| POST | `/api/roles` | Create role |
+| PUT | `/api/roles/{id}` | Update role |
+| DELETE | `/api/roles/{id}` | Delete role |
+
 **Note**: Task creation is handled exclusively through `POST /api/task-service` (TaskService) for proper event-driven orchestration. Direct task creation via WorkflowManagement.API is not supported.
 
 ### 5.2 SLAConfiguration.API (Port 5002)
@@ -662,10 +674,19 @@ CREATE TABLE "PriorityRules" (
 |--------|----------|-------------|
 | GET | `/api/tasks/{id}` | Get task details (proxied to WorkflowManagement.API) |
 
+**Auth Proxy Endpoints** (proxied to external Auth service; require Bearer token):
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/organizationuser?product_id={product_id}` | Get active organization users. Gateway adds `tenant_id` from JWT (claim `tenant_id` or `firebase.tenant`). Proxies to Auth service `GET /api/organizationuser?product_id=...&tenant_id=...`. Used by Users, Members, and Workflow Wizard pages. |
+| GET | `/api/auth/users/organization/{organizationId}?status=active\|pending` | Get users by organization and status (legacy; pending invitations still use this). |
+| GET | `/api/auth/invitations/organization/{organizationId}?status=pending` | Get pending invitations by organization. |
+| GET | `/api/auth/tenant/{email}` | Tenant lookup by email. |
+
 **Reverse Proxy Routes** (All requests are proxied to backend services):
 - `/api/workflows/*` → WorkflowManagement.API:5000
 - `/api/teams/*` → WorkflowManagement.API:5000
 - `/api/members/*` → WorkflowManagement.API:5000
+- `/api/roles/*` → WorkflowManagement.API:5000 (including `/api/roles/all`, which is API-key-only; see `Auth:ExcludedPathPrefixes`)
 - `/api/stages/*` → WorkflowManagement.API:5000
 - `/api/tasks/*` (GET/PUT/DELETE) → WorkflowManagement.API:5000
 - `/api/task-service/*` (POST/GET/PUT/DELETE) → TaskService:5005
@@ -1302,6 +1323,19 @@ export interface Member {
 | SLA API (`slaApi.ts`) | `http://localhost:5004/api` | SLAConfiguration.API:5002 |
 | Priority Rules API (`priorityRulesApi.ts`) | `http://localhost:5004/api` | PriorityRuleEngine.API:5010 |
 | Workload API (`workloadService.ts`) | `http://localhost:5004/api` | Workload.API:5003 |
+| User/organization users (`userService.getActiveOrganizationUsers`) | `GET /api/auth/organizationuser?product_id=...` | Auth service (via API Gateway; gateway adds `tenant_id` from JWT) |
+
+**Frontend environment variables** (build-time; e.g. `.env.development`, `.env.production`):
+| Variable | Purpose |
+|----------|---------|
+| `REACT_APP_API_URL` | API Gateway base URL |
+| `REACT_APP_PRODUCT_ID` | Product ID for active organization users API (`/api/auth/organizationuser`). Required for Users, Members, and Workflow Wizard pages. Set in GitHub Secrets as `REACT_APP_PRODUCT_ID` for CI build. |
+| `REACT_APP_FIREBASE_*` | Firebase config (API key, project ID, auth domain) |
+
+**Backend API key (WorkflowManagement.API)**:
+| Config / env | Purpose |
+|--------------|---------|
+| `ApiKeys:GetAllRoles` | API key for `GET /api/roles/all`. Set via env `ApiKeys__GetAllRoles`; in deploy use GitHub Secret `ROLES_API_KEY` (see `deploy-backend.yml`). |
 
 **Backend Service Ports** (accessed via API Gateway):
 | Service | Port | Purpose |
@@ -2156,11 +2190,13 @@ If issues occur, you can:
 
 ---
 
-**Document Version**: 3.0  
-**Last Updated**: January 2026  
+**Document Version**: 3.2  
+**Last Updated**: February 2026  
 **Author**: System Documentation
 
 **Version History**:
+- **v3.2** (February 2026): Added `GET /api/roles/all` (API key via `X-Api-Key`); gateway `Auth:ExcludedPathPrefixes` includes `/api/roles/all`; WorkflowManagement.API `ApiKeys:GetAllRoles` and deploy `ROLES_API_KEY`
+- **v3.1** (February 2026): Added Auth proxy endpoint `GET /api/auth/organizationuser` for active organization users (product_id + tenant_id from JWT); frontend `REACT_APP_PRODUCT_ID` env and `userService.getActiveOrganizationUsers` for Users, Members, Workflow Wizard pages
 - **v3.0** (January 2026): Migrated from RabbitMQ to multi-cloud event bus architecture (AWS/Azure/GCP)
 - **v2.0** (January 2026): Added stage orchestration and automatic reassignment
 - **v1.0** (Initial): Core workflow management system
