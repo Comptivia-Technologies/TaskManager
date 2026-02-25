@@ -40,6 +40,30 @@ public class TaskRepository : Repository<Models.Task>, ITaskRepository
             .ToListAsync();
     }
 
+    public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksCompletedByMemberAsync(Guid memberId)
+    {
+        var memberIdStr = memberId.ToString();
+        var tasks = await _context.Tasks
+            .Include(t => t.Workflow)
+            .Include(t => t.Stage)
+            .Include(t => t.AssignedToMember)
+            .Where(t => t.CompletedByMemberIds != null)
+            .ToListAsync();
+        return tasks.Where(t => ("," + t.CompletedByMemberIds + ",").Contains("," + memberIdStr + ",")).ToList();
+    }
+
+    public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksEscalatedByMemberAsync(Guid memberId)
+    {
+        var memberIdStr = memberId.ToString();
+        var tasks = await _context.Tasks
+            .Include(t => t.Workflow)
+            .Include(t => t.Stage)
+            .Include(t => t.AssignedToMember)
+            .Where(t => t.EscalatedByMemberIds != null)
+            .ToListAsync();
+        return tasks.Where(t => ("," + t.EscalatedByMemberIds + ",").Contains("," + memberIdStr + ",")).ToList();
+    }
+
     public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksWithDetailsAsync()
     {
         return await _context.Tasks
