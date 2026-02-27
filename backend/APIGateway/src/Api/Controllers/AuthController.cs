@@ -78,6 +78,49 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpPost("organizationuser/create")]
+    public async Task<IActionResult> CreateOrganizationUser([FromBody] JsonElement? body)
+    {
+        if (body is null)
+            return BadRequest(new { error = "Request body is required" });
+        var bodyValue = body.Value;
+        if (bodyValue.ValueKind == JsonValueKind.Null || bodyValue.ValueKind == JsonValueKind.Undefined)
+            return BadRequest(new { error = "Request body is required" });
+
+        try
+        {
+            var baseUrl = GetAuthServiceBaseUrl();
+            var requestUrl = $"{baseUrl}/api/organizationuser/create";
+            var request = CreateRequest(HttpMethod.Post, requestUrl);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(bodyValue),
+                System.Text.Encoding.UTF8,
+                "application/json");
+            var httpClient = _httpClientFactory.CreateClient();
+            var response = await httpClient.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/json";
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ContentResult
+                {
+                    StatusCode = (int)response.StatusCode,
+                    Content = content,
+                    ContentType = contentType,
+                };
+            }
+            if (string.IsNullOrEmpty(content))
+                return Ok();
+            var jsonData = JsonSerializer.Deserialize<JsonElement>(content);
+            return Ok(jsonData);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error proxying create organization user");
+            return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+        }
+    }
+
     [HttpGet("organizationuser")]
     public async Task<IActionResult> GetOrganizationUsers([FromQuery] string product_id)
     {
