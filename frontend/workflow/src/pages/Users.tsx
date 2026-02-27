@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, UserCreate, UserStatus } from '../types';
+import { User, UserCreate, UserStatus, Role } from '../types';
 import { FiPlus, FiEdit, FiTrash2, FiGrid, FiX } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { userService } from '../services/userService';
+import { userService, CreateOrganizationUserPayload } from '../services/userService';
+import { roleService } from '../services/roleService';
 import LoadingSpinner from '../components/LoadingSpinner';
-
-const ROLES = ['Admin', 'User', 'Folder Manager', 'Content Creator', 'Workspace Manager'];
 
 const formatDate = (iso: string) => {
   const d = new Date(iso);
@@ -14,7 +13,7 @@ const formatDate = (iso: string) => {
 };
 
 const Users = () => {
-  const { organizationId } = useAuth();
+  const { organizationId, currentTenantId } = useAuth();
   const [activeUsers, setActiveUsers] = useState<User[]>([]);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,30 +26,38 @@ const Users = () => {
     organisationId: '',
     role: '',
   });
+  const [productRoleId, setProductRoleId] = useState('');
+  const [selectedRoleId, setSelectedRoleId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [roles, setRoles] = useState<Role[]>([]);
 
   const loadUsers = useCallback(async () => {
     if (!organizationId) {
       setLoading(false);
       setActiveUsers([]);
       setPendingUsers([]);
+      setRoles([]);
       return;
     }
     setLoading(true);
     try {
-      const [active, pending] = await Promise.all([
-        userService.getActiveOrganizationUsers(organizationId),
+      const [active, pending, rolesList] = await Promise.all([
+        userService.getActiveOrganizationUsers(organizationId, currentTenantId),
         userService.getPendingInvitations(organizationId),
+        roleService.getByOrganization(organizationId),
       ]);
       setActiveUsers(active);
       setPendingUsers(pending);
+      setRoles(rolesList);
     } catch (err: unknown) {
       toast.error('Failed to load users');
       setActiveUsers([]);
       setPendingUsers([]);
+      setRoles([]);
     } finally {
       setLoading(false);
     }
-  }, [organizationId]);
+  }, [organizationId, currentTenantId]);
 
   useEffect(() => {
     loadUsers();
@@ -65,6 +72,8 @@ const Users = () => {
   const openAddModal = () => {
     setEditingUser(null);
     setFormData({ fullName: '', email: '', organisationId: organizationId || '', role: '' });
+    setProductRoleId('');
+    setSelectedRoleId('');
     setIsModalOpen(true);
   };
 
@@ -83,12 +92,14 @@ const Users = () => {
     setIsModalOpen(false);
     setEditingUser(null);
     setFormData({ fullName: '', email: '', organisationId: organizationId || '', role: '' });
+    setProductRoleId('');
+    setSelectedRoleId('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updated = { ...formData, updatedAt: new Date().toISOString().slice(0, 10) };
     if (editingUser) {
+      const updated = { ...formData, updatedAt: new Date().toISOString().slice(0, 10) };
       if (editingUser.status === 'Active') {
         setActiveUsers((prev) =>
           prev.map((u) => (u.userId === editingUser.userId ? { ...u, ...updated } : u))
@@ -99,18 +110,42 @@ const Users = () => {
         );
       }
       toast.success('User updated successfully');
-    } else {
-      const newUser: User = {
-        userId: String(Date.now()),
-        ...formData,
-        status: 'Active',
-        createdAt: new Date().toISOString().slice(0, 10),
-        updatedAt: new Date().toISOString().slice(0, 10),
-      };
-      setActiveUsers((prev) => [...prev, newUser]);
-      toast.success('User added successfully');
+      closeModal();
+      return;
     }
-    closeModal();
+    const productId = process.env.REACT_APP_PRODUCT_ID;
+    if (!organizationId || !productId) {
+      toast.error('Organization or product not configured');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const payload: CreateOrganizationUserPayload = {
+        organization_id: organizationId,
+        email: formData.email,
+        full_name: formData.fullName,
+        user_type: 'organization',
+        role: formData.role,
+        products_data: [
+          {
+            product_id: productId,
+            role_id: productRoleId.trim() || selectedRoleId,
+            role_name: formData.role,
+          },
+        ],
+      };
+      await userService.createOrganizationUser(payload);
+      toast.success('User added successfully');
+      closeModal();
+      loadUsers();
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err
+        ? String((err.response as { data?: unknown }).data)
+        : 'Failed to add user';
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleDelete = (user: User) => {
@@ -327,19 +362,39 @@ const Users = () => {
                   Role <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  value={roles.find((r) => r.name === formData.role)?.roleId ?? ''}
+                  onChange={(e) => {
+                    const r = roles.find((r) => r.roleId === e.target.value);
+                    if (r) {
+                      setFormData((prev) => ({ ...prev, role: r.name }));
+                      setSelectedRoleId(r.roleId);
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans appearance-none cursor-pointer"
                   required
                 >
                   <option value="">Select a role</option>
-                  {ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
+                  {roles.map((r) => (
+                    <option key={r.roleId} value={r.roleId}>
+                      {r.name}
                     </option>
                   ))}
                 </select>
               </div>
+              {!editingUser && (
+                <div className="mb-6">
+                  <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                    Product role ID
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Optional – from Product Hub"
+                    value={productRoleId}
+                    onChange={(e) => setProductRoleId(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                  />
+                </div>
+              )}
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
@@ -350,9 +405,10 @@ const Users = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
+                  disabled={submitting}
+                  className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
                 >
-                  {editingUser ? 'Update User' : 'Add User'}
+                  {submitting ? 'Adding…' : editingUser ? 'Update User' : 'Add User'}
                 </button>
               </div>
             </form>

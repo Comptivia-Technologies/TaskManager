@@ -73,11 +73,13 @@ function mapInvitationToUser(inv: ApiInvitation, organisationId: string): User {
 }
 
 export const userService = {
-  getActiveOrganizationUsers: async (organizationId: string): Promise<User[]> => {
+  getActiveOrganizationUsers: async (organizationId: string, tenantId?: string | null): Promise<User[]> => {
     const productId = process.env.REACT_APP_PRODUCT_ID;
     if (!productId) return [];
+    const params = new URLSearchParams({ product_id: productId });
+    if (tenantId?.trim()) params.set('tenant_id', tenantId.trim());
     const response = await api.get<UsersResponse | { data?: ApiUser[]; users?: ApiUser[] }>(
-      `/api/auth/organizationuser?product_id=${encodeURIComponent(productId)}`
+      `/api/auth/organizationuser?${params.toString()}`
     );
     const body = response.data as { data?: { users?: ApiUser[] } | ApiUser[]; users?: ApiUser[] } | undefined;
     const list =
@@ -112,4 +114,23 @@ export const userService = {
     const list = data?.invitations ?? data?.users ?? [];
     return list.map((u) => mapInvitationToUser(u, organizationId));
   },
+
+  createOrganizationUser: async (
+    payload: CreateOrganizationUserPayload
+  ): Promise<unknown> => {
+    const response = await api.post<unknown>(
+      '/api/auth/organizationuser/create',
+      payload
+    );
+    return response.data;
+  },
 };
+
+export interface CreateOrganizationUserPayload {
+  organization_id: string;
+  email: string;
+  full_name: string;
+  user_type: string;
+  role: string;
+  products_data: { product_id: string; role_id: string; role_name: string }[];
+}

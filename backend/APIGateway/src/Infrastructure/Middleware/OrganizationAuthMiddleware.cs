@@ -19,7 +19,7 @@ public class OrganizationAuthMiddleware
     {
         _next = next;
         _excludedPathPrefixes = configuration.GetSection("Auth:ExcludedPathPrefixes").Get<string[]>()
-            ?? new[] { "/health", "/api/auth", "/swagger" };
+            ?? new[] { "/health", "/api/auth/tenant", "/api/roles/all", "/swagger" };
     }
 
     public async Task InvokeAsync(HttpContext context)

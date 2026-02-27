@@ -233,6 +233,8 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 
 **Auth proxy** (AuthController): Proxies auth-related requests to external Auth service (`AuthService:BaseUrl`). For `GET /api/auth/organizationuser`, gateway reads `tenant_id` from JWT (claims `tenant_id` or `firebase.tenant`, or `firebase` JSON claim) and forwards request with `product_id` (query) and `tenant_id` to Auth service.
 
+**Implementation note**: `Auth:ExcludedPathPrefixes` must exclude only paths that do not require JWT (e.g. `/api/auth/tenant`, `/api/roles/all`), not the entire `/api/auth` prefix. That way `/api/auth/organizationuser` is not excluded and the middleware runs for it, setting `TenantId` from the JWT so the controller can add `tenant_id` to the downstream request.
+
 **Responsibilities**:
 - **Reverse Proxy**: Routes all requests to appropriate backend services
 - **No Business Logic**: Gateway is a thin routing layer only
