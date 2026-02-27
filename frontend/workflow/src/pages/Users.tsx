@@ -13,7 +13,7 @@ const formatDate = (iso: string) => {
 };
 
 const Users = () => {
-  const { organizationId } = useAuth();
+  const { organizationId, currentTenantId } = useAuth();
   const [activeUsers, setActiveUsers] = useState<User[]>([]);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +42,7 @@ const Users = () => {
     setLoading(true);
     try {
       const [active, pending, rolesList] = await Promise.all([
-        userService.getActiveOrganizationUsers(organizationId),
+        userService.getActiveOrganizationUsers(organizationId, currentTenantId),
         userService.getPendingInvitations(organizationId),
         roleService.getByOrganization(organizationId),
       ]);
@@ -57,7 +57,7 @@ const Users = () => {
     } finally {
       setLoading(false);
     }
-  }, [organizationId]);
+  }, [organizationId, currentTenantId]);
 
   useEffect(() => {
     loadUsers();

@@ -73,11 +73,13 @@ function mapInvitationToUser(inv: ApiInvitation, organisationId: string): User {
 }
 
 export const userService = {
-  getActiveOrganizationUsers: async (organizationId: string): Promise<User[]> => {
+  getActiveOrganizationUsers: async (organizationId: string, tenantId?: string | null): Promise<User[]> => {
     const productId = process.env.REACT_APP_PRODUCT_ID;
     if (!productId) return [];
+    const params = new URLSearchParams({ product_id: productId });
+    if (tenantId?.trim()) params.set('tenant_id', tenantId.trim());
     const response = await api.get<UsersResponse | { data?: ApiUser[]; users?: ApiUser[] }>(
-      `/api/auth/organizationuser?product_id=${encodeURIComponent(productId)}`
+      `/api/auth/organizationuser?${params.toString()}`
     );
     const body = response.data as { data?: { users?: ApiUser[] } | ApiUser[]; users?: ApiUser[] } | undefined;
     const list =

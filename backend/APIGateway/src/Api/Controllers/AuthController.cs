@@ -122,14 +122,15 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("organizationuser")]
-    public async Task<IActionResult> GetOrganizationUsers([FromQuery] string product_id)
+    public async Task<IActionResult> GetOrganizationUsers([FromQuery] string product_id, [FromQuery] string? tenant_id)
     {
         if (string.IsNullOrEmpty(product_id))
             return BadRequest(new { error = "product_id is required" });
 
-        var tenantId = HttpContext.Items[OrganizationAuthMiddleware.TenantIdItemKey]?.ToString();
+        var tenantId = HttpContext.Items[OrganizationAuthMiddleware.TenantIdItemKey]?.ToString()
+            ?? (!string.IsNullOrWhiteSpace(tenant_id) ? tenant_id.Trim() : null);
         if (string.IsNullOrEmpty(tenantId))
-            return BadRequest(new { error = "tenant_id could not be determined from token" });
+            return BadRequest(new { error = "tenant_id could not be determined from token or query" });
 
         try
         {

@@ -68,6 +68,7 @@ paths:
         Gateway proxies to Auth service: GET {AuthService:BaseUrl}/api/organizationuser?product_id=...&tenant_id=...
         Used by Users page, Members page, and Workflow Wizard for loading Product Hub users.
         Requires Bearer token.
+        **Implementation**: Gateway excludes only specific paths (e.g. /api/auth/tenant, /api/roles/all) in Auth:ExcludedPathPrefixes, not the whole /api/auth prefix, so this path receives the middleware and tenant_id from the JWT.
       parameters:
         - name: product_id
           in: query
