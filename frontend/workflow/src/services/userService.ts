@@ -14,6 +14,15 @@ interface ApiUser {
   status?: string;
   created_at?: string;
   updated_at?: string;
+  product_role?: {
+    role_name?: string;
+    role_id?: string;
+    product_id?: string;
+    product_name?: string;
+    subscription_id?: string;
+    subscription_expiry_date?: string;
+    subscription_created_at?: string;
+  } | null;
 }
 
 interface UsersResponse {
@@ -32,7 +41,7 @@ function mapApiUserToUser(apiUser: ApiUser, organisationId: string): User {
     fullName: apiUser.full_name || apiUser.username || '',
     email: apiUser.email || '',
     organisationId: apiUser.organization_id || organisationId,
-    role: apiUser.role || '',
+    role: apiUser.product_role?.role_name ?? apiUser.role ?? '',
     status: capitalStatus,
     createdAt: apiUser.created_at || new Date().toISOString(),
     updatedAt: apiUser.updated_at || new Date().toISOString(),
