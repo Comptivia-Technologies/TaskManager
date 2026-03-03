@@ -1,10 +1,31 @@
 import api from './api';
-import { Task, TaskUpdate } from '../types';
+import { Task, TaskUpdate, PaginatedTasksResponse } from '../types';
 
 export const taskService = {
   getAll: async (): Promise<Task[]> => {
-    const response = await api.get<Task[]>('/api/tasks');
-    return response.data;
+    const response = await api.get<PaginatedTasksResponse | Task[]>('/api/tasks');
+    const raw = response.data;
+    if (Array.isArray(raw)) return raw;
+    return Array.isArray(raw?.data) ? raw.data : [];
+  },
+
+  getAllPaginated: async (priority?: string, page = 1, limit = 10): Promise<PaginatedTasksResponse> => {
+    const params = new URLSearchParams();
+    if (priority?.trim()) params.set('priority', priority.trim());
+    params.set('page', String(page));
+    params.set('limit', String(limit));
+    const response = await api.get<PaginatedTasksResponse | Task[]>(`/api/tasks?${params.toString()}`);
+    const raw = response.data;
+    if (Array.isArray(raw)) {
+      return { data: raw, totalCount: raw.length, page: 1, limit: raw.length || 10, totalPages: raw.length ? 1 : 0 };
+    }
+    return {
+      data: Array.isArray(raw?.data) ? raw.data : [],
+      totalCount: raw?.totalCount ?? 0,
+      page: raw?.page ?? 1,
+      limit: raw?.limit ?? 10,
+      totalPages: raw?.totalPages ?? 0
+    };
   },
 
   getById: async (id: string): Promise<Task> => {

@@ -7,35 +7,56 @@ import { FiCheckCircle, FiClock, FiUser, FiLayers, FiCalendar, FiAlertCircle } f
 import { useNavigate } from 'react-router-dom';
 import { formatDateToIST } from '../utils/dateUtils';
 
+const PAGE_SIZE = 10;
+const PRIORITY_OPTIONS = ['All', 'Critical', 'High', 'Medium', 'Low'];
+
 const Tasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [priorityFilter, setPriorityFilter] = useState<string>('All');
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const [tasksData, workflowsData] = await Promise.all([
-        taskService.getAll(),
+      const priority = priorityFilter === 'All' ? undefined : priorityFilter;
+      const [paginated, workflowsData] = await Promise.all([
+        taskService.getAllPaginated(priority, page, PAGE_SIZE),
         workflowService.getAll()
       ]);
-      setTasks(tasksData);
-      setWorkflows(workflowsData);
+      setTasks(paginated.data ?? []);
+      setWorkflows(workflowsData ?? []);
+      setTotalCount(paginated.totalCount);
+      setTotalPages(paginated.totalPages);
     } catch (err) {
       setError('Failed to load tasks. Please try again.');
       console.error('Error loading data:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [priorityFilter, page]);
 
-  // Initial load on mount
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const goToPage = (p: number) => {
+    if (p >= 1 && p <= totalPages) setPage(p);
+  };
+
+  const pageNumbers = (() => {
+    const maxVisible = 5;
+    let start = Math.max(1, page - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  })();
 
   // Refresh when window gains focus (user returns to tab)
   useEffect(() => {
@@ -137,13 +158,12 @@ const Tasks = () => {
         )}
 
         {/* Summary Stats */}
-        {tasks.length > 0 && (
-          <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-azure-sm shadow-azure-sm p-4 border border-[#434E78]/20">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-black/60 font-sans uppercase tracking-wide">Total Tasks</p>
-                  <p className="text-2xl font-semibold text-black font-sans mt-1">{tasks.length}</p>
+                  <p className="text-2xl font-semibold text-black font-sans mt-1">{totalCount}</p>
                 </div>
                 <FiCheckCircle className="text-[#434E78] text-2xl" />
               </div>
@@ -182,7 +202,35 @@ const Tasks = () => {
               </div>
             </div>
           </div>
-        )}
+
+        {/* Priority filter & pagination info */}
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-4">
+          <div className="flex items-center gap-2">
+            <label htmlFor="priority-filter" className="text-sm font-medium text-black/70 font-sans">
+              Priority
+            </label>
+            <select
+              id="priority-filter"
+              value={priorityFilter}
+              onChange={(e) => {
+                setPriorityFilter(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-azure-sm border border-[#434E78]/30 px-3 py-2 text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#434E78]/50"
+            >
+              {PRIORITY_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+          {totalPages > 0 && (
+            <span className="text-sm text-black/60 font-sans">
+              Page {page} of {totalPages} ({totalCount} tasks)
+            </span>
+          )}
+        </div>
 
         {/* Tasks Table */}
         <div className="bg-white rounded-azure-sm shadow-azure-md border border-[#434E78]/20 overflow-hidden">
@@ -316,6 +364,40 @@ const Tasks = () => {
               </table>
             </div>
           )}
+        </div>
+
+        {/* Pagination */}
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => goToPage(page - 1)}
+            disabled={page <= 1}
+            className="px-3 py-1.5 rounded-azure-sm border border-[#434E78]/30 text-sm font-sans disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#434E78]/5"
+          >
+            Prev
+          </button>
+          {pageNumbers.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => goToPage(p)}
+              className={`min-w-[2rem] px-3 py-1.5 rounded-azure-sm border text-sm font-sans ${
+                p === page
+                  ? 'bg-[#434E78] text-white border-[#434E78]'
+                  : 'border-[#434E78]/30 hover:bg-[#434E78]/5'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => goToPage(page + 1)}
+            disabled={page >= totalPages}
+            className="px-3 py-1.5 rounded-azure-sm border border-[#434E78]/30 text-sm font-sans disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#434E78]/5"
+          >
+            Next
+          </button>
         </div>
       </div>
     </div>

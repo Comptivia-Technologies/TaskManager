@@ -40,12 +40,12 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetAllTasks()
+    public async Task<ActionResult<PaginatedTasksResponseDto>> GetAllTasks([FromQuery] string? priority, [FromQuery] int page = 1, [FromQuery] int limit = 10)
     {
         try
         {
-            var tasks = await _taskService.GetAllTasksAsync();
-            return Ok(tasks);
+            var result = await _taskService.GetTasksPaginatedAsync(priority, page, limit);
+            return Ok(result);
         }
         catch (Exception ex)
         {

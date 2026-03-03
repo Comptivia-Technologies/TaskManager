@@ -22,7 +22,8 @@ const Teams = () => {
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
-  
+  const [previousTeamMemberIds, setPreviousTeamMemberIds] = useState<string[]>([]);
+
   // Member management state
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [isMemberEditMode, setIsMemberEditMode] = useState(false);
@@ -47,16 +48,20 @@ const Teams = () => {
       // Load current team members
       try {
         const teamMembers = await teamService.getMembers(team.teamId);
-        setSelectedMemberIds(teamMembers.map((m: Member) => m.memberId));
+        const ids = teamMembers.map((m: Member) => m.memberId);
+        setSelectedMemberIds(ids);
+        setPreviousTeamMemberIds(ids);
       } catch (error) {
         console.error('Error loading team members:', error);
         setSelectedMemberIds([]);
+        setPreviousTeamMemberIds([]);
       }
     } else {
       setIsEditMode(false);
       setFormData({ teamName: '', description: '' });
       setSelectedTeam(null);
       setSelectedMemberIds([]);
+      setPreviousTeamMemberIds([]);
     }
     setIsModalOpen(true);
   };
@@ -67,6 +72,7 @@ const Teams = () => {
     setSelectedTeam(null);
     setFormData({ teamName: '', description: '' });
     setSelectedMemberIds([]);
+    setPreviousTeamMemberIds([]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,11 +89,36 @@ const Teams = () => {
         const newTeam = await teamService.create(formData);
         createdTeamId = newTeam.teamId;
       }
-      
+
+      const freshMembers = await memberService.getAll();
+      const selectedSet = new Set(selectedMemberIds);
+
+      // In edit mode: unassign members who were on the team but are no longer selected
+      if (isEditMode && previousTeamMemberIds.length > 0) {
+        try {
+          for (const memberId of previousTeamMemberIds) {
+            if (selectedSet.has(memberId)) continue;
+            const member = freshMembers.find(m => m.memberId === memberId);
+            if (member) {
+              await memberService.update(memberId, {
+                firstName: member.firstName,
+                lastName: member.lastName,
+                email: member.email,
+                role: member.role,
+                skillLevel: member.skillLevel,
+                teamId: undefined,
+              });
+            }
+          }
+        } catch (unassignError: any) {
+          console.error('Error unassigning members:', unassignError);
+          toast.warning('Team updated but failed to remove some members from the team');
+        }
+      }
+
       // Assign selected existing members to the team
       if (selectedMemberIds.length > 0) {
         try {
-          const freshMembers = await memberService.getAll();
           for (const memberId of selectedMemberIds) {
             const member = freshMembers.find(m => m.memberId === memberId);
             if (member) {

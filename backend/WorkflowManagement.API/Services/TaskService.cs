@@ -131,6 +131,45 @@ public class TaskService : ITaskService
         return tasksList;
     }
 
+    public async Task<PaginatedTasksResponseDto> GetTasksPaginatedAsync(string? priority, int page, int limit)
+    {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+
+        if (page < 1) page = 1;
+        if (limit < 1) limit = 10;
+        if (limit > 100) limit = 100;
+
+        var (tasks, totalCount) = await _taskRepository.GetTasksWithDetailsByOrganizationPaginatedAsync(orgId.Value, priority, page, limit);
+        var tasksList = tasks.ToList();
+        var tasksDto = _mapper.Map<IEnumerable<TaskReadDto>>(tasksList).ToList();
+
+        foreach (var taskDto in tasksDto)
+        {
+            var task = tasksList.FirstOrDefault(t => t.TaskId == taskDto.TaskId);
+            if (task != null)
+            {
+                if (task.Stage != null)
+                    taskDto.StageName = task.Stage.StageName;
+                if (task.Workflow != null)
+                    taskDto.WorkflowName = task.Workflow.WorkflowName;
+                if (task.AssignedToMember != null)
+                    taskDto.AssignedToMemberName = $"{task.AssignedToMember.FirstName} {task.AssignedToMember.LastName}";
+            }
+        }
+
+        var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)limit);
+        return new PaginatedTasksResponseDto
+        {
+            Data = tasksDto,
+            TotalCount = totalCount,
+            Page = page,
+            Limit = limit,
+            TotalPages = totalPages
+        };
+    }
+
     public async Task<TaskReadDto?> GetTaskByIdAsync(Guid id)
     {
         var orgId = _orgAccessor.GetCurrentOrganizationId();

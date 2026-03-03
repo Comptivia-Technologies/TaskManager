@@ -6,6 +6,7 @@ public interface ITaskService
 {
     Task<TaskReadDto> CreateTaskAsync(TaskCreateDto taskCreateDto);
     Task<IEnumerable<TaskReadDto>> GetAllTasksAsync();
+    Task<PaginatedTasksResponseDto> GetTasksPaginatedAsync(string? priority, int page, int limit);
     Task<TaskReadDto?> GetTaskByIdAsync(Guid id);
     Task<TaskReadDto?> UpdateTaskAsync(Guid id, TaskUpdateDto taskUpdateDto);
     Task<bool> DeleteTaskAsync(Guid id);
