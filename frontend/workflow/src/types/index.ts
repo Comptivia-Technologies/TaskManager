@@ -146,6 +146,14 @@ export interface TaskUpdate {
   assignedToMemberId?: string;
 }
 
+export interface PaginatedTasksResponse {
+  data: Task[];
+  totalCount: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 // SLA and task priorities are now fully dynamic, so this is a free-form string
 export type PriorityLevel = string;
 

@@ -2,6 +2,15 @@ using System.ComponentModel.DataAnnotations;
 
 namespace WorkflowManagement.API.DTOs;
 
+public class PaginatedTasksResponseDto
+{
+    public IEnumerable<TaskReadDto> Data { get; set; } = new List<TaskReadDto>();
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int Limit { get; set; }
+    public int TotalPages { get; set; }
+}
+
 public class MemberTaskSummaryDto
 {
     public IEnumerable<TaskReadDto> AssignedToMe { get; set; } = new List<TaskReadDto>();

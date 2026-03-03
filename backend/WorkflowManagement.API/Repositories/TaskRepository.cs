@@ -82,5 +82,27 @@ public class TaskRepository : Repository<Models.Task>, ITaskRepository
             .Where(t => t.OrganizationId == organizationId)
             .ToListAsync();
     }
+
+    public async System.Threading.Tasks.Task<(IEnumerable<Models.Task> Items, int TotalCount)> GetTasksWithDetailsByOrganizationPaginatedAsync(Guid organizationId, string? priority, int page, int limit)
+    {
+        var query = _context.Tasks
+            .Include(t => t.Workflow)
+            .Include(t => t.Stage)
+            .Include(t => t.AssignedToMember)
+            .Where(t => t.OrganizationId == organizationId);
+
+        if (!string.IsNullOrWhiteSpace(priority))
+            query = query.Where(t => t.Priority == priority.Trim());
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderByDescending(t => t.CreatedAt)
+            .Skip((page - 1) * limit)
+            .Take(limit)
+            .ToListAsync();
+
+        return (items, totalCount);
+    }
 }
 
