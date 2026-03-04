@@ -24,6 +24,11 @@ const Teams = () => {
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [previousTeamMemberIds, setPreviousTeamMemberIds] = useState<string[]>([]);
 
+  const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
+  const [deletingTeam, setDeletingTeam] = useState(false);
+  const [memberToDeleteFromTeam, setMemberToDeleteFromTeam] = useState<{ memberId: string; firstName: string; lastName: string } | null>(null);
+  const [deletingMember, setDeletingMember] = useState(false);
+
   // Member management state
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [isMemberEditMode, setIsMemberEditMode] = useState(false);
@@ -152,21 +157,18 @@ const Teams = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    const team = teams.find(t => t.teamId === id);
-    const teamName = team?.teamName || 'this team';
-    
-    if (window.confirm(`Are you sure you want to delete "${teamName}"?\n\nNote: You cannot delete a team that has members, workflows, or stages assigned to it.`)) {
-      try {
-        await teamService.delete(id);
-        toast.success('Team deleted successfully');
-        refetch();
-      } catch (error: any) {
-        const errorMessage = error.response?.data?.error || error.message || 'Failed to delete team';
-        toast.error(errorMessage, {
-          autoClose: 5000, // Show for 5 seconds for longer error messages
-        });
-      }
+  const handleDeleteTeam = async (team: Team) => {
+    setDeletingTeam(true);
+    try {
+      await teamService.delete(team.teamId);
+      toast.success('Team deleted successfully');
+      setTeamToDelete(null);
+      refetch();
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to delete team';
+      toast.error(errorMessage, { autoClose: 5000 });
+    } finally {
+      setDeletingTeam(false);
     }
   };
 
@@ -248,22 +250,22 @@ const Teams = () => {
     }
   };
 
-  const handleDeleteMember = async (memberId: string) => {
+  const handleDeleteMemberFromTeam = async (memberId: string) => {
     if (!selectedTeam) return;
-    
-    if (window.confirm('Are you sure you want to delete this member?')) {
-      try {
-        await memberService.delete(memberId);
-        toast.success('Member deleted successfully');
-        // Refresh team details
-        const [members, workflows] = await Promise.all([
-          teamService.getMembers(selectedTeam.teamId),
-          teamService.getWorkflows(selectedTeam.teamId),
-        ]);
-        setSelectedTeam({ ...selectedTeam, members, workflows } as any);
-      } catch (error: any) {
-        toast.error(error.response?.data?.error || 'Failed to delete member');
-      }
+    setDeletingMember(true);
+    try {
+      await memberService.delete(memberId);
+      toast.success('Member deleted successfully');
+      setMemberToDeleteFromTeam(null);
+      const [members, workflows] = await Promise.all([
+        teamService.getMembers(selectedTeam.teamId),
+        teamService.getWorkflows(selectedTeam.teamId),
+      ]);
+      setSelectedTeam({ ...selectedTeam, members, workflows } as any);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to delete member');
+    } finally {
+      setDeletingMember(false);
     }
   };
 
@@ -327,7 +329,7 @@ const Teams = () => {
                         <FiEdit className="text-sm" />
                       </button>
                       <button
-                        onClick={() => handleDeleteMember(member.memberId)}
+                        onClick={() => setMemberToDeleteFromTeam({ memberId: member.memberId, firstName: member.firstName, lastName: member.lastName })}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
                         title="Delete member"
                       >
@@ -356,6 +358,35 @@ const Teams = () => {
             )}
           </div>
         </div>
+
+        {memberToDeleteFromTeam && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
+              <h2 className="text-xl font-semibold mb-2 text-black font-sans">Delete member</h2>
+              <p className="text-black/70 text-sm font-sans mb-6">
+                Are you sure you want to delete {memberToDeleteFromTeam.firstName} {memberToDeleteFromTeam.lastName}?
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMemberToDeleteFromTeam(null)}
+                  disabled={deletingMember}
+                  className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteMemberFromTeam(memberToDeleteFromTeam.memberId)}
+                  disabled={deletingMember}
+                  className="px-4 py-2 bg-red-600 text-white rounded-azure-sm hover:bg-red-700 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
+                >
+                  {deletingMember ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -449,7 +480,7 @@ const Teams = () => {
                       <FiEdit className="text-base" />
                     </button>
                     <button
-                      onClick={() => handleDelete(team.teamId)}
+                      onClick={() => setTeamToDelete(team)}
                       className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-azure-sm transition-colors"
                       title="Delete"
                     >
@@ -734,6 +765,35 @@ const Teams = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {teamToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
+            <h2 className="text-xl font-semibold mb-2 text-black font-sans">Delete team</h2>
+            <p className="text-black/70 text-sm font-sans mb-6">
+              Are you sure you want to delete &quot;{teamToDelete.teamName}&quot;? You cannot delete a team that has members, workflows, or stages assigned to it.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setTeamToDelete(null)}
+                disabled={deletingTeam}
+                className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteTeam(teamToDelete)}
+                disabled={deletingTeam}
+                className="px-4 py-2 bg-red-600 text-white rounded-azure-sm hover:bg-red-700 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
+              >
+                {deletingTeam ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

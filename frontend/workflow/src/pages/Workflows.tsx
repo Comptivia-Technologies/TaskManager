@@ -16,17 +16,21 @@ const Workflows = () => {
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
   const [isSLAConfigureMode, setIsSLAConfigureMode] = useState(false);
   const [selectedWorkflowForSLA, setSelectedWorkflowForSLA] = useState<string | undefined>(undefined);
+  const [workflowToDelete, setWorkflowToDelete] = useState<Workflow | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this workflow?')) {
-      try {
-        await workflowService.delete(id);
-        toast.success('Workflow deleted successfully');
-        refetch();
-      } catch (error: any) {
-        toast.error(error.response?.data?.error || 'Failed to delete workflow');
-      }
+  const handleDeleteWorkflow = async (workflow: Workflow) => {
+    setDeleting(true);
+    try {
+      await workflowService.delete(workflow.workflowId);
+      toast.success('Workflow deleted successfully');
+      setWorkflowToDelete(null);
+      refetch();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to delete workflow');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -176,7 +180,7 @@ const Workflows = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDelete(workflow.workflowId);
+                          setWorkflowToDelete(workflow);
                         }}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
                         title="Delete workflow"
@@ -220,6 +224,35 @@ const Workflows = () => {
           </div>
         )}
       </div>
+
+      {workflowToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
+            <h2 className="text-xl font-semibold mb-2 text-black font-sans">Delete workflow</h2>
+            <p className="text-black/70 text-sm font-sans mb-6">
+              Are you sure you want to delete {workflowToDelete.workflowName}?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setWorkflowToDelete(null)}
+                disabled={deleting}
+                className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteWorkflow(workflowToDelete)}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-azure-sm hover:bg-red-700 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
