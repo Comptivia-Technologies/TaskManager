@@ -29,6 +29,10 @@ const Users = () => {
   const [productRoleId, setProductRoleId] = useState('');
   const [selectedRoleId, setSelectedRoleId] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [userToArchive, setUserToArchive] = useState<User | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [userToRestore, setUserToRestore] = useState<User | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
 
   const loadUsers = useCallback(async () => {
@@ -175,15 +179,17 @@ const Users = () => {
     }
   };
 
-  const handleRestore = async (user: User) => {
+  const handleRestoreUser = async (user: User) => {
     const idToRestore = user.id ?? user.userId;
     if (!idToRestore) {
       toast.error('User id not found');
       return;
     }
+    setRestoring(true);
     try {
       await userService.updateUserStatus(idToRestore, 'active');
       toast.success('User restored');
+      setUserToRestore(null);
       loadUsers();
     } catch (err: unknown) {
       const msg =
@@ -191,27 +197,40 @@ const Users = () => {
           ? String((err.response as { data?: unknown }).data)
           : 'Failed to restore user';
       toast.error(msg);
+    } finally {
+      setRestoring(false);
     }
   };
 
-  const handleDelete = async (user: User) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
-    const idToDelete = user.id ?? user.userId;
-    if (!idToDelete) {
+  const handleRestoreConfirm = () => {
+    if (userToRestore) handleRestoreUser(userToRestore);
+  };
+
+  const handleArchiveUser = async (user: User) => {
+    const idToArchive = user.id ?? user.userId;
+    if (!idToArchive) {
       toast.error('User id not found');
       return;
     }
+    setArchiving(true);
     try {
-      await userService.deleteUser(idToDelete);
-      toast.success('User deleted');
+      await userService.deleteUser(idToArchive);
+      toast.success('User archived');
+      setUserToArchive(null);
       loadUsers();
     } catch (err: unknown) {
       const msg =
         err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err
           ? String((err.response as { data?: unknown }).data)
-          : 'Failed to delete user';
+          : 'Failed to archive user';
       toast.error(msg);
+    } finally {
+      setArchiving(false);
     }
+  };
+
+  const handleArchiveConfirm = () => {
+    if (userToArchive) handleArchiveUser(userToArchive);
   };
 
   if (loading) {
@@ -328,7 +347,7 @@ const Users = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     {statusFilter === 'Archived' ? (
                       <button
-                        onClick={() => handleRestore(user)}
+                        onClick={() => setUserToRestore(user)}
                         className="text-green-600 hover:text-green-700 hover:bg-green-50 p-2 rounded-azure-sm transition-colors inline-flex"
                         title="Restore"
                       >
@@ -344,9 +363,9 @@ const Users = () => {
                           <FiEdit className="text-base" />
                         </button>
                         <button
-                          onClick={() => handleDelete(user)}
+                          onClick={() => setUserToArchive(user)}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-azure-sm transition-colors inline-flex"
-                          title="Delete"
+                          title="Archive"
                         >
                           <FiTrash2 className="text-base" />
                         </button>
@@ -464,10 +483,68 @@ const Users = () => {
                   disabled={submitting}
                   className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
                 >
-                  {submitting ? 'Adding…' : editingUser ? 'Update User' : 'Add User'}
+                  {submitting ? (editingUser ? 'Updating…' : 'Adding…') : editingUser ? 'Update User' : 'Add User'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {userToArchive && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
+            <h2 className="text-xl font-semibold mb-2 text-black font-sans">Archive user</h2>
+            <p className="text-black/70 text-sm font-sans mb-6">
+              Are you sure you want to archive {userToArchive.fullName || userToArchive.email}? They can be restored from the Archived tab.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setUserToArchive(null)}
+                disabled={archiving}
+                className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleArchiveConfirm}
+                disabled={archiving}
+                className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
+              >
+                {archiving ? 'Archiving…' : 'Archive'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {userToRestore && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
+            <h2 className="text-xl font-semibold mb-2 text-black font-sans">Restore user</h2>
+            <p className="text-black/70 text-sm font-sans mb-6">
+              Are you sure you want to restore {userToRestore.fullName || userToRestore.email}? They will appear in the Active tab.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setUserToRestore(null)}
+                disabled={restoring}
+                className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRestoreConfirm}
+                disabled={restoring}
+                className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
+              >
+                {restoring ? 'Restoring…' : 'Restore'}
+              </button>
+            </div>
           </div>
         </div>
       )}
