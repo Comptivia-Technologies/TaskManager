@@ -37,6 +37,7 @@ function mapApiUserToUser(apiUser: ApiUser, organisationId: string): User {
   const capitalStatus: UserStatus =
     rawStatus === 'active' ? 'Active' : rawStatus === 'pending' ? 'Pending' : rawStatus === 'archived' ? 'Archived' : 'Active';
   return {
+    id: apiUser.id,
     userId: apiUser.user_id || apiUser.id || '',
     fullName: apiUser.full_name || apiUser.username || '',
     email: apiUser.email || '',
@@ -133,7 +134,40 @@ export const userService = {
     );
     return response.data;
   },
+
+  updateOrganizationUser: async (
+    userId: string,
+    payload: UpdateOrganizationUserPayload
+  ): Promise<unknown> => {
+    const productId = process.env.REACT_APP_PRODUCT_ID;
+    if (!productId) throw new Error('REACT_APP_PRODUCT_ID is not configured');
+    const params = new URLSearchParams({ product_id: productId });
+    const response = await api.put<unknown>(
+      `/api/auth/organizationuser/${encodeURIComponent(userId)}?${params.toString()}`,
+      payload
+    );
+    return response.data;
+  },
+
+  deleteUser: async (userId: string): Promise<void> => {
+    await api.delete(`/api/auth/users/${encodeURIComponent(userId)}`);
+  },
+
+  updateUserStatus: async (id: string, status: string): Promise<unknown> => {
+    const response = await api.patch<unknown>(
+      `/api/auth/users/${encodeURIComponent(id)}/status`,
+      { status }
+    );
+    return response.data;
+  },
 };
+
+export interface UpdateOrganizationUserPayload {
+  full_name: string;
+  email: string;
+  role_id: string;
+  role_name: string;
+}
 
 export interface CreateOrganizationUserPayload {
   organization_id: string;

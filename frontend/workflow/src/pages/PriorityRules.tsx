@@ -15,6 +15,8 @@ const PriorityRules = () => {
   const [editingRule, setEditingRule] = useState<PriorityRule | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | 'global' | null>(null);
   const [showActiveOnly, setShowActiveOnly] = useState(false);
+  const [ruleToDelete, setRuleToDelete] = useState<PriorityRule | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Group rules by workflow
   const [rulesByWorkflow, setRulesByWorkflow] = useState<Map<string | 'global', PriorityRule[]>>(new Map());
@@ -90,16 +92,18 @@ const PriorityRules = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this rule?')) return;
-
+  const handleDeleteRule = async (rule: PriorityRule) => {
+    setDeleting(true);
     try {
-      await priorityRulesService.delete(id);
+      await priorityRulesService.delete(rule.ruleId);
       toast.success('Rule deleted successfully');
+      setRuleToDelete(null);
       loadRules();
     } catch (error: any) {
       toast.error('Failed to delete rule');
       console.error('Error deleting rule:', error);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -290,7 +294,7 @@ const PriorityRules = () => {
                         <FiEdit className="text-lg" />
                       </button>
                       <button
-                        onClick={() => handleDelete(rule.ruleId)}
+                        onClick={() => setRuleToDelete(rule)}
                         className="text-red-600 hover:text-red-800 transition-colors"
                         title="Delete"
                       >
@@ -387,7 +391,7 @@ const PriorityRules = () => {
                                   <FiEdit className="text-sm" />
                                 </button>
                                 <button
-                                  onClick={() => handleDelete(rule.ruleId)}
+                                  onClick={() => setRuleToDelete(rule)}
                                   className="text-red-600 hover:text-red-800 transition-colors"
                                   title="Delete"
                                 >
@@ -570,6 +574,35 @@ const PriorityRules = () => {
           </div>
         )}
       </div>
+
+      {ruleToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
+            <h2 className="text-xl font-semibold mb-2 text-black font-sans">Delete rule</h2>
+            <p className="text-black/70 text-sm font-sans mb-6">
+              Are you sure you want to delete this rule?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setRuleToDelete(null)}
+                disabled={deleting}
+                className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteRule(ruleToDelete)}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-azure-sm hover:bg-red-700 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
