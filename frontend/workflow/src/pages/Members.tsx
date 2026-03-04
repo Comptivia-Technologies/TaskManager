@@ -42,7 +42,7 @@ const Members = () => {
     if (!organizationId) return;
     try {
       const users = await userService.getActiveOrganizationUsers(organizationId, currentTenantId);
-      setProductHubUsers(users);
+      setProductHubUsers(users.filter((u) => u.status === 'Active'));
     } catch {
       setProductHubUsers([]);
     }

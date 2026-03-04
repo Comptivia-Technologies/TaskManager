@@ -152,6 +152,126 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpPut("organizationuser/{userId}")]
+    public async Task<IActionResult> UpdateOrganizationUser(string userId, [FromQuery] string product_id, [FromBody] JsonElement? body)
+    {
+        if (string.IsNullOrEmpty(userId))
+            return BadRequest(new { error = "userId is required" });
+        if (string.IsNullOrEmpty(product_id))
+            return BadRequest(new { error = "product_id is required" });
+        if (body is null)
+            return BadRequest(new { error = "Request body is required" });
+        var bodyValue = body.Value;
+        if (bodyValue.ValueKind == JsonValueKind.Null || bodyValue.ValueKind == JsonValueKind.Undefined)
+            return BadRequest(new { error = "Request body is required" });
+
+        try
+        {
+            var baseUrl = GetAuthServiceBaseUrl();
+            var requestUrl = $"{baseUrl}/api/organizationuser/{Uri.EscapeDataString(userId)}?product_id={Uri.EscapeDataString(product_id)}";
+            var request = CreateRequest(HttpMethod.Put, requestUrl);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(bodyValue),
+                System.Text.Encoding.UTF8,
+                "application/json");
+            var httpClient = _httpClientFactory.CreateClient();
+            var response = await httpClient.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/json";
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ContentResult
+                {
+                    StatusCode = (int)response.StatusCode,
+                    Content = content,
+                    ContentType = contentType,
+                };
+            }
+            if (string.IsNullOrEmpty(content))
+                return Ok();
+            var jsonData = JsonSerializer.Deserialize<JsonElement>(content);
+            return Ok(jsonData);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error proxying update organization user for userId {UserId}", userId);
+            return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+        }
+    }
+
+    [HttpDelete("users/{userId}")]
+    public async Task<IActionResult> DeleteUser(string userId)
+    {
+        if (string.IsNullOrEmpty(userId))
+            return BadRequest(new { error = "userId is required" });
+
+        try
+        {
+            var baseUrl = GetAuthServiceBaseUrl();
+            var requestUrl = $"{baseUrl}/api/users/{Uri.EscapeDataString(userId)}";
+            var request = CreateRequest(HttpMethod.Delete, requestUrl);
+            var httpClient = _httpClientFactory.CreateClient();
+            var response = await httpClient.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+                return StatusCode((int)response.StatusCode, content);
+            if (string.IsNullOrEmpty(content))
+                return Ok();
+            var jsonData = JsonSerializer.Deserialize<JsonElement>(content);
+            return Ok(jsonData);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error proxying delete user for userId {UserId}", userId);
+            return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+        }
+    }
+
+    [HttpPatch("users/{userId}/status")]
+    public async Task<IActionResult> UpdateUserStatus(string userId, [FromBody] JsonElement? body)
+    {
+        if (string.IsNullOrEmpty(userId))
+            return BadRequest(new { error = "userId is required" });
+        if (body is null)
+            return BadRequest(new { error = "Request body is required" });
+        var bodyValue = body.Value;
+        if (bodyValue.ValueKind == JsonValueKind.Null || bodyValue.ValueKind == JsonValueKind.Undefined)
+            return BadRequest(new { error = "Request body is required" });
+
+        try
+        {
+            var baseUrl = GetAuthServiceBaseUrl();
+            var requestUrl = $"{baseUrl}/api/users/{Uri.EscapeDataString(userId)}/status";
+            var request = CreateRequest(HttpMethod.Patch, requestUrl);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(bodyValue),
+                System.Text.Encoding.UTF8,
+                "application/json");
+            var httpClient = _httpClientFactory.CreateClient();
+            var response = await httpClient.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/json";
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ContentResult
+                {
+                    StatusCode = (int)response.StatusCode,
+                    Content = content,
+                    ContentType = contentType,
+                };
+            }
+            if (string.IsNullOrEmpty(content))
+                return Ok();
+            var jsonData = JsonSerializer.Deserialize<JsonElement>(content);
+            return Ok(jsonData);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error proxying update user status for userId {UserId}", userId);
+            return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+        }
+    }
+
     [HttpGet("users/organization/{organizationId}")]
     public async Task<IActionResult> GetUsersByOrganization(string organizationId, [FromQuery] string status = "active")
     {

@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User, UserCreate, UserStatus, Role } from '../types';
-import { FiPlus, FiEdit, FiTrash2, FiGrid, FiX } from 'react-icons/fi';
+import { FiPlus, FiEdit, FiTrash2, FiRefreshCw, FiX } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { userService, CreateOrganizationUserPayload } from '../services/userService';
+import { userService, CreateOrganizationUserPayload, UpdateOrganizationUserPayload } from '../services/userService';
 import { roleService } from '../services/roleService';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -63,11 +63,17 @@ const Users = () => {
     loadUsers();
   }, [loadUsers]);
 
+  const activeList = activeUsers.filter((u) => u.status === 'Active');
+  const archivedList = activeUsers.filter((u) => u.status === 'Archived');
   const filteredUsers =
-    statusFilter === 'Active' ? activeUsers : statusFilter === 'Pending' ? pendingUsers : [];
-  const activeCount = activeUsers.length;
+    statusFilter === 'Active'
+      ? activeList
+      : statusFilter === 'Pending'
+        ? pendingUsers
+        : archivedList;
+  const activeCount = activeList.length;
   const pendingCount = pendingUsers.length;
-  const archivedCount = 0;
+  const archivedCount = archivedList.length;
 
   const openAddModal = () => {
     setEditingUser(null);
@@ -85,6 +91,8 @@ const Users = () => {
       organisationId: user.organisationId,
       role: user.role,
     });
+    const roleId = roles.find((r) => r.name === user.role)?.roleId ?? '';
+    setSelectedRoleId(roleId);
     setIsModalOpen(true);
   };
 
@@ -99,18 +107,37 @@ const Users = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingUser) {
-      const updated = { ...formData, updatedAt: new Date().toISOString().slice(0, 10) };
-      if (editingUser.status === 'Active') {
-        setActiveUsers((prev) =>
-          prev.map((u) => (u.userId === editingUser.userId ? { ...u, ...updated } : u))
-        );
-      } else {
-        setPendingUsers((prev) =>
-          prev.map((u) => (u.userId === editingUser.userId ? { ...u, ...updated } : u))
-        );
+      const productId = process.env.REACT_APP_PRODUCT_ID;
+      if (!productId) {
+        toast.error('Product not configured');
+        return;
       }
-      toast.success('User updated successfully');
-      closeModal();
+      const roleId = selectedRoleId || roles.find((r) => r.name === formData.role)?.roleId;
+      if (!roleId) {
+        toast.error('Please select a role');
+        return;
+      }
+      setSubmitting(true);
+      try {
+        const payload: UpdateOrganizationUserPayload = {
+          full_name: formData.fullName,
+          email: formData.email,
+          role_id: roleId,
+          role_name: formData.role,
+        };
+        await userService.updateOrganizationUser(editingUser.userId, payload);
+        toast.success('User updated successfully');
+        closeModal();
+        loadUsers();
+      } catch (err: unknown) {
+        const msg =
+          err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err
+            ? String((err.response as { data?: unknown }).data)
+            : 'Failed to update user';
+        toast.error(msg);
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
     const productId = process.env.REACT_APP_PRODUCT_ID;
@@ -148,19 +175,43 @@ const Users = () => {
     }
   };
 
-  const handleDelete = (user: User) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
-    if (user.status === 'Active') {
-      setActiveUsers((prev) => prev.filter((u) => u.userId !== user.userId));
-    } else {
-      setPendingUsers((prev) => prev.filter((u) => u.userId !== user.userId));
+  const handleRestore = async (user: User) => {
+    const idToRestore = user.id ?? user.userId;
+    if (!idToRestore) {
+      toast.error('User id not found');
+      return;
     }
-    toast.success('User deleted');
+    try {
+      await userService.updateUserStatus(idToRestore, 'active');
+      toast.success('User restored');
+      loadUsers();
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err
+          ? String((err.response as { data?: unknown }).data)
+          : 'Failed to restore user';
+      toast.error(msg);
+    }
   };
 
-  const handleArchive = (user: User) => {
-    setActiveUsers((prev) => prev.filter((u) => u.userId !== user.userId));
-    toast.success('User archived');
+  const handleDelete = async (user: User) => {
+    if (!window.confirm('Are you sure you want to delete this user?')) return;
+    const idToDelete = user.id ?? user.userId;
+    if (!idToDelete) {
+      toast.error('User id not found');
+      return;
+    }
+    try {
+      await userService.deleteUser(idToDelete);
+      toast.success('User deleted');
+      loadUsers();
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err
+          ? String((err.response as { data?: unknown }).data)
+          : 'Failed to delete user';
+      toast.error(msg);
+    }
   };
 
   if (loading) {
@@ -275,27 +326,32 @@ const Users = () => {
                     {formatDate(user.updatedAt)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => openEditModal(user)}
-                      className="text-green-600 hover:text-green-700 hover:bg-green-50 p-2 rounded-azure-sm mr-1 transition-colors inline-flex"
-                      title="Edit"
-                    >
-                      <FiEdit className="text-base" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(user)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-azure-sm mr-1 transition-colors inline-flex"
-                      title="Delete"
-                    >
-                      <FiTrash2 className="text-base" />
-                    </button>
-                    <button
-                      onClick={() => handleArchive(user)}
-                      className="text-[#434E78] hover:bg-[#434E78]/10 p-2 rounded-azure-sm transition-colors inline-flex"
-                      title="More options"
-                    >
-                      <FiGrid className="text-base" />
-                    </button>
+                    {statusFilter === 'Archived' ? (
+                      <button
+                        onClick={() => handleRestore(user)}
+                        className="text-green-600 hover:text-green-700 hover:bg-green-50 p-2 rounded-azure-sm transition-colors inline-flex"
+                        title="Restore"
+                      >
+                        <FiRefreshCw className="text-base" />
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => openEditModal(user)}
+                          className="text-green-600 hover:text-green-700 hover:bg-green-50 p-2 rounded-azure-sm mr-1 transition-colors inline-flex"
+                          title="Edit"
+                        >
+                          <FiEdit className="text-base" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(user)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-azure-sm transition-colors inline-flex"
+                          title="Delete"
+                        >
+                          <FiTrash2 className="text-base" />
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))

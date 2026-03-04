@@ -294,6 +294,7 @@ export interface RuleConditions {
 export type UserStatus = 'Active' | 'Pending' | 'Archived';
 
 export interface User {
+  id?: string;
   userId: string;
   fullName: string;
   email: string;
