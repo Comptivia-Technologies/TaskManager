@@ -14,7 +14,7 @@ const ConditionBuilder = ({ value, onChange }: ConditionBuilderProps) => {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const isInternalUpdate = useRef(false);
 
-  // Available fields
+  // Available fields and labels for the condition builder
   const availableFields = [
     { value: '$.taskType', label: 'Task Type' },
     { value: '$.taskName', label: 'Task Name' },
