@@ -55,35 +55,45 @@ Used by backend only. **Do not commit the password.** Store it in GitHub Secrets
 
 ---
 
-## GitHub secrets required (QA UI)
+## CI/CD – QA backend pipeline
 
-Same as dev unless you use QA-specific values:
+| Item | Value |
+|------|--------|
+| **Workflow file** | `.github/workflows/deploy-backend-qa.yml` |
+| **Trigger branch** | `qa` |
+| **Path filter** | `backend/**` |
+| **Manual run** | Yes (`workflow_dispatch`) |
 
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `REACT_APP_PRODUCT_ID`
-- `REACT_APP_FIREBASE_API_KEY`
-- `REACT_APP_FIREBASE_PROJECT_ID`
-- `REACT_APP_FIREBASE_AUTH_DOMAIN`
+**Steps:** Checkout → AWS credentials → ECR login → build & push images (same ECR as dev) → register task definitions → update QA ECS services.
 
-**Not needed for QA UI:** DB password, PG host (used only by backend).
+**ECS cluster:** `workflow-automation-cluster` (same as dev)
+
+**QA ECS services:**  
+`task-manager-api-gateway-qa`, `task-manager-task-service-qa`, `task-manager-workflow-service-qa`, `task-manager-sla-manager-service-qa`, `task-manager-workload-service-qa`, `task-manager-priority-rule-engine-api-qa`, `task-manager-workflow-management-api-qa`, `task-manager-sla-configuration-api-qa`, `task-manager-workload-api-qa`
+
+**Env:** Same event bus (`work-flow-bus`), same scheduler group (`task-manager-schedules`), QA DB (Neon), CORS `https://qa.workflowautomation.enginuo.com`, Auth `https://qa.api.product-hub.comptivia.com`.
 
 ---
 
-## GitHub secrets/variables for QA backend (when added)
+## GitHub secrets required
 
-- **Secret:** `QA_DB_PASSWORD` (or reuse `DB_PASSWORD` if same).
-- **In workflow or Variables:** `QA_DB_HOST`, `QA_DB_NAME`, `QA_DB_USER`, `QA_DB_PORT` (or hardcode in workflow like dev).
+**QA UI + backend (shared):**  
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `REACT_APP_PRODUCT_ID`, `REACT_APP_FIREBASE_*` (for frontend).
+
+**QA backend only:**  
+- `QA_DB_PASSWORD` – QA Neon DB password (required for `deploy-backend-qa.yml`)
+- `ROLES_API_KEY` – for WorkflowManagement.API (GET /api/roles/all)
 
 ---
 
 ## Quick checks
 
 - **Deploy QA UI:** Push to `qa` with changes under `frontend/**`, or run "Deploy Frontend to QA (S3 + CloudFront)" manually.
-- **IAM:** Same user as dev must have s3:PutObject (and related) on `qa.workflowautomation.enginuo.com` and `cloudfront:CreateInvalidation` on the QA distribution.
-- **API URL:** If QA API base URL differs, set `API_URL` in the workflow env (or via a GitHub Variable) in `deploy-frontend-qa.yml`.
+- **Deploy QA backend:** Push to `qa` with changes under `backend/**`, or run "Deploy Backend to QA (ECS)" manually. Ensure `QA_DB_PASSWORD` is set in repo secrets.
+- **IAM:** Same user as dev must have S3/CloudFront for QA bucket + distribution, and ECS/ECR/EventBridge etc. for backend.
+- **Service discovery:** QA services use namespace `workflow-automation`; internal hostnames are e.g. `task-manager-workflow-management-api-qa.workflow-automation`. If your QA service discovery names differ, update the ReverseProxy and API base URLs in `deploy-backend-qa.yml`.
 
 ---
 
 **Document:** QA deployment reference  
-**See also:** `DEPLOYMENT_GUIDE.md` (full dev/infra), `.github/workflows/deploy-frontend-qa.yml`
+**See also:** `DEPLOYMENT_GUIDE.md` (full dev/infra), `.github/workflows/deploy-frontend-qa.yml`, `.github/workflows/deploy-backend-qa.yml`

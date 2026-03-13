@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace WorkflowService.Application.EventHandlers;
 
 /// <summary>
-/// Handles TaskAssignedEvent - starts task in first stage
+/// Handles TaskAssignedEvent - starts task in first stage of the workflow
 /// </summary>
 public class TaskAssignedEventHandler
 {
