@@ -14,7 +14,7 @@ public class Member
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
-    // Navigation properties
+    // Navigation properties for the member
     public Team? Team { get; set; }
     public ICollection<Task> AssignedTasks { get; set; } = new List<Task>();
 }
