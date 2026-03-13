@@ -107,7 +107,7 @@ jobs:
               {\"name\":\"EVENTBUS_PROVIDER\",\"value\":\"AWS\"},
               {\"name\":\"EventBus__AWS__Region\",\"value\":\"ap-south-1\"},
               {\"name\":\"EventBus__AWS__EventBusName\",\"value\":\"work-flow-bus\"},
-              {\"name\":\"EventBus__AWS__ServicePrefix\",\"value\":\"task-manager\"},
+              {\"name\":\"EventBus__AWS__ServicePrefix\",\"value\":\"task-manager-qa\"},
               {\"name\":\"EventBus__AWS__VisibilityTimeoutSeconds\",\"value\":\"300\"},
               {\"name\":\"EventBus__AWS__MaxReceiveCount\",\"value\":\"3\"},
               {\"name\":\"EventBus__AWS__SchedulerGroupName\",\"value\":\"task-manager-schedules\"},
