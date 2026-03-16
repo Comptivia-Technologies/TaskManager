@@ -33,7 +33,7 @@ Used by backend only. **Do not commit the password.** Store it in GitHub Secrets
 
 | Variable | Value |
 |----------|--------|
-| **PGHOST** | `ep-lucky-haze-a12q0wll-pooler.ap-southeast-1.aws.neon.tech` |
+| **PGHOST** | `ep-patient-sunset-ann0reem-pooler.c-6.us-east-1.aws.neon.tech` |
 | **PGDATABASE** | `neondb` |
 | **PGUSER** | `neondb_owner` |
 | **PGPASSWORD** | Store in GitHub Secrets only |
@@ -78,7 +78,9 @@ Used by backend only. **Do not commit the password.** Store it in GitHub Secrets
 ## GitHub secrets required
 
 **QA UI + backend (shared):**  
-`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `REACT_APP_PRODUCT_ID`, `REACT_APP_FIREBASE_*` (for frontend).
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
+
+**QA frontend:** Product ID and Firebase (product-hub-qa) are set in `deploy-frontend-qa.yml` env; no separate secrets needed for QA build.
 
 **QA backend only:**  
 - `QA_DB_PASSWORD` – QA Neon DB password (required for `deploy-backend-qa.yml`)
