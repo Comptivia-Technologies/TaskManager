@@ -13,6 +13,12 @@ env:
   S3_BUCKET: qa.workflowautomation.enginuo.com
   CLOUDFRONT_DISTRIBUTION_ID: E2FZCABSWJ9XF3
   API_URL: https://qa.api.workflowautomation.enginuo.com
+  # QA-specific product hub and Firebase (product-hub-qa)
+  REACT_APP_AUTH_API_URL: https://qa.api.product-hub.comptivia.com
+  REACT_APP_PRODUCT_ID: abc56307-aba4-4e00-92eb-6e2440d6ad61
+  REACT_APP_FIREBASE_PROJECT_ID: product-hub-qa
+  REACT_APP_FIREBASE_API_KEY: AIzaSyDEAa6ypEY5gWPlOwaE37MweO9skvy-1yw
+  REACT_APP_FIREBASE_AUTH_DOMAIN: product-hub-qa.firebaseapp.com
 
 jobs:
   deploy:
@@ -44,10 +50,11 @@ jobs:
         working-directory: ./frontend/workflow
         env:
           REACT_APP_API_URL: ${{ env.API_URL }}
-          REACT_APP_PRODUCT_ID: ${{ secrets.REACT_APP_PRODUCT_ID }}
-          REACT_APP_FIREBASE_API_KEY: ${{ secrets.REACT_APP_FIREBASE_API_KEY }}
-          REACT_APP_FIREBASE_PROJECT_ID: ${{ secrets.REACT_APP_FIREBASE_PROJECT_ID }}
-          REACT_APP_FIREBASE_AUTH_DOMAIN: ${{ secrets.REACT_APP_FIREBASE_AUTH_DOMAIN }}
+          REACT_APP_AUTH_API_URL: ${{ env.REACT_APP_AUTH_API_URL }}
+          REACT_APP_PRODUCT_ID: ${{ env.REACT_APP_PRODUCT_ID }}
+          REACT_APP_FIREBASE_API_KEY: ${{ env.REACT_APP_FIREBASE_API_KEY }}
+          REACT_APP_FIREBASE_PROJECT_ID: ${{ env.REACT_APP_FIREBASE_PROJECT_ID }}
+          REACT_APP_FIREBASE_AUTH_DOMAIN: ${{ env.REACT_APP_FIREBASE_AUTH_DOMAIN }}
         run: npm run build
 
       - name: Deploy to S3

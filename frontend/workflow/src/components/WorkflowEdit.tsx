@@ -14,7 +14,7 @@ interface WorkflowEditProps {
 
 interface StageForm {
   stageId?: string; // Existing stage has ID, new stage doesn't
-  tempId?: number; // Temporary ID for new stages
+  tempId?: number; // Temporary ID for new stages (this is used to keep track of the order of the stages when they are added)
   stageName: string;
   stageOrder: number;
   teamId: string;

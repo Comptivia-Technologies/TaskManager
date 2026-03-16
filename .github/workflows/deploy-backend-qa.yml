@@ -14,7 +14,7 @@ env:
   ECS_CLUSTER: workflow-automation-cluster
   TASK_EXECUTION_ROLE: arn:aws:iam::798277642170:role/workflow-automation-ecsTaskExecutionRole
   TASK_ROLE: arn:aws:iam::798277642170:role/workflow-automation-eventBridgeSchedulerRole
-  DB_HOST: ep-lucky-haze-a12q0wll-pooler.ap-southeast-1.aws.neon.tech
+  DB_HOST: ep-patient-sunset-ann0reem-pooler.c-6.us-east-1.aws.neon.tech
   DB_NAME: neondb
   DB_USER: neondb_owner
   CORS_ORIGIN: https://qa.workflowautomation.enginuo.com
