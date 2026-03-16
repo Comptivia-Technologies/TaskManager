@@ -3,7 +3,7 @@ using SLAManagerService.Domain.Entities;
 namespace SLAManagerService.Application.Interfaces;
 
 /// <summary>
-/// Repository for SLA operations (this is the repository for the SLA operations)
+/// Repository for SLA operations (this is the repository for the SLA operations) This is the interface for the SLA repository
 /// </summary>
 public interface ISLARepository
 {

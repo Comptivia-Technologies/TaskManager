@@ -99,7 +99,8 @@ jobs:
                 {"name":"ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address","value":"http://task-manager-task-service-qa.workflow-automation:80"},
                 {"name":"TaskServiceApi__BaseUrl","value":"http://task-manager-task-service-qa.workflow-automation/api"},
                 {"name":"WorkflowManagementApi__BaseUrl","value":"http://task-manager-workflow-management-api-qa.workflow-automation/api"},
-                {"name":"AuthService__BaseUrl","value":$authUrl}
+                {"name":"AuthService__BaseUrl","value":$authUrl},
+                {"name":"Firebase__ProjectId","value":"product-hub-qa"}
               ]')
             fi
             
