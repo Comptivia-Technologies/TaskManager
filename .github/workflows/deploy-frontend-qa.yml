@@ -12,7 +12,7 @@ env:
   AWS_REGION: ap-south-1
   S3_BUCKET: qa.workflowautomation.enginuo.com
   CLOUDFRONT_DISTRIBUTION_ID: E2FZCABSWJ9XF3
-  API_URL: https://qa-api.workflowautomation.enginuo.com
+  API_URL: https://qa.api.workflowautomation.enginuo.com
 
 jobs:
   deploy:
