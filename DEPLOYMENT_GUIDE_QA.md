@@ -9,7 +9,7 @@ Essential reference for deploying and operating the QA environment.
 | Item | Value |
 |------|--------|
 | **Frontend URL** | https://qa.workflowautomation.enginuo.com |
-| **API URL** (build-time for UI) | https://qa-api.workflowautomation.enginuo.com |
+| **API URL** (build-time for UI) | https://qa.api.workflowautomation.enginuo.com |
 | **AWS Region** | ap-south-1 |
 
 ---
