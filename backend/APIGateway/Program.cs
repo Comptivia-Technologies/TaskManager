@@ -42,7 +42,7 @@ builder.Services.AddSingleton<GcpEventBus>();
 builder.Services.AddSingleton<IEventBusFactory, EventBusFactory>();
 builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFactory>().CreateEventBus());
 
-// YARP Reverse Proxy - Load config
+// YARP Reverse Proxy - Load config (this is the reverse proxy for the API Gateway) This is the reverse proxy for the API Gateway
 // Note: Cluster addresses can be overridden via environment variables using the format:
 // ReverseProxy__Clusters__{cluster-name}__Destinations__{destination-name}__Address
 var reverseProxyConfig = builder.Configuration.GetSection("ReverseProxy");
