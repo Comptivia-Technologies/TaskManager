@@ -2,7 +2,7 @@ namespace APIGateway.Application.DTOs;
 
 /// <summary>
 /// DTO for creating a task via API Gateway
-/// Priority will be automatically assigned by rule engine based on taskData
+/// Priority will be automatically assigned by rule engine based on taskData (this is the DTO for creating a task via the API Gateway)
 /// </summary>
 public class CreateTaskRequestDto
 {

@@ -13,7 +13,7 @@ interface WorkflowEditProps {
 }
 
 interface StageForm {
-  stageId?: string; // Existing stage has ID, new stage doesn't
+  stageId?: string; // Existing stage has ID, new stage doesn't have an ID (this is used to keep track of the stage ID)
   tempId?: number; // Temporary ID for new stages (this is used to keep track of the order of the stages when they are added)
   stageName: string;
   stageOrder: number;
