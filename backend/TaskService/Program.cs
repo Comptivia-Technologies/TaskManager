@@ -26,7 +26,7 @@ if (string.IsNullOrEmpty(connectionString))
     var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD")
         ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
     
-    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword};SSL Mode=Require";
+    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword};SSL Mode=Require;Channel Binding=require";
 }
 
 builder.Services.AddDbContext<TaskDbContext>(options =>

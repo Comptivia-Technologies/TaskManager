@@ -32,7 +32,7 @@ if (string.IsNullOrEmpty(connectionString))
     var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD")
         ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
     
-    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword};SSL Mode=Require";
+    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword};SSL Mode=Require;Channel Binding=require";
 }
 
 builder.Services.AddDbContext<PriorityRuleDbContext>(options =>
@@ -136,7 +136,7 @@ using (var scope = app.Services.CreateScope())
             var dbPassword2 = Environment.GetEnvironmentVariable("DB_PASSWORD")
                 ?? throw new InvalidOperationException("DB_PASSWORD environment variable is required");
             
-            dbConnectionString = $"Host={dbHost2};Port={dbPort2};Database={dbName2};Username={dbUser2};Password={dbPassword2};SSL Mode=Require";
+            dbConnectionString = $"Host={dbHost2};Port={dbPort2};Database={dbName2};Username={dbUser2};Password={dbPassword2};SSL Mode=Require;Channel Binding=require";
         }
         
         // Extract database name from connection string

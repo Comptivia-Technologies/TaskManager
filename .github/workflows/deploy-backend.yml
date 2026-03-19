@@ -113,7 +113,7 @@ jobs:
               {\"name\":\"EventBus__AWS__SchedulerGroupName\",\"value\":\"task-manager-schedules\"},
               {\"name\":\"EventBus__AWS__SchedulerRoleArn\",\"value\":\"$TASK_ROLE\"},
               {\"name\":\"Cors__AllowedOrigin\",\"value\":\"https://dev.workflowautomation.enginuo.com\"},
-              {\"name\":\"DB_HOST\",\"value\":\"ep-spring-field-a15ak7se-pooler.ap-southeast-1.aws.neon.tech\"},
+              {\"name\":\"DB_HOST\",\"value\":\"ep-plain-hat-an4d4okx-pooler.c-6.us-east-1.aws.neon.tech\"},
               {\"name\":\"DB_PORT\",\"value\":\"5432\"},
               {\"name\":\"DB_USER\",\"value\":\"neondb_owner\"},
               {\"name\":\"DB_PASSWORD\",\"value\":\"$DB_PASSWORD\"},
