@@ -160,6 +160,34 @@ public class TasksController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Tasks assigned to the member whose Members.UserId matches, scoped to the current organization.
+    /// </summary>
+    [HttpGet("user/{userId}")]
+    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetTasksByUserId(string userId)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                return BadRequest("UserId is required.");
+
+            var tasks = await _taskService.GetTasksAssignedToUserIdAsync(userId);
+            if (tasks == null)
+                return NotFound("No member found for this user ID in the current organization.");
+
+            return Ok(tasks);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting tasks for user ID {UserId}", userId);
+            return StatusCode(500, "An error occurred while retrieving tasks");
+        }
+    }
+
     [HttpGet("member/summary/{memberId}")]
     public async Task<ActionResult<MemberTaskSummaryDto>> GetMemberTaskSummary(Guid memberId)
     {

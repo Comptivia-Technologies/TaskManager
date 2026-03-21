@@ -10,6 +10,13 @@ public class MemberRepository : Repository<Member>, IMemberRepository
     {
     }
 
+    public async Task<Member?> GetByUserIdAsync(string userId, Guid organizationId)
+    {
+        return await _context.Members
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.UserId == userId && m.OrganizationId == organizationId);
+    }
+
     public async Task<IEnumerable<Member>> GetMembersByTeamAsync(Guid teamId)
     {
         return await _context.Members
