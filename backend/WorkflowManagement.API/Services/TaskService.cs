@@ -14,6 +14,7 @@ public class TaskService : ITaskService
     private readonly IWorkflowService _workflowService;
     private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly IMapper _mapper;
+    private readonly ILogger<TaskService> _logger;
 
     public TaskService(
         ITaskRepository taskRepository,
@@ -22,7 +23,8 @@ public class TaskService : ITaskService
         IMemberRepository memberRepository,
         IWorkflowService workflowService,
         ICurrentOrganizationAccessor orgAccessor,
-        IMapper mapper)
+        IMapper mapper,
+        ILogger<TaskService> logger)
     {
         _taskRepository = taskRepository;
         _workflowRepository = workflowRepository;
@@ -31,6 +33,7 @@ public class TaskService : ITaskService
         _workflowService = workflowService;
         _orgAccessor = orgAccessor;
         _mapper = mapper;
+        _logger = logger;
     }
 
     public async Task<TaskReadDto> CreateTaskAsync(TaskCreateDto taskCreateDto)
@@ -378,7 +381,13 @@ public class TaskService : ITaskService
 
         var member = await _memberRepository.GetByUserIdAsync(userId, orgId.Value);
         if (member == null)
+        {
+            _logger.LogWarning(
+                "GetTasksAssignedToUserId: no Member row for UserId {UserId} in OrganizationId {OrganizationId}; API will return 404.",
+                userId,
+                orgId.Value);
             return null;
+        }
 
         return await GetTasksByMemberAsync(member.MemberId);
     }

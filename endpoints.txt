@@ -298,6 +298,51 @@ Error Responses:
 - 500 Internal Server Error: Server error
 
 ================================================================================
+7. GET TASKS ASSIGNED TO MEMBER BY USER ID
+================================================================================
+
+Resolves Members.UserId (e.g. auth subject from token) to MemberId in the current organization,
+then returns tasks currently assigned to that member (AssignedToMemberId). Same task shape as
+other WorkflowManagement task list responses.
+
+Local Endpoint:
+GET http://localhost:5004/api/tasks/user/{userId}
+
+Deployed Endpoint:
+GET https://api.workflowautomation.enginuo.com/api/tasks/user/{userId}
+
+Example:
+GET http://localhost:5004/api/tasks/user/auth0|abc123-or-firebase-uid
+
+Path parameter:
+- userId (required): Must match Members.UserId for a member in the current organization.
+  URL-encode the value if it contains reserved characters.
+
+Payload: None
+
+Headers (typical):
+- X-Organization-Id: <organization-guid> (required for organization-scoped resolution; same as other WorkflowManagement APIs)
+
+Output:
+Same JSON array of task objects as section 6 (TaskReadDto): taskId, taskName, description, status,
+priority, dueDate, workflowId, stageId, stageName, assignedToMemberId, assignedToMemberName,
+completedByMemberIds, escalatedByMemberIds, isOverdue, createdAt, updatedAt.
+
+Status Code: 200 OK (array may be empty if the member has no assigned tasks)
+
+Error Responses:
+- 400 Bad Request: userId missing or whitespace
+- 401 Unauthorized: Organization context required (e.g. missing X-Organization-Id when enforced)
+- 404 Not Found: No member exists with that UserId in the current organization
+- 500 Internal Server Error: Server error
+
+Note:
+- This is "currently assigned to me" only. After reassignment to another member, the task no
+  longer appears here; stage completions by a member are tracked via completedByMemberIds on the
+  task and exposed on GET /api/tasks/member/summary/{memberId}.
+- Routed through API Gateway to WorkflowManagement.API when using the gateway base URL above.
+
+================================================================================
 COMPLETE TASK LIFECYCLE EXAMPLE
 ================================================================================
 
@@ -348,6 +393,11 @@ GET http://localhost:5004/api/tasks
 
 Returns all tasks with enriched data
 
+Step 8: Get Tasks Assigned to Current User (by Members.UserId)
+GET http://localhost:5004/api/tasks/user/{userId}
+
+Returns tasks where AssignedToMemberId matches the member linked to that UserId in the current org.
+
 ================================================================================
 ERROR RESPONSE FORMAT
 ================================================================================
@@ -363,6 +413,7 @@ Common Status Codes:
 - 202 Accepted - Task creation initiated (async processing)
 - 204 No Content - Success (no response body)
 - 400 Bad Request - Invalid input
+- 401 Unauthorized - Authentication or organization context required
 - 404 Not Found - Resource not found
 - 500 Internal Server Error - Server error
 
@@ -378,5 +429,5 @@ Production:
 - Include Bearer Token: Authorization: Bearer YOUR_TOKEN
 
 ================================================================================
-Last Updated: January 2026
+Last Updated: March 2026
 ================================================================================
