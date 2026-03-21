@@ -370,6 +370,19 @@ public class TaskService : ITaskService
         return tasksList;
     }
 
+    public async Task<IEnumerable<TaskReadDto>?> GetTasksAssignedToUserIdAsync(string userId)
+    {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+
+        var member = await _memberRepository.GetByUserIdAsync(userId, orgId.Value);
+        if (member == null)
+            return null;
+
+        return await GetTasksByMemberAsync(member.MemberId);
+    }
+
     public async Task<MemberTaskSummaryDto> GetMemberTaskSummaryAsync(Guid memberId)
     {
         var assigned = await GetTasksByMemberAsync(memberId);
