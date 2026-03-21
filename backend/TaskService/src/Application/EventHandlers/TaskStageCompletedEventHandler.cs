@@ -48,26 +48,29 @@ public class TaskStageCompletedEventHandler
                 return;
             }
 
-            // Update task - clear current stage info (will be set by next TaskStageStartedEvent)
-            // Clear CurrentStageId immediately when completion happens to allow next stage to start
-            task.CurrentStageId = null; // Always clear - next TaskStageStartedEvent will set it
-            task.CurrentStageStartedAt = null; // Will be set when next stage starts
-            task.StageTimeoutAt = null; // Will be set when next stage starts
-            task.TaskStageCompletedEventId = correlationId; // Store CorrelationId for idempotency (unique per stage event)
-            task.UpdatedAt = DateTime.UtcNow;
-
+            // Intermediate stages: clear so TaskStageStartedEvent can set the next stage.
+            // Final stage: keep CurrentStageId on the completed stage; TaskCompletedEvent marks status Completed.
             if (@event.NextStageId.HasValue)
             {
+                task.CurrentStageId = null;
+                task.CurrentStageStartedAt = null;
+                task.StageTimeoutAt = null;
                 _logger.LogInformation(
                     "Stage completed, cleared CurrentStageId for next stage. TaskId: {TaskId}, CompletedStageId: {CompletedStageId}, NextStageId: {NextStageId}",
                     task.TaskId, @event.StageId, @event.NextStageId);
             }
             else
             {
+                task.CurrentStageId = @event.StageId;
+                task.CurrentStageStartedAt = null;
+                task.StageTimeoutAt = null;
                 _logger.LogInformation(
-                    "Last stage completed. TaskId: {TaskId}, CompletedStageId: {CompletedStageId}",
+                    "Last stage completed; retaining CurrentStageId until task marked completed. TaskId: {TaskId}, StageId: {StageId}",
                     task.TaskId, @event.StageId);
             }
+
+            task.TaskStageCompletedEventId = correlationId;
+            task.UpdatedAt = DateTime.UtcNow;
 
             await _repository.UpdateAsync(task);
 
