@@ -173,7 +173,12 @@ public class TasksController : ControllerBase
 
             var tasks = await _taskService.GetTasksAssignedToUserIdAsync(userId);
             if (tasks == null)
+            {
+                _logger.LogWarning(
+                    "GetTasksByUserId returned 404: no member for UserId {UserId} in current organization context.",
+                    userId);
                 return NotFound("No member found for this user ID in the current organization.");
+            }
 
             return Ok(tasks);
         }
