@@ -813,6 +813,9 @@ public class TaskService : ITaskService
         if (task == null)
             throw new KeyNotFoundException($"Task with ID {taskId} not found");
 
+        if (task.Status == DomainTaskStatus.Completed)
+            throw new InvalidOperationException($"Task {taskId} is already completed");
+
         if (!task.CurrentStageId.HasValue)
             throw new InvalidOperationException($"Task {taskId} is not currently in any stage");
 
