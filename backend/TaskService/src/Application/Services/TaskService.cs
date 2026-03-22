@@ -286,6 +286,18 @@ public class TaskService : ITaskService
         }
     }
 
+    public async System.Threading.Tasks.Task SyncTaskStatusToWorkflowManagementAsync(Guid taskId)
+    {
+        var task = await _repository.GetByIdAsync(taskId);
+        if (task == null)
+        {
+            _logger.LogWarning("SyncTaskStatusToWorkflowManagementAsync: task not found. TaskId: {TaskId}", taskId);
+            return;
+        }
+
+        await SyncTaskStatusToWorkflowManagementAPIAsync(task, task.Status);
+    }
+
     public async System.Threading.Tasks.Task SyncAllOverdueTasksAsync()
     {
         // Get all tasks that are already marked as overdue (IsOverdue = true, Status = Overdue)

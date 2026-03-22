@@ -11,6 +11,10 @@ public interface ITaskService
     System.Threading.Tasks.Task<TaskReadDto> CreateTaskAsync(TaskCreateDto createDto);
     System.Threading.Tasks.Task<TaskReadDto?> GetTaskByIdAsync(Guid taskId);
     System.Threading.Tasks.Task UpdateTaskStatusAsync(Guid taskId, DomainTaskStatus newStatus);
+    /// <summary>
+    /// Pushes the task's current status from TaskService to WorkflowManagement.API (same as after UpdateTaskStatusAsync).
+    /// </summary>
+    System.Threading.Tasks.Task SyncTaskStatusToWorkflowManagementAsync(Guid taskId);
     System.Threading.Tasks.Task<bool> DeleteTaskAsync(Guid taskId);
     System.Threading.Tasks.Task SyncAllOverdueTasksAsync();
     System.Threading.Tasks.Task CleanupOrphanedTasksAsync();

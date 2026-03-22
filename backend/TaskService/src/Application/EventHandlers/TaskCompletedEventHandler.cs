@@ -13,13 +13,16 @@ namespace TaskService.Application.EventHandlers;
 public class TaskCompletedEventHandler
 {
     private readonly ITaskRepository _repository;
+    private readonly ITaskService _taskService;
     private readonly ILogger<TaskCompletedEventHandler> _logger;
 
     public TaskCompletedEventHandler(
         ITaskRepository repository,
+        ITaskService taskService,
         ILogger<TaskCompletedEventHandler> logger)
     {
         _repository = repository;
+        _taskService = taskService;
         _logger = logger;
     }
 
@@ -57,6 +60,8 @@ public class TaskCompletedEventHandler
             task.UpdatedAt = DateTime.UtcNow;
 
             await _repository.UpdateAsync(task);
+
+            await _taskService.SyncTaskStatusToWorkflowManagementAsync(@event.TaskId);
 
             _logger.LogInformation(
                 "Task marked as completed. TaskId: {TaskId}, WorkflowId: {WorkflowId}, FinalStageId: {FinalStageId}",
