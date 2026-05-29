@@ -15,8 +15,6 @@ public class PriorityRuleDbContext : DbContext
         {
             entity.ToTable("PriorityRules");
             entity.HasKey(e => e.RuleId);
-            entity.Property(e => e.OrganizationId).IsRequired();
-            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.RuleName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Priority).IsRequired().HasMaxLength(50);
             entity.Property(e => e.ConditionsJson).IsRequired();

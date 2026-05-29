@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WorkflowManagement.API.Authorization;
 using WorkflowManagement.API.DTOs;
 using WorkflowManagement.API.Services;
 
@@ -6,6 +8,7 @@ namespace WorkflowManagement.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class TasksController : ControllerBase
 {
     private readonly ITaskService _taskService;
@@ -18,6 +21,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("tasks.manage")]
     public async Task<ActionResult<TaskReadDto>> CreateTask([FromBody] TaskCreateDto taskCreateDto)
     {
         try
@@ -40,6 +44,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("tasks.view")]
     public async Task<ActionResult<PaginatedTasksResponseDto>> GetAllTasks([FromQuery] string? priority, [FromQuery] int page = 1, [FromQuery] int limit = 10)
     {
         try
@@ -160,37 +165,20 @@ public class TasksController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Tasks assigned to the member whose Members.UserId matches, scoped to the current organization.
-    /// </summary>
-    [HttpGet("user/{userId}")]
-    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetTasksByUserId(string userId)
+    [HttpGet("assigned/me")]
+    [RequirePermission("tasks.view")]
+    public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetMyAssignedTasks()
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(userId))
-                return BadRequest("UserId is required.");
+        var email = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+            ?? User.FindFirst("email")?.Value;
+        if (string.IsNullOrWhiteSpace(email))
+            return BadRequest("Email claim not found in token.");
 
-            var tasks = await _taskService.GetTasksAssignedToUserIdAsync(userId);
-            if (tasks == null)
-            {
-                _logger.LogWarning(
-                    "GetTasksByUserId returned 404: no member for UserId {UserId} in current organization context.",
-                    userId);
-                return NotFound("No member found for this user ID in the current organization.");
-            }
+        var tasks = await _taskService.GetTasksAssignedToEmailAsync(email);
+        if (tasks == null)
+            return NotFound("No member record found for your email.");
 
-            return Ok(tasks);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting tasks for user ID {UserId}", userId);
-            return StatusCode(500, "An error occurred while retrieving tasks");
-        }
+        return Ok(tasks);
     }
 
     [HttpGet("member/summary/{memberId}")]

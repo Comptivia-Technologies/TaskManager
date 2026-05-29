@@ -36,14 +36,5 @@ public class StageRepository : Repository<Stage>, IStageRepository
             .FirstOrDefaultAsync(s => s.StageId == stageId);
     }
 
-    public async Task<IEnumerable<Stage>> GetStagesWithTeamByOrganizationAsync(Guid organizationId)
-    {
-        return await _context.Stages
-            .Include(s => s.Workflow)
-            .Include(s => s.Team)
-            .Where(s => s.OrganizationId == organizationId)
-            .OrderBy(s => s.StageOrder)
-            .ToListAsync();
-    }
 }
 

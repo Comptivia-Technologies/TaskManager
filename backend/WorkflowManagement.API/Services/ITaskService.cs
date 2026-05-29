@@ -13,9 +13,6 @@ public interface ITaskService
     Task<IEnumerable<TaskReadDto>> GetTasksByWorkflowAsync(Guid workflowId);
     Task<IEnumerable<TaskReadDto>> GetTasksByStageAsync(Guid stageId);
     Task<IEnumerable<TaskReadDto>> GetTasksByMemberAsync(Guid memberId);
-    Task<IEnumerable<TaskReadDto>?> GetTasksAssignedToUserIdAsync(string userId);
+    Task<IEnumerable<TaskReadDto>?> GetTasksAssignedToEmailAsync(string email);
     Task<MemberTaskSummaryDto> GetMemberTaskSummaryAsync(Guid memberId);
 }
-
-
-

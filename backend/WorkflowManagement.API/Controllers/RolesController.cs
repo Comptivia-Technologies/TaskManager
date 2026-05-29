@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WorkflowManagement.API.Authorization;
 using WorkflowManagement.API.DTOs;
 using WorkflowManagement.API.Services;
 
@@ -6,72 +8,44 @@ namespace WorkflowManagement.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class RolesController : ControllerBase
 {
     private readonly IRoleService _roleService;
-    private readonly IConfiguration _configuration;
     private readonly ILogger<RolesController> _logger;
 
-    public RolesController(IRoleService roleService, IConfiguration configuration, ILogger<RolesController> logger)
+    public RolesController(IRoleService roleService, ILogger<RolesController> logger)
     {
         _roleService = roleService;
-        _configuration = configuration;
         _logger = logger;
     }
 
-    [HttpGet("all")]
-    public async Task<ActionResult<IEnumerable<RoleReadDto>>> GetAll([FromHeader(Name = "X-Api-Key")] string? apiKey)
-    {
-        var expectedKey = _configuration["ApiKeys:GetAllRoles"];
-        if (string.IsNullOrEmpty(expectedKey) || string.IsNullOrEmpty(apiKey) || !string.Equals(apiKey, expectedKey, StringComparison.Ordinal))
-        {
-            return Unauthorized();
-        }
-
-        try
-        {
-            var roles = await _roleService.GetAllAsync();
-            return Ok(roles);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error listing all roles");
-            return StatusCode(500, "An error occurred while retrieving roles");
-        }
-    }
-
-    [HttpGet("organization/{organizationId:guid}")]
-    public async Task<ActionResult<IEnumerable<RoleReadDto>>> GetByOrganization(Guid organizationId)
+    [HttpGet]
+    [RequirePermission("roles.view")]
+    public async Task<ActionResult<IEnumerable<RoleReadDto>>> GetAll()
     {
         try
         {
-            var roles = await _roleService.GetByOrganizationAsync(organizationId);
-            return Ok(roles);
+            return Ok(await _roleService.GetAllAsync());
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error listing roles for organization {OrganizationId}", organizationId);
+            _logger.LogError(ex, "Error listing roles");
             return StatusCode(500, "An error occurred while retrieving roles");
         }
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission("roles.view")]
     public async Task<ActionResult<RoleReadDto>> GetById(Guid id)
     {
-        try
-        {
-            var role = await _roleService.GetByIdAsync(id);
-            if (role == null) return NotFound();
-            return Ok(role);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting role {RoleId}", id);
-            return StatusCode(500, "An error occurred while retrieving the role");
-        }
+        var role = await _roleService.GetByIdAsync(id);
+        if (role == null) return NotFound();
+        return Ok(role);
     }
 
     [HttpPost]
+    [RequirePermission("roles.manage")]
     public async Task<ActionResult<RoleReadDto>> Create([FromBody] RoleCreateDto dto)
     {
         try
@@ -88,6 +62,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission("roles.manage")]
     public async Task<ActionResult<RoleReadDto>> Update(Guid id, [FromBody] RoleUpdateDto dto)
     {
         try
@@ -105,6 +80,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission("roles.manage")]
     public async Task<ActionResult> Delete(Guid id)
     {
         try
@@ -112,6 +88,10 @@ public class RolesController : ControllerBase
             var deleted = await _roleService.DeleteAsync(id);
             if (!deleted) return NotFound();
             return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
         }
         catch (Exception ex)
         {

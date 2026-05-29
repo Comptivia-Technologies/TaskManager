@@ -38,9 +38,6 @@ if (string.IsNullOrEmpty(connectionString))
 builder.Services.AddDbContext<PriorityRuleDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<PriorityRuleEngine.API.Services.ICurrentOrganizationAccessor, PriorityRuleEngine.API.Services.CurrentOrganizationAccessor>();
-
 // Event Bus - Register all providers
 builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
 builder.Services.AddSingleton<AwsEventBus>();
@@ -198,7 +195,6 @@ using (var scope = app.Services.CreateScope())
             var createTableSql = @"
                 CREATE TABLE IF NOT EXISTS ""PriorityRules"" (
                     ""RuleId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    ""OrganizationId"" UUID NOT NULL,
                     ""RuleName"" VARCHAR(200) NOT NULL,
                     ""Priority"" VARCHAR(50) NOT NULL,
                     ""Salience"" INTEGER NOT NULL DEFAULT 0,
@@ -214,10 +210,6 @@ using (var scope = app.Services.CreateScope())
             await dbContext.Database.ExecuteSqlRawAsync(createTableSql);
             
             // Create indexes
-            await dbContext.Database.ExecuteSqlRawAsync(@"
-                CREATE INDEX IF NOT EXISTS ""IX_PriorityRules_OrganizationId"" 
-                ON ""PriorityRules"" (""OrganizationId"")");
-            
             await dbContext.Database.ExecuteSqlRawAsync(@"
                 CREATE INDEX IF NOT EXISTS ""IX_PriorityRules_IsActive_Salience"" 
                 ON ""PriorityRules"" (""IsActive"", ""Salience"" DESC)");
@@ -239,26 +231,6 @@ using (var scope = app.Services.CreateScope())
                     await connection.OpenAsync();
                 try
                 {
-                    // Check OrganizationId and add if missing
-                    using (var cmd = connection.CreateCommand())
-                    {
-                        cmd.CommandText = @"
-                            SELECT COUNT(*) FROM information_schema.columns
-                            WHERE table_schema = 'public' AND table_name = 'PriorityRules' AND column_name = 'OrganizationId'";
-                        var orgColumnExists = Convert.ToInt32(await cmd.ExecuteScalarAsync()) > 0;
-                        if (!orgColumnExists)
-                        {
-                            scopeLogger.LogInformation("OrganizationId column does not exist. Adding...");
-                            await dbContext.Database.ExecuteSqlRawAsync(@"
-                                ALTER TABLE ""PriorityRules""
-                                ADD COLUMN ""OrganizationId"" UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'");
-                            await dbContext.Database.ExecuteSqlRawAsync(@"
-                                CREATE INDEX IF NOT EXISTS ""IX_PriorityRules_OrganizationId""
-                                ON ""PriorityRules"" (""OrganizationId"")");
-                            scopeLogger.LogInformation("OrganizationId column added successfully.");
-                        }
-                    }
-
                     // Check WorkflowId and add if missing
                     using (var cmd = connection.CreateCommand())
                     {

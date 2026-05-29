@@ -16,7 +16,6 @@ public interface ITaskRepository
     System.Threading.Tasks.Task<IEnumerable<DomainTask>> GetOverdueTasksAsync();
     System.Threading.Tasks.Task<IEnumerable<DomainTask>> GetAlreadyOverdueTasksAsync();
     System.Threading.Tasks.Task<IEnumerable<string>> GetAllTaskNamesAsync();
-    System.Threading.Tasks.Task<IEnumerable<Guid>> GetDistinctOrganizationIdsAsync();
     System.Threading.Tasks.Task<bool> ExistsAsync(Guid taskId);
 }
 

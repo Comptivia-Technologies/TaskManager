@@ -148,9 +148,8 @@ public class TaskAssignedEventHandler
             // Removed: Map Assigned to Pending - WorkloadService handles both statuses
 
             // First, check if task already exists in WorkflowManagement.API
-            var searchResponse = await GetWithOrgHeaderAsync(
-                $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}",
-                task.OrganizationId);
+            var searchResponse = await _httpClient.GetAsync(
+                $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}");
 
             WorkflowTaskInfo? existingWorkflowTask = null;
             if (searchResponse.IsSuccessStatusCode)
@@ -254,10 +253,9 @@ public class TaskAssignedEventHandler
                     "Updating existing task in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, NewMemberId: {MemberId}",
                     task.TaskId, existingWorkflowTask.TaskId, task.MemberId.Value);
 
-                var updateResponse = await PutWithOrgHeaderAsync(
+                var updateResponse = await _httpClient.PutAsJsonAsync(
                     $"{workflowManagementApiUrl}/tasks/{existingWorkflowTask.TaskId}",
-                    taskUpdateDto,
-                    task.OrganizationId);
+                    taskUpdateDto);
 
                 if (updateResponse.IsSuccessStatusCode)
                 {
@@ -303,10 +301,9 @@ public class TaskAssignedEventHandler
                     "Creating new task in WorkflowManagement.API. TaskId: {TaskId}, Priority: {Priority}",
                     task.TaskId, task.Priority);
 
-                var response = await PostWithOrgHeaderAsync(
+                var response = await _httpClient.PostAsJsonAsync(
                     $"{workflowManagementApiUrl}/tasks",
-                    taskCreateDto,
-                    task.OrganizationId);
+                    taskCreateDto);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -331,29 +328,6 @@ public class TaskAssignedEventHandler
                 "Error syncing task to WorkflowManagement.API. TaskId: {TaskId}",
                 task.TaskId);
         }
-    }
-
-    private async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> GetWithOrgHeaderAsync(string url, Guid organizationId)
-    {
-        var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, url);
-        request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
-        return await _httpClient.SendAsync(request);
-    }
-
-    private async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> PutWithOrgHeaderAsync(string url, object content, Guid organizationId)
-    {
-        var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Put, url);
-        request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
-        request.Content = System.Net.Http.Json.JsonContent.Create(content);
-        return await _httpClient.SendAsync(request);
-    }
-
-    private async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> PostWithOrgHeaderAsync(string url, object content, Guid organizationId)
-    {
-        var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, url);
-        request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
-        request.Content = System.Net.Http.Json.JsonContent.Create(content);
-        return await _httpClient.SendAsync(request);
     }
 
     private class WorkflowTaskInfo

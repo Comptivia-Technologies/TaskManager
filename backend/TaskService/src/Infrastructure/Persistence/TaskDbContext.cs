@@ -23,8 +23,6 @@ public class TaskDbContext : DbContext
         {
             entity.ToTable("Tasks");
             entity.HasKey(e => e.TaskId);
-            entity.Property(e => e.OrganizationId).IsRequired();
-            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.TaskName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Priority).IsRequired().HasMaxLength(50);
             entity.Property(e => e.TaskType).IsRequired().HasMaxLength(100);

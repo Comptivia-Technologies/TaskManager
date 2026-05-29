@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WorkflowManagement.API.Authorization;
 using WorkflowManagement.API.DTOs;
 using WorkflowManagement.API.Services;
 
@@ -6,6 +8,7 @@ namespace WorkflowManagement.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class StagesController : ControllerBase
 {
     private readonly IStageService _stageService;
@@ -18,6 +21,7 @@ public class StagesController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("workflows.view")]
     public async Task<ActionResult<IEnumerable<StageReadDto>>> GetAllStages()
     {
         try
@@ -33,6 +37,7 @@ public class StagesController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [RequirePermission("workflows.view")]
     public async Task<ActionResult<StageReadDto>> GetStageById(Guid id)
     {
         try
@@ -51,6 +56,7 @@ public class StagesController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("workflows.manage")]
     public async Task<ActionResult<StageReadDto>> CreateStage([FromBody] StageCreateDto stageCreateDto)
     {
         try
@@ -73,6 +79,7 @@ public class StagesController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [RequirePermission("workflows.manage")]
     public async Task<ActionResult<StageReadDto>> UpdateStage(Guid id, [FromBody] StageUpdateDto stageUpdateDto)
     {
         try
@@ -94,6 +101,7 @@ public class StagesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission("workflows.manage")]
     public async Task<IActionResult> DeleteStage(Guid id)
     {
         try
@@ -112,6 +120,7 @@ public class StagesController : ControllerBase
     }
 
     [HttpGet("workflow/{workflowId}")]
+    [RequirePermission("workflows.view")]
     public async Task<ActionResult<IEnumerable<StageReadDto>>> GetStagesByWorkflow(Guid workflowId)
     {
         try

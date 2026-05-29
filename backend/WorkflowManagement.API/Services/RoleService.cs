@@ -11,34 +11,20 @@ public class RoleService : IRoleService
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<Permission> _permissionRepository;
     private readonly ApplicationDbContext _context;
-    private readonly ILogger<RoleService> _logger;
 
     public RoleService(
         IRepository<Role> roleRepository,
         IRepository<Permission> permissionRepository,
-        ApplicationDbContext context,
-        ILogger<RoleService> logger)
+        ApplicationDbContext context)
     {
         _roleRepository = roleRepository;
         _permissionRepository = permissionRepository;
         _context = context;
-        _logger = logger;
     }
 
     public async Task<IEnumerable<RoleReadDto>> GetAllAsync()
     {
         var roles = await _context.Roles
-            .Include(r => r.RolePermissions)
-            .ThenInclude(rp => rp.Permission)
-            .OrderBy(r => r.Name)
-            .ToListAsync();
-        return roles.Select(MapToReadDto).ToList();
-    }
-
-    public async Task<IEnumerable<RoleReadDto>> GetByOrganizationAsync(Guid organizationId)
-    {
-        var roles = await _context.Roles
-            .Where(r => r.OrganizationId == organizationId)
             .Include(r => r.RolePermissions)
             .ThenInclude(rp => rp.Permission)
             .OrderBy(r => r.Name)
@@ -61,7 +47,6 @@ public class RoleService : IRoleService
         {
             Name = dto.Name,
             Description = dto.Description,
-            OrganizationId = dto.OrganizationId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -85,6 +70,9 @@ public class RoleService : IRoleService
 
     public async Task<bool> DeleteAsync(Guid roleId)
     {
+        if (await _context.AppUsers.AnyAsync(u => u.RoleId == roleId))
+            throw new InvalidOperationException("Cannot delete a role assigned to users.");
+
         return await _roleRepository.DeleteAsync(roleId);
     }
 
@@ -106,15 +94,12 @@ public class RoleService : IRoleService
         await _context.SaveChangesAsync();
     }
 
-    private static RoleReadDto MapToReadDto(Role role)
-    {
-        return new RoleReadDto
+    private static RoleReadDto MapToReadDto(Role role) =>
+        new()
         {
             RoleId = role.RoleId,
             Name = role.Name,
             Description = role.Description,
-            OrganizationId = role.OrganizationId,
             PermissionCodes = role.RolePermissions?.Select(rp => rp.Permission?.Code).Where(c => c != null).Cast<string>().ToList() ?? new List<string>()
         };
-    }
 }

@@ -5,7 +5,6 @@ interface RoleApiResponse {
   roleId: string;
   name: string;
   description?: string | null;
-  organizationId: string;
   permissionCodes: string[];
 }
 
@@ -19,16 +18,15 @@ function mapToRole(r: RoleApiResponse): Role {
 }
 
 export const roleService = {
-  getByOrganization: async (organizationId: string): Promise<Role[]> => {
-    const response = await api.get<RoleApiResponse[]>(`/api/roles/organization/${organizationId}`);
+  getAll: async (): Promise<Role[]> => {
+    const response = await api.get<RoleApiResponse[]>('/api/roles');
     return (response.data ?? []).map(mapToRole);
   },
 
-  create: async (organizationId: string, data: RoleCreate): Promise<Role> => {
+  create: async (data: RoleCreate): Promise<Role> => {
     const response = await api.post<RoleApiResponse>('/api/roles', {
       name: data.name,
       description: data.description ?? null,
-      organizationId,
       permissionCodes: data.permissions ?? [],
     });
     return mapToRole(response.data);

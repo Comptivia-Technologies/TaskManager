@@ -32,12 +32,6 @@ public class TeamRepository : Repository<Team>, ITeamRepository
             .FirstOrDefaultAsync(t => t.TeamId == teamId);
     }
 
-    public async Task<IEnumerable<Team>> GetTeamsByOrganizationAsync(Guid organizationId)
-    {
-        return await _context.Teams
-            .Where(t => t.OrganizationId == organizationId)
-            .ToListAsync();
-    }
 }
 
 

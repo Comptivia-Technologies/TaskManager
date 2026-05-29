@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using PriorityRuleEngine.API.DTOs;
 using PriorityRuleEngine.API.Models;
 using PriorityRuleEngine.API.Repositories;
-using PriorityRuleEngine.API.Services;
 
 namespace PriorityRuleEngine.API.Controllers;
 
@@ -11,28 +10,22 @@ namespace PriorityRuleEngine.API.Controllers;
 public class PriorityRulesController : ControllerBase
 {
     private readonly IPriorityRuleRepository _repository;
-    private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly ILogger<PriorityRulesController> _logger;
 
     public PriorityRulesController(
         IPriorityRuleRepository repository,
-        ICurrentOrganizationAccessor orgAccessor,
         ILogger<PriorityRulesController> logger)
     {
         _repository = repository;
-        _orgAccessor = orgAccessor;
         _logger = logger;
     }
 
     [HttpGet]
     public async Task<ActionResult<List<PriorityRuleDto>>> GetRules([FromQuery] bool activeOnly = false)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            return Unauthorized(new { error = "Organization context required." });
-        var rules = (activeOnly
+        var rules = activeOnly
             ? await _repository.GetActiveRulesAsync()
-            : await _repository.GetAllRulesAsync()).Where(r => r.OrganizationId == orgId.Value).ToList();
+            : await _repository.GetAllRulesAsync();
 
         var dtos = rules.Select(r => new PriorityRuleDto
         {
@@ -55,11 +48,8 @@ public class PriorityRulesController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<PriorityRuleDto>> GetRule(Guid id)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            return Unauthorized(new { error = "Organization context required." });
         var rule = await _repository.GetByIdAsync(id);
-        if (rule == null || rule.OrganizationId != orgId.Value) return NotFound();
+        if (rule == null) return NotFound();
 
         var dto = new PriorityRuleDto
         {
@@ -82,16 +72,12 @@ public class PriorityRulesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<PriorityRuleDto>> CreateRule([FromBody] CreatePriorityRuleRequest request)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            return Unauthorized(new { error = "Organization context required." });
         _logger.LogInformation(
             "Creating rule. RuleName: {RuleName}, Priority: {Priority}, WorkflowId from request: {WorkflowId}",
             request.RuleName, request.Priority, request.WorkflowId);
         
         var rule = new PriorityRule
         {
-            OrganizationId = orgId.Value,
             RuleName = request.RuleName,
             Priority = request.Priority,
             Salience = request.Salience,
@@ -133,11 +119,8 @@ public class PriorityRulesController : ControllerBase
     [HttpPut("{id}")]
     public async Task<ActionResult<PriorityRuleDto>> UpdateRule(Guid id, [FromBody] UpdatePriorityRuleRequest request)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            return Unauthorized(new { error = "Organization context required." });
         var existing = await _repository.GetByIdAsync(id);
-        if (existing == null || existing.OrganizationId != orgId.Value)
+        if (existing == null)
             return NotFound();
         var rule = new PriorityRule
         {
@@ -175,11 +158,8 @@ public class PriorityRulesController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteRule(Guid id)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            return Unauthorized(new { error = "Organization context required." });
         var existing = await _repository.GetByIdAsync(id);
-        if (existing == null || existing.OrganizationId != orgId.Value)
+        if (existing == null)
             return NotFound();
         var deleted = await _repository.DeleteAsync(id);
         if (!deleted) return NotFound();
@@ -187,4 +167,3 @@ public class PriorityRulesController : ControllerBase
         return NoContent();
     }
 }
-

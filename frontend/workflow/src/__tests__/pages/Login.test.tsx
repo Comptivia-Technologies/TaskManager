@@ -6,14 +6,8 @@ import { Login } from '../../pages/Login';
 jest.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
     signIn: jest.fn(),
-    signUp: jest.fn(),
-    setTenant: jest.fn(),
-    fetchTenantId: jest.fn().mockResolvedValue(null),
-    currentTenantId: null,
+    loading: false,
   }),
-}));
-jest.mock('../../services/tenantService', () => ({
-  fetchTenantIdByEmail: jest.fn().mockResolvedValue({ tenantId: null, exists: false }),
 }));
 
 describe('Login', () => {
@@ -23,6 +17,6 @@ describe('Login', () => {
         <Login />
       </MemoryRouter>
     );
-    expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
   });
 });

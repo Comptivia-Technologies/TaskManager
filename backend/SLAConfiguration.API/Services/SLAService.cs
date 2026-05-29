@@ -13,23 +13,18 @@ public class SLAService : ISLAService
 {
     private readonly ISLARepository _slaRepository;
     private readonly SLAConfigurationDbContext _context;
-    private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly IMapper _mapper;
 
-    public SLAService(ISLARepository slaRepository, SLAConfigurationDbContext context, ICurrentOrganizationAccessor orgAccessor, IMapper mapper)
+    public SLAService(ISLARepository slaRepository, SLAConfigurationDbContext context, IMapper mapper)
     {
         _slaRepository = slaRepository;
         _context = context;
-        _orgAccessor = orgAccessor;
         _mapper = mapper;
     }
 
     public async System.Threading.Tasks.Task<IEnumerable<SLAConfigurationReadDto>> GetAllSLAConfigurationsAsync()
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
-        var slaConfigs = (await _slaRepository.GetAllAsync()).Where(s => s.OrganizationId == orgId.Value).ToList();
+        var slaConfigs = (await _slaRepository.GetAllAsync()).ToList();
         var slaConfigsDto = new List<SLAConfigurationReadDto>();
 
         foreach (var slaConfig in slaConfigs)
@@ -43,11 +38,8 @@ public class SLAService : ISLAService
 
     public async System.Threading.Tasks.Task<SLAConfigurationReadDto?> GetSLAConfigurationByWorkflowIdAsync(Guid workflowId)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         var slaConfig = await _slaRepository.GetByWorkflowIdAsync(workflowId);
-        if (slaConfig == null || slaConfig.OrganizationId != orgId.Value)
+        if (slaConfig == null)
             return null;
 
         return await MapToReadDtoAsync(slaConfig);
@@ -55,9 +47,6 @@ public class SLAService : ISLAService
 
     public async System.Threading.Tasks.Task<SLAConfigurationReadDto> CreateSLAConfigurationAsync(SLAConfigurationCreateDto slaCreateDto)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         try
         {
             // Check if workflow exists
@@ -92,7 +81,6 @@ public class SLAService : ISLAService
 
             var slaConfig = new Models.SLAConfiguration
             {
-                OrganizationId = orgId.Value,
                 WorkflowId = slaCreateDto.WorkflowId,
                 PriorityLevelsJson = priorityLevelsJson,
                 CreatedAt = DateTime.UtcNow,
@@ -114,11 +102,8 @@ public class SLAService : ISLAService
 
     public async System.Threading.Tasks.Task<SLAConfigurationReadDto?> UpdateSLAConfigurationAsync(Guid workflowId, SLAConfigurationUpdateDto slaUpdateDto)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         var slaConfig = await _slaRepository.GetByWorkflowIdAsync(workflowId);
-        if (slaConfig == null || slaConfig.OrganizationId != orgId.Value)
+        if (slaConfig == null)
             return null;
 
         // Replace entire priority levels dictionary with the new one (not merge)
@@ -136,11 +121,8 @@ public class SLAService : ISLAService
 
     public async System.Threading.Tasks.Task<bool> DeleteSLAConfigurationAsync(Guid workflowId)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         var slaConfig = await _slaRepository.GetByWorkflowIdAsync(workflowId);
-        if (slaConfig == null || slaConfig.OrganizationId != orgId.Value)
+        if (slaConfig == null)
             return false;
 
         return await _slaRepository.DeleteAsync(slaConfig.SLAConfigurationId);
@@ -199,4 +181,3 @@ public class SLAService : ISLAService
         }
     }
 }
-

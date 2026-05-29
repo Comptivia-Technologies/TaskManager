@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WorkflowManagement.API.Authorization;
 using WorkflowManagement.API.DTOs;
 using WorkflowManagement.API.Services;
 
@@ -6,6 +8,7 @@ namespace WorkflowManagement.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class MembersController : ControllerBase
 {
     private readonly IMemberService _memberService;
@@ -18,6 +21,7 @@ public class MembersController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("members.view")]
     public async Task<ActionResult<IEnumerable<MemberReadDto>>> GetAllMembers()
     {
         try
@@ -33,6 +37,7 @@ public class MembersController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [RequirePermission("members.view")]
     public async Task<ActionResult<MemberReadDto>> GetMemberById(Guid id)
     {
         try
@@ -51,6 +56,7 @@ public class MembersController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("members.manage")]
     public async Task<ActionResult<MemberReadDto>> CreateMember([FromBody] MemberCreateDto memberCreateDto)
     {
         try
@@ -79,6 +85,7 @@ public class MembersController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [RequirePermission("members.manage")]
     public async Task<ActionResult<MemberReadDto>> UpdateMember(Guid id, [FromBody] MemberUpdateDto memberUpdateDto)
     {
         try
@@ -104,6 +111,7 @@ public class MembersController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission("members.manage")]
     public async Task<IActionResult> DeleteMember(Guid id)
     {
         try
@@ -122,6 +130,7 @@ public class MembersController : ControllerBase
     }
 
     [HttpGet("{id}/tasks")]
+    [RequirePermission("tasks.view")]
     public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetMemberTasks(Guid id)
     {
         try

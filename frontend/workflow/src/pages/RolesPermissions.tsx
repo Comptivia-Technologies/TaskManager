@@ -10,7 +10,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 type Tab = 'roles' | 'permissions';
 
 const RolesPermissions = () => {
-  const { organizationId } = useAuth();
+  const { hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('roles');
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(false);
@@ -38,10 +38,9 @@ const RolesPermissions = () => {
   }, []);
 
   const loadRoles = useCallback(async () => {
-    if (!organizationId) return;
     setRolesLoading(true);
     try {
-      const list = await roleService.getByOrganization(organizationId);
+      const list = await roleService.getAll();
       setRoles(list);
     } catch {
       toast.error('Failed to load roles');
@@ -49,7 +48,7 @@ const RolesPermissions = () => {
     } finally {
       setRolesLoading(false);
     }
-  }, [organizationId]);
+  }, []);
 
   useEffect(() => {
     loadPermissions();
@@ -103,10 +102,6 @@ const RolesPermissions = () => {
 
   const handleRoleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!organizationId) {
-      toast.error('Organization context required');
-      return;
-    }
     try {
       if (editingRole) {
         await roleService.update(editingRole.roleId, {
@@ -116,7 +111,7 @@ const RolesPermissions = () => {
         });
         toast.success('Role updated successfully');
       } else {
-        await roleService.create(organizationId, {
+        await roleService.create({
           name: roleForm.name,
           description: roleForm.description || undefined,
           permissions: roleForm.permissions,
@@ -172,7 +167,7 @@ const RolesPermissions = () => {
             <h2 className="text-lg font-semibold text-black font-sans">Roles</h2>
             <button
               onClick={openAddRoleModal}
-              disabled={!organizationId}
+              disabled={!hasPermission('roles.manage')}
               className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FiPlus className="mr-2" />

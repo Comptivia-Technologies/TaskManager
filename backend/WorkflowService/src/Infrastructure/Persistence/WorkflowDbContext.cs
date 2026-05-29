@@ -28,8 +28,6 @@ public class WorkflowDbContext : DbContext
         {
             entity.ToTable("WorkflowSelections");
             entity.HasKey(e => e.SelectionId);
-            entity.Property(e => e.OrganizationId).IsRequired();
-            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.TaskId).IsRequired();
             entity.Property(e => e.WorkflowId).IsRequired();
             entity.Property(e => e.WorkflowName).IsRequired().HasMaxLength(200);
@@ -49,8 +47,6 @@ public class WorkflowDbContext : DbContext
         {
             entity.ToTable("Workflows");
             entity.HasKey(e => e.WorkflowId);
-            entity.Property(e => e.OrganizationId).IsRequired();
-            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.WorkflowName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.TeamId).IsRequired(false);
         });
@@ -61,8 +57,6 @@ public class WorkflowDbContext : DbContext
         {
             entity.ToTable("Stages");
             entity.HasKey(e => e.StageId);
-            entity.Property(e => e.OrganizationId).IsRequired();
-            entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.StageName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.StageOrder).IsRequired();
             entity.Property(e => e.WorkflowId).IsRequired();

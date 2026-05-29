@@ -10,13 +10,6 @@ public class MemberRepository : Repository<Member>, IMemberRepository
     {
     }
 
-    public async Task<Member?> GetByUserIdAsync(string userId, Guid organizationId)
-    {
-        return await _context.Members
-            .AsNoTracking()
-            .FirstOrDefaultAsync(m => m.UserId == userId && m.OrganizationId == organizationId);
-    }
-
     public async Task<IEnumerable<Member>> GetMembersByTeamAsync(Guid teamId)
     {
         return await _context.Members
@@ -32,22 +25,10 @@ public class MemberRepository : Repository<Member>, IMemberRepository
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<Member>> GetMembersWithTeamByOrganizationAsync(Guid organizationId)
+    public async Task<Member?> GetByEmailAsync(string email)
     {
         return await _context.Members
-            .Include(m => m.Team)
-            .Where(m => m.OrganizationId == organizationId)
-            .ToListAsync();
-    }
-
-    public async Task<IEnumerable<Member>> GetMembersByTeamAsync(Guid teamId, Guid organizationId)
-    {
-        return await _context.Members
-            .Include(m => m.Team)
-            .Where(m => m.TeamId == teamId && m.OrganizationId == organizationId)
-            .ToListAsync();
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Email.ToLower() == email.ToLower());
     }
 }
-
-
-

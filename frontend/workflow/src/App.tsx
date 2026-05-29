@@ -14,7 +14,7 @@ import SLAConfiguration from './pages/SLAConfiguration';
 import WorkloadConfiguration from './pages/WorkloadConfiguration';
 import Tasks from './pages/Tasks';
 import PriorityRules from './pages/PriorityRules';
-import Users from './pages/Users';
+import AppUsers from './pages/AppUsers';
 import RolesPermissions from './pages/RolesPermissions';
 
 function App() {
@@ -160,7 +160,7 @@ function App() {
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
-                    <Users />
+                    <AppUsers />
                   </div>
                 </div>
               </ProtectedRoute>

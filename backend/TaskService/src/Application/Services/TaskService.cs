@@ -23,34 +23,26 @@ public class TaskService : ITaskService
     private readonly ILogger<TaskService> _logger;
     private readonly IConfiguration _configuration;
     private readonly HttpClient _httpClient;
-    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public TaskService(
         ITaskRepository repository,
         IEventBus eventBus,
         ILogger<TaskService> logger,
         IConfiguration configuration,
-        IHttpClientFactory httpClientFactory,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpClientFactory httpClientFactory)
     {
         _repository = repository;
         _eventBus = eventBus;
         _logger = logger;
         _configuration = configuration;
         _httpClient = httpClientFactory.CreateClient();
-        _httpContextAccessor = httpContextAccessor;
     }
 
     public async System.Threading.Tasks.Task<TaskReadDto> CreateTaskAsync(TaskCreateDto createDto)
     {
-        var orgIdHeader = _httpContextAccessor.HttpContext?.Request.Headers["X-Organization-Id"].FirstOrDefault();
-        if (string.IsNullOrEmpty(orgIdHeader) || !Guid.TryParse(orgIdHeader, out var organizationId))
-            throw new UnauthorizedAccessException("Organization context required (X-Organization-Id header).");
-
         var task = new DomainTask
         {
             TaskId = Guid.NewGuid(),
-            OrganizationId = organizationId,
             TaskName = createDto.TaskName,
             Description = createDto.Description,
             Priority = createDto.Priority,
@@ -67,7 +59,6 @@ public class TaskService : ITaskService
         var taskCreatedEvent = new TaskCreatedEvent
         {
             TaskId = createdTask.TaskId,
-            OrganizationId = organizationId,
             TaskName = createdTask.TaskName,
             Description = createdTask.Description,
             Priority = createdTask.Priority,
@@ -165,9 +156,8 @@ public class TaskService : ITaskService
             // Removed: Map Assigned to Pending - WorkloadService handles both statuses
 
             // Get all tasks for this workflow (send org for WorkflowManagement.API)
-            var tasksResponse = await GetWithOrgHeaderAsync(
-                $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}",
-                task.OrganizationId);
+            var tasksResponse = await _httpClient.GetAsync(
+                $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}");
 
             if (tasksResponse.IsSuccessStatusCode)
             {
@@ -202,9 +192,8 @@ public class TaskService : ITaskService
                 if (matchingTaskId.HasValue)
                 {
                     // Get existing task to preserve CompletedByMemberIds and EscalatedByMemberIds
-                    var existingTaskResponse = await GetWithOrgHeaderAsync(
-                        $"{workflowManagementApiUrl}/tasks/{matchingTaskId.Value}",
-                        task.OrganizationId);
+                    var existingTaskResponse = await _httpClient.GetAsync(
+                        $"{workflowManagementApiUrl}/tasks/{matchingTaskId.Value}");
                     
                     string? existingCompletedByMemberIds = null;
                     string? existingEscalatedByMemberIds = null;
@@ -244,10 +233,9 @@ public class TaskService : ITaskService
                         IsOverdue = task.IsOverdue
                     };
 
-                    var updateResponse = await PutWithOrgHeaderAsync(
+                    var updateResponse = await _httpClient.PutAsJsonAsync(
                         $"{workflowManagementApiUrl}/tasks/{matchingTaskId.Value}",
-                        updateDto,
-                        task.OrganizationId);
+                        updateDto);
 
                     if (updateResponse.IsSuccessStatusCode)
                     {
@@ -414,9 +402,8 @@ public class TaskService : ITaskService
                 ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
             // Get all tasks for this workflow (send org for WorkflowManagement.API)
-            var tasksResponse = await GetWithOrgHeaderAsync(
-                $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}",
-                task.OrganizationId);
+            var tasksResponse = await _httpClient.GetAsync(
+                $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}");
 
             if (tasksResponse.IsSuccessStatusCode)
             {
@@ -450,9 +437,8 @@ public class TaskService : ITaskService
                 if (matchingTaskId.HasValue)
                 {
                     // Delete the task via WorkflowManagement.API
-                    var deleteResponse = await DeleteWithOrgHeaderAsync(
-                        $"{workflowManagementApiUrl}/tasks/{matchingTaskId.Value}",
-                        task.OrganizationId);
+                    var deleteResponse = await _httpClient.DeleteAsync(
+                        $"{workflowManagementApiUrl}/tasks/{matchingTaskId.Value}");
 
                     if (deleteResponse.IsSuccessStatusCode)
                     {
@@ -495,16 +481,12 @@ public class TaskService : ITaskService
     {
         try
         {
-            // Get all task names from TaskService database
             var taskServiceTaskNames = await _repository.GetAllTaskNamesAsync();
             var taskServiceTaskNamesSet = new HashSet<string>(taskServiceTaskNames, StringComparer.OrdinalIgnoreCase);
             
-            var orgIds = await _repository.GetDistinctOrganizationIdsAsync();
-            var orgIdsList = orgIds.ToList();
-            
             _logger.LogInformation(
-                "Found {Count} tasks in TaskService database, {OrgCount} organizations. Checking for orphaned tasks in WorkflowManagement.API",
-                taskServiceTaskNamesSet.Count, orgIdsList.Count);
+                "Found {Count} tasks in TaskService database. Checking for orphaned tasks in WorkflowManagement.API",
+                taskServiceTaskNamesSet.Count);
 
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
                 ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
@@ -513,73 +495,69 @@ public class TaskService : ITaskService
             int failedCount = 0;
             int skippedCount = 0;
 
-            foreach (var orgId in orgIdsList)
+            var tasksResponse = await _httpClient.GetAsync($"{workflowManagementApiUrl}/tasks");
+            if (!tasksResponse.IsSuccessStatusCode)
             {
-                var tasksResponse = await GetWithOrgHeaderAsync($"{workflowManagementApiUrl}/tasks", orgId);
-                if (!tasksResponse.IsSuccessStatusCode)
-                {
-                    _logger.LogWarning(
-                        "Could not fetch tasks from WorkflowManagement.API for cleanup. OrgId: {OrgId}, StatusCode: {StatusCode}",
-                        orgId, tasksResponse.StatusCode);
-                    continue;
-                }
+                _logger.LogWarning(
+                    "Could not fetch tasks from WorkflowManagement.API for cleanup. StatusCode: {StatusCode}",
+                    tasksResponse.StatusCode);
+                return;
+            }
 
-                var tasksJson = await tasksResponse.Content.ReadAsStringAsync();
-                using var jsonDoc = System.Text.Json.JsonDocument.Parse(tasksJson);
-                var tasksArray = jsonDoc.RootElement.EnumerateArray();
+            var tasksJson = await tasksResponse.Content.ReadAsStringAsync();
+            using var jsonDoc = System.Text.Json.JsonDocument.Parse(tasksJson);
+            var tasksArray = jsonDoc.RootElement.EnumerateArray();
 
-                foreach (var taskElement in tasksArray)
+            foreach (var taskElement in tasksArray)
+            {
+                try
                 {
-                    try
+                    var taskNameProp = taskElement.TryGetProperty("taskName", out var camelCaseName) ? camelCaseName :
+                                      taskElement.TryGetProperty("TaskName", out var pascalCaseName) ? pascalCaseName : default;
+                    
+                    var taskIdProp = taskElement.TryGetProperty("taskId", out var camelCaseId) ? camelCaseId :
+                                    taskElement.TryGetProperty("TaskId", out var pascalCaseId) ? pascalCaseId : default;
+
+                    if (taskNameProp.ValueKind == System.Text.Json.JsonValueKind.Undefined ||
+                        taskIdProp.ValueKind == System.Text.Json.JsonValueKind.Undefined)
                     {
-                        var taskNameProp = taskElement.TryGetProperty("taskName", out var camelCaseName) ? camelCaseName :
-                                          taskElement.TryGetProperty("TaskName", out var pascalCaseName) ? pascalCaseName : default;
-                        
-                        var taskIdProp = taskElement.TryGetProperty("taskId", out var camelCaseId) ? camelCaseId :
-                                        taskElement.TryGetProperty("TaskId", out var pascalCaseId) ? pascalCaseId : default;
-
-                        if (taskNameProp.ValueKind == System.Text.Json.JsonValueKind.Undefined ||
-                            taskIdProp.ValueKind == System.Text.Json.JsonValueKind.Undefined)
-                        {
-                            skippedCount++;
-                            continue;
-                        }
-
-                        var taskName = taskNameProp.GetString();
-                        var workflowTaskId = taskIdProp.GetGuid();
-
-                        if (taskName != null && taskServiceTaskNamesSet.Contains(taskName))
-                            continue;
-
-                        _logger.LogInformation(
-                            "Found orphaned task in WorkflowManagement.API. TaskName: {TaskName}, WorkflowTaskId: {WorkflowTaskId}. Deleting...",
-                            taskName, workflowTaskId);
-
-                        var deleteResponse = await DeleteWithOrgHeaderAsync(
-                            $"{workflowManagementApiUrl}/tasks/{workflowTaskId}",
-                            orgId);
-
-                        if (deleteResponse.IsSuccessStatusCode)
-                        {
-                            deletedCount++;
-                            _logger.LogInformation(
-                                "Deleted orphaned task from WorkflowManagement.API. TaskName: {TaskName}, WorkflowTaskId: {WorkflowTaskId}",
-                                taskName, workflowTaskId);
-                        }
-                        else
-                        {
-                            failedCount++;
-                            var errorContent = await deleteResponse.Content.ReadAsStringAsync();
-                            _logger.LogWarning(
-                                "Failed to delete orphaned task from WorkflowManagement.API. TaskName: {TaskName}, WorkflowTaskId: {WorkflowTaskId}, Error: {Error}",
-                                taskName, workflowTaskId, errorContent);
-                        }
+                        skippedCount++;
+                        continue;
                     }
-                    catch (Exception ex)
+
+                    var taskName = taskNameProp.GetString();
+                    var workflowTaskId = taskIdProp.GetGuid();
+
+                    if (taskName != null && taskServiceTaskNamesSet.Contains(taskName))
+                        continue;
+
+                    _logger.LogInformation(
+                        "Found orphaned task in WorkflowManagement.API. TaskName: {TaskName}, WorkflowTaskId: {WorkflowTaskId}. Deleting...",
+                        taskName, workflowTaskId);
+
+                    var deleteResponse = await _httpClient.DeleteAsync(
+                        $"{workflowManagementApiUrl}/tasks/{workflowTaskId}");
+
+                    if (deleteResponse.IsSuccessStatusCode)
+                    {
+                        deletedCount++;
+                        _logger.LogInformation(
+                            "Deleted orphaned task from WorkflowManagement.API. TaskName: {TaskName}, WorkflowTaskId: {WorkflowTaskId}",
+                            taskName, workflowTaskId);
+                    }
+                    else
                     {
                         failedCount++;
-                        _logger.LogError(ex, "Error processing task during cleanup");
+                        var errorContent = await deleteResponse.Content.ReadAsStringAsync();
+                        _logger.LogWarning(
+                            "Failed to delete orphaned task from WorkflowManagement.API. TaskName: {TaskName}, WorkflowTaskId: {WorkflowTaskId}, Error: {Error}",
+                            taskName, workflowTaskId, errorContent);
                     }
+                }
+                catch (Exception ex)
+                {
+                    failedCount++;
+                    _logger.LogError(ex, "Error processing task during cleanup");
                 }
             }
 
@@ -838,9 +816,8 @@ public class TaskService : ITaskService
         var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
             ?? "http://localhost:5000/api";
 
-        var stagesResponse = await GetWithOrgHeaderAsync(
-            $"{workflowManagementApiUrl}/stages/workflow/{task.WorkflowId.Value}",
-            task.OrganizationId);
+        var stagesResponse = await _httpClient.GetAsync(
+            $"{workflowManagementApiUrl}/stages/workflow/{task.WorkflowId.Value}");
 
         if (!stagesResponse.IsSuccessStatusCode)
         {
@@ -924,9 +901,8 @@ public class TaskService : ITaskService
         var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"] 
             ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
-        var stagesResponse = await GetWithOrgHeaderAsync(
-            $"{workflowManagementApiUrl}/stages/workflow/{task.WorkflowId.Value}",
-            task.OrganizationId);
+        var stagesResponse = await _httpClient.GetAsync(
+            $"{workflowManagementApiUrl}/stages/workflow/{task.WorkflowId.Value}");
 
         if (!stagesResponse.IsSuccessStatusCode)
         {
@@ -982,28 +958,6 @@ public class TaskService : ITaskService
         _logger.LogInformation(
             "Stage escalated for task. TaskId: {TaskId}, StageId: {StageId}, StageName: {StageName}, NextStageId: {NextStageId}, Reason: {Reason}, CorrelationId: {CorrelationId}",
             taskId, currentStage.StageId, currentStage.StageName, nextStage?.StageId, escalationReason, correlationId);
-    }
-
-    private async System.Threading.Tasks.Task<HttpResponseMessage> GetWithOrgHeaderAsync(string url, Guid organizationId)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
-        return await _httpClient.SendAsync(request);
-    }
-
-    private async System.Threading.Tasks.Task<HttpResponseMessage> PutWithOrgHeaderAsync(string url, object content, Guid organizationId)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Put, url);
-        request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
-        request.Content = JsonContent.Create(content);
-        return await _httpClient.SendAsync(request);
-    }
-
-    private async System.Threading.Tasks.Task<HttpResponseMessage> DeleteWithOrgHeaderAsync(string url, Guid organizationId)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Delete, url);
-        request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
-        return await _httpClient.SendAsync(request);
     }
 
     /// <summary>

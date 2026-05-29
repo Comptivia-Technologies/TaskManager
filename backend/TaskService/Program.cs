@@ -49,8 +49,6 @@ builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFa
 // HTTP Client for syncing to WorkflowManagement.API
 builder.Services.AddHttpClient();
 
-builder.Services.AddHttpContextAccessor();
-
 // Repositories
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 

@@ -23,19 +23,10 @@ authApi.interceptors.request.use(
 authApi.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      try {
-        const { authService } = await import('./authService');
-        const newToken = await authService.refreshAuthToken();
-        if (newToken) {
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          return authApi(originalRequest);
-        }
-      } catch {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('authTokenExpiry');
+    if (error.response?.status === 401) {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('authUser');
+      if (!window.location.pathname.startsWith('/login')) {
         window.location.href = '/login';
       }
     }

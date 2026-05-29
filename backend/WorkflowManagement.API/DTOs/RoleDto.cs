@@ -7,7 +7,6 @@ public class RoleReadDto
     public Guid RoleId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public Guid OrganizationId { get; set; }
     public List<string> PermissionCodes { get; set; } = new List<string>();
 }
 
@@ -19,9 +18,6 @@ public class RoleCreateDto
 
     [StringLength(1000)]
     public string? Description { get; set; }
-
-    [Required]
-    public Guid OrganizationId { get; set; }
 
     public List<string> PermissionCodes { get; set; } = new List<string>();
 }

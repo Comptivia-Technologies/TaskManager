@@ -10,7 +10,5 @@ public interface ITaskRepository : IRepository<Models.Task>
     System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksCompletedByMemberAsync(Guid memberId);
     System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksEscalatedByMemberAsync(Guid memberId);
     System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksWithDetailsAsync();
-    System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksWithDetailsByOrganizationAsync(Guid organizationId);
-    System.Threading.Tasks.Task<(IEnumerable<Models.Task> Items, int TotalCount)> GetTasksWithDetailsByOrganizationPaginatedAsync(Guid organizationId, string? priority, int page, int limit);
+    System.Threading.Tasks.Task<(IEnumerable<Models.Task> Items, int TotalCount)> GetTasksWithDetailsPaginatedAsync(string? priority, int page, int limit);
 }
-

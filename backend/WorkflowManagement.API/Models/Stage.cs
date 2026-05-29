@@ -6,7 +6,6 @@ namespace WorkflowManagement.API.Models;
 public class Stage
 {
     public Guid StageId { get; set; } = Guid.NewGuid();
-    public Guid OrganizationId { get; set; }
     public string StageName { get; set; } = string.Empty;
     public int StageOrder { get; set; }
     public Guid WorkflowId { get; set; }

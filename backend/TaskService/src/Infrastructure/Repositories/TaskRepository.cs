@@ -146,14 +146,6 @@ public class TaskRepository : ITaskRepository
             .ToListAsync();
     }
 
-    public async System.Threading.Tasks.Task<IEnumerable<Guid>> GetDistinctOrganizationIdsAsync()
-    {
-        return await _context.Tasks
-            .Select(t => t.OrganizationId)
-            .Distinct()
-            .ToListAsync();
-    }
-
     public async System.Threading.Tasks.Task<bool> ExistsAsync(Guid taskId)
     {
         return await _context.Tasks.AnyAsync(t => t.TaskId == taskId);

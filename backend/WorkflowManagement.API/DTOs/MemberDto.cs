@@ -5,7 +5,6 @@ namespace WorkflowManagement.API.DTOs;
 public class MemberReadDto
 {
     public Guid MemberId { get; set; }
-    public string? UserId { get; set; }
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
@@ -31,8 +30,6 @@ public class MemberCreateDto
     [EmailAddress]
     [StringLength(200)]
     public string Email { get; set; } = string.Empty;
-
-    public string? UserId { get; set; }
 
     public Guid? TeamId { get; set; }
 

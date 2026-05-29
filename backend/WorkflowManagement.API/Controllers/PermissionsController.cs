@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WorkflowManagement.API.Authorization;
 using WorkflowManagement.API.DTOs;
 using WorkflowManagement.API.Models;
 using WorkflowManagement.API.Repositories;
@@ -7,6 +9,7 @@ namespace WorkflowManagement.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class PermissionsController : ControllerBase
 {
     private readonly IRepository<Permission> _permissionRepository;
@@ -19,6 +22,7 @@ public class PermissionsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("permissions.view")]
     public async Task<ActionResult<IEnumerable<PermissionReadDto>>> GetAll()
     {
         try

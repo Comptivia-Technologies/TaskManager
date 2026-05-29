@@ -1,12 +1,14 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { authService } from '../services/authService';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  permission?: string;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, permission }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -17,8 +19,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     );
   }
 
-  if (!user) {
+  if (!user || !authService.isAuthenticated()) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (permission && !user.permissions?.includes(permission)) {
+    return <Navigate to="/workflows" replace />;
   }
 
   return <>{children}</>;

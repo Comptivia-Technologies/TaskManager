@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WorkflowManagement.API.Authorization;
 using WorkflowManagement.API.DTOs;
 using WorkflowManagement.API.Services;
 
@@ -6,6 +8,7 @@ namespace WorkflowManagement.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class TeamsController : ControllerBase
 {
     private readonly ITeamService _teamService;
@@ -18,6 +21,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("teams.view")]
     public async Task<ActionResult<IEnumerable<TeamReadDto>>> GetAllTeams()
     {
         try
@@ -33,6 +37,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [RequirePermission("teams.view")]
     public async Task<ActionResult<TeamReadDto>> GetTeamById(Guid id)
     {
         try
@@ -51,6 +56,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("teams.manage")]
     public async Task<ActionResult<TeamReadDto>> CreateTeam([FromBody] TeamCreateDto teamCreateDto)
     {
         try
@@ -69,6 +75,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [RequirePermission("teams.manage")]
     public async Task<ActionResult<TeamReadDto>> UpdateTeam(Guid id, [FromBody] TeamUpdateDto teamUpdateDto)
     {
         try
@@ -90,6 +97,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission("teams.manage")]
     public async Task<IActionResult> DeleteTeam(Guid id)
     {
         try
@@ -113,6 +121,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpGet("{id}/members")]
+    [RequirePermission("teams.view")]
     public async Task<ActionResult<IEnumerable<MemberReadDto>>> GetTeamMembers(Guid id)
     {
         try
@@ -128,6 +137,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpGet("{id}/workflows")]
+    [RequirePermission("teams.view")]
     public async Task<ActionResult<IEnumerable<WorkflowReadDto>>> GetTeamWorkflows(Guid id)
     {
         try

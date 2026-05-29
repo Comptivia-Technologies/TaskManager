@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WorkflowManagement.API.Authorization;
 using WorkflowManagement.API.DTOs;
 using WorkflowManagement.API.Services;
 
@@ -6,6 +8,7 @@ namespace WorkflowManagement.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class WorkflowsController : ControllerBase
 {
     private readonly IWorkflowService _workflowService;
@@ -18,6 +21,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("workflows.view")]
     public async Task<ActionResult<IEnumerable<WorkflowReadDto>>> GetAllWorkflows()
     {
         try
@@ -33,6 +37,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [RequirePermission("workflows.view")]
     public async Task<ActionResult<WorkflowReadDto>> GetWorkflowById(Guid id)
     {
         try
@@ -51,6 +56,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("workflows.manage")]
     public async Task<ActionResult<WorkflowReadDto>> CreateWorkflow([FromBody] WorkflowCreateDto workflowCreateDto)
     {
         try
@@ -73,6 +79,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [RequirePermission("workflows.manage")]
     public async Task<ActionResult<WorkflowReadDto>> UpdateWorkflow(Guid id, [FromBody] WorkflowUpdateDto workflowUpdateDto)
     {
         try
@@ -94,6 +101,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission("workflows.manage")]
     public async Task<IActionResult> DeleteWorkflow(Guid id)
     {
         try
@@ -112,6 +120,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{id}/stages")]
+    [RequirePermission("workflows.view")]
     public async Task<ActionResult<IEnumerable<StageReadDto>>> GetWorkflowStages(Guid id)
     {
         try
@@ -127,6 +136,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{id}/tasks")]
+    [RequirePermission("tasks.view")]
     public async Task<ActionResult<IEnumerable<TaskReadDto>>> GetWorkflowTasks(Guid id)
     {
         try
@@ -142,6 +152,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{id}/json")]
+    [RequirePermission("workflows.view")]
     public async Task<ActionResult<object>> GetWorkflowJson(Guid id)
     {
         try
@@ -161,6 +172,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpPost("{id}/update-json")]
+    [RequirePermission("workflows.manage")]
     public async Task<IActionResult> UpdateWorkflowJson(Guid id)
     {
         try

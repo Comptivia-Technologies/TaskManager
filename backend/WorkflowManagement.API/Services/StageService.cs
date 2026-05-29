@@ -11,58 +11,42 @@ public class StageService : IStageService
     private readonly IWorkflowRepository _workflowRepository;
     private readonly ITeamRepository _teamRepository;
     private readonly IWorkflowService _workflowService;
-    private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly IMapper _mapper;
 
-    public StageService(IStageRepository stageRepository, IWorkflowRepository workflowRepository, ITeamRepository teamRepository, IWorkflowService workflowService, ICurrentOrganizationAccessor orgAccessor, IMapper mapper)
+    public StageService(IStageRepository stageRepository, IWorkflowRepository workflowRepository, ITeamRepository teamRepository, IWorkflowService workflowService, IMapper mapper)
     {
         _stageRepository = stageRepository;
         _workflowRepository = workflowRepository;
         _teamRepository = teamRepository;
         _workflowService = workflowService;
-        _orgAccessor = orgAccessor;
         _mapper = mapper;
     }
 
     public async Task<IEnumerable<StageReadDto>> GetAllStagesAsync()
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
-        var stages = await _stageRepository.GetStagesWithTeamByOrganizationAsync(orgId.Value);
+        var stages = await _stageRepository.GetStagesWithTeamAsync();
         return _mapper.Map<IEnumerable<StageReadDto>>(stages);
     }
 
     public async Task<StageReadDto?> GetStageByIdAsync(Guid id)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         var stage = await _stageRepository.GetByIdAsync(id);
-        if (stage == null || stage.OrganizationId != orgId.Value)
-            return null;
-        return _mapper.Map<StageReadDto>(stage);
+        return stage == null ? null : _mapper.Map<StageReadDto>(stage);
     }
 
     public async Task<StageReadDto> CreateStageAsync(StageCreateDto stageCreateDto)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         var workflow = await _workflowRepository.GetByIdAsync(stageCreateDto.WorkflowId);
-        if (workflow == null || workflow.OrganizationId != orgId.Value)
-            throw new ArgumentException("Workflow does not exist or does not belong to your organization.");
+        if (workflow == null)
+            throw new ArgumentException("Workflow does not exist.");
         var team = await _teamRepository.GetByIdAsync(stageCreateDto.TeamId);
-        if (team == null || team.OrganizationId != orgId.Value)
-            throw new ArgumentException("Team does not exist or does not belong to your organization.");
+        if (team == null)
+            throw new ArgumentException("Team does not exist.");
 
         var stage = _mapper.Map<Stage>(stageCreateDto);
-        stage.OrganizationId = orgId.Value;
         stage.CreatedAt = DateTime.UtcNow;
 
         var createdStage = await _stageRepository.AddAsync(stage);
-        
-        // Reload the stage to ensure all data is correct
         var stageWithTeam = await _stageRepository.GetStageWithTeamAsync(createdStage.StageId);
         if (stageWithTeam == null)
             throw new InvalidOperationException("Failed to retrieve created stage");
@@ -71,71 +55,36 @@ public class StageService : IStageService
         if (stageWithTeam.Team != null)
             stageDto.TeamName = stageWithTeam.Team.TeamName;
 
-        // Update workflow JSON after stage creation
-        try
-        {
-            await _workflowService.UpdateWorkflowJsonAsync(stageCreateDto.WorkflowId);
-        }
-        catch
-        {
-            // Log but don't fail stage creation if JSON update fails
-        }
+        try { await _workflowService.UpdateWorkflowJsonAsync(stageCreateDto.WorkflowId); } catch { }
 
         return stageDto;
     }
 
     public async Task<StageReadDto?> UpdateStageAsync(Guid id, StageUpdateDto stageUpdateDto)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         var stage = await _stageRepository.GetByIdAsync(id);
-        if (stage == null || stage.OrganizationId != orgId.Value)
-            return null;
+        if (stage == null) return null;
 
         var workflowId = stage.WorkflowId;
         _mapper.Map(stageUpdateDto, stage);
-
         var updatedStage = await _stageRepository.UpdateAsync(stage);
-        
-        // Update workflow JSON after stage update
-        try
-        {
-            await _workflowService.UpdateWorkflowJsonAsync(workflowId);
-        }
-        catch
-        {
-            // Log but don't fail stage update if JSON update fails
-        }
+
+        try { await _workflowService.UpdateWorkflowJsonAsync(workflowId); } catch { }
 
         return _mapper.Map<StageReadDto>(updatedStage);
     }
 
     public async Task<bool> DeleteStageAsync(Guid id)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         var stage = await _stageRepository.GetByIdAsync(id);
-        if (stage == null || stage.OrganizationId != orgId.Value)
-            return false;
+        if (stage == null) return false;
 
         var workflowId = stage.WorkflowId;
         var deleted = await _stageRepository.DeleteAsync(id);
-        
-        // Update workflow JSON after stage deletion
         if (deleted)
         {
-            try
-            {
-                await _workflowService.UpdateWorkflowJsonAsync(workflowId);
-            }
-            catch
-            {
-                // Log but don't fail stage deletion if JSON update fails
-            }
+            try { await _workflowService.UpdateWorkflowJsonAsync(workflowId); } catch { }
         }
-
         return deleted;
     }
 
@@ -145,4 +94,3 @@ public class StageService : IStageService
         return _mapper.Map<IEnumerable<StageReadDto>>(stages);
     }
 }
-

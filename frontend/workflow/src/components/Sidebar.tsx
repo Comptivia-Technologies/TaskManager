@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FiLayers, FiUsers, FiUser, FiUserCheck, FiClock, FiActivity, FiCheckSquare, FiSettings, FiLogOut, FiChevronDown, FiChevronRight } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 
-type MenuLink = { path: string; label: string; icon: React.ComponentType<{ className?: string }> };
+type MenuLink = { path: string; label: string; icon: React.ComponentType<{ className?: string }>; permission?: string };
 type MenuGroup = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -16,7 +16,7 @@ const isGroup = (item: MenuItem): item is MenuGroup => 'children' in item;
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut, user } = useAuth();
+  const { signOut, user, hasPermission } = useAuth();
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   const isActive = (path: string) => {
@@ -33,22 +33,24 @@ const Sidebar = () => {
   };
 
   const menuItems: MenuItem[] = [
-    { path: '/workflows', label: 'Workflows', icon: FiLayers },
-    { path: '/tasks', label: 'Tasks', icon: FiCheckSquare },
-    { path: '/teams', label: 'Teams', icon: FiUsers },
-    { path: '/members', label: 'Members', icon: FiUser },
-    { path: '/sla-configuration', label: 'SLA Configuration', icon: FiClock },
-    { path: '/workload-configuration', label: 'Workload Configuration', icon: FiActivity },
-    { path: '/priority-rules', label: 'Priority Rules', icon: FiSettings },
+    { path: '/workflows', label: 'Workflows', icon: FiLayers, permission: 'workflows.view' },
+    { path: '/tasks', label: 'Tasks', icon: FiCheckSquare, permission: 'tasks.view' },
+    { path: '/teams', label: 'Teams', icon: FiUsers, permission: 'teams.view' },
+    { path: '/members', label: 'Members', icon: FiUser, permission: 'members.view' },
+    { path: '/sla-configuration', label: 'SLA Configuration', icon: FiClock, permission: 'sla.view' },
+    { path: '/workload-configuration', label: 'Workload Configuration', icon: FiActivity, permission: 'workload.view' },
+    { path: '/priority-rules', label: 'Priority Rules', icon: FiSettings, permission: 'priority_rules.view' },
     {
       label: 'User Management',
       icon: FiUserCheck,
       children: [
-        { path: '/users', label: 'Users' },
+        { path: '/users', label: 'App Users' },
         { path: '/roles-permissions', label: 'Roles & Permissions' },
       ],
     },
   ];
+
+  const canSee = (perm?: string) => !perm || hasPermission(perm);
 
   return (
     <div className="fixed left-0 top-0 h-full w-64 bg-[#434E78] text-white shadow-azure-lg z-40 flex flex-col">
@@ -66,6 +68,7 @@ const Sidebar = () => {
       <nav className="mt-2 px-2 py-4 flex-1">
         {menuItems.map((item) => {
           if (isGroup(item)) {
+            if (!hasPermission('users.view') && !hasPermission('roles.view')) return null;
             const Icon = item.icon;
             const isExpanded = expandedGroup === item.label;
             const hasActiveChild = item.children.some((c) => isActive(c.path));
@@ -116,6 +119,7 @@ const Sidebar = () => {
               </div>
             );
           }
+          if (!canSee(item.permission)) return null;
           const Icon = item.icon;
           const active = isActive(item.path);
           return (
@@ -138,6 +142,9 @@ const Sidebar = () => {
         })}
       </nav>
       <div className="border-t border-white/20 p-4">
+        {user && (
+          <p className="text-xs text-white/70 px-4 mb-2 truncate">{user.fullName}</p>
+        )}
         {user && (
           <button
             onClick={handleSignOut}

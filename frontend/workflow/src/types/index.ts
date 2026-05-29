@@ -19,7 +19,6 @@ export interface TeamUpdate {
 
 export interface Member {
   memberId: string;
-  userId?: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -35,7 +34,6 @@ export interface MemberCreate {
   firstName: string;
   lastName: string;
   email: string;
-  userId?: string;
   teamId?: string;
   role: string;
   skillLevel: number;

@@ -128,9 +128,8 @@ public class TaskOverdueEventHandler
             }
 
             // Get all tasks for this workflow (send org for WorkflowManagement.API filtering)
-            var tasksResponse = await GetWithOrgHeaderAsync(
-                $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}",
-                task.OrganizationId);
+            var tasksResponse = await _httpClient.GetAsync(
+                $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}");
 
             if (tasksResponse.IsSuccessStatusCode)
             {
@@ -165,9 +164,8 @@ public class TaskOverdueEventHandler
                 if (matchingTaskId.HasValue)
                 {
                     // Get existing task to preserve CompletedByMemberIds and EscalatedByMemberIds
-                    var existingTaskResponse = await GetWithOrgHeaderAsync(
-                        $"{workflowManagementApiUrl}/tasks/{matchingTaskId.Value}",
-                        task.OrganizationId);
+                    var existingTaskResponse = await _httpClient.GetAsync(
+                        $"{workflowManagementApiUrl}/tasks/{matchingTaskId.Value}");
                     
                     string? existingCompletedByMemberIds = null;
                     string? existingEscalatedByMemberIds = null;
@@ -210,10 +208,9 @@ public class TaskOverdueEventHandler
                         "Attempting to sync overdue status. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, DueDate: {DueDate}, DueDateKind: {DueDateKind}",
                         task.TaskId, matchingTaskId.Value, dueDateUtc, dueDateUtc?.Kind);
 
-                    var updateResponse = await PutWithOrgHeaderAsync(
+                    var updateResponse = await _httpClient.PutAsJsonAsync(
                         $"{workflowManagementApiUrl}/tasks/{matchingTaskId.Value}",
-                        updateDto,
-                        task.OrganizationId);
+                        updateDto);
 
                     if (updateResponse.IsSuccessStatusCode)
                     {
@@ -250,21 +247,6 @@ public class TaskOverdueEventHandler
                 "Error syncing task overdue status to WorkflowManagement.API. TaskId: {TaskId}",
                 task.TaskId);
         }
-    }
-
-    private async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> GetWithOrgHeaderAsync(string url, Guid organizationId)
-    {
-        var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, url);
-        request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
-        return await _httpClient.SendAsync(request);
-    }
-
-    private async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> PutWithOrgHeaderAsync(string url, object content, Guid organizationId)
-    {
-        var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Put, url);
-        request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
-        request.Content = System.Net.Http.Json.JsonContent.Create(content);
-        return await _httpClient.SendAsync(request);
     }
 
     private class WorkflowTaskInfo

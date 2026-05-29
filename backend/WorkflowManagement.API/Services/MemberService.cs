@@ -10,50 +10,38 @@ public class MemberService : IMemberService
     private readonly IMemberRepository _memberRepository;
     private readonly ITeamRepository _teamRepository;
     private readonly ITaskRepository _taskRepository;
-    private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly IMapper _mapper;
 
-    public MemberService(IMemberRepository memberRepository, ITeamRepository teamRepository, ITaskRepository taskRepository, ICurrentOrganizationAccessor orgAccessor, IMapper mapper)
+    public MemberService(IMemberRepository memberRepository, ITeamRepository teamRepository, ITaskRepository taskRepository, IMapper mapper)
     {
         _memberRepository = memberRepository;
         _teamRepository = teamRepository;
         _taskRepository = taskRepository;
-        _orgAccessor = orgAccessor;
         _mapper = mapper;
     }
 
     public async Task<IEnumerable<MemberReadDto>> GetAllMembersAsync()
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
-        var members = await _memberRepository.GetMembersWithTeamByOrganizationAsync(orgId.Value);
+        var members = await _memberRepository.GetMembersWithTeamAsync();
         var memberDtos = _mapper.Map<IEnumerable<MemberReadDto>>(members).ToList();
-        
-        // Populate team names from the included Team navigation property
+
         foreach (var memberDto in memberDtos)
         {
             var member = members.FirstOrDefault(m => m.MemberId == memberDto.MemberId);
             if (member?.Team != null)
-            {
                 memberDto.TeamName = member.Team.TeamName;
-            }
         }
-        
+
         return memberDtos;
     }
 
     public async Task<MemberReadDto?> GetMemberByIdAsync(Guid id)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         var member = await _memberRepository.GetByIdAsync(id);
-        if (member == null || member.OrganizationId != orgId.Value)
-            return null;
+        if (member == null) return null;
 
-        var team = member.TeamId.HasValue 
-            ? await _teamRepository.GetByIdAsync(member.TeamId.Value) 
+        var team = member.TeamId.HasValue
+            ? await _teamRepository.GetByIdAsync(member.TeamId.Value)
             : null;
         var memberDto = _mapper.Map<MemberReadDto>(member);
         if (team != null)
@@ -64,26 +52,22 @@ public class MemberService : IMemberService
 
     public async Task<MemberReadDto> CreateMemberAsync(MemberCreateDto memberCreateDto)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         if (memberCreateDto.TeamId.HasValue && memberCreateDto.TeamId.Value != Guid.Empty)
         {
             var team = await _teamRepository.GetByIdAsync(memberCreateDto.TeamId.Value);
-            if (team == null || team.OrganizationId != orgId.Value)
-                throw new ArgumentException("Team does not exist or does not belong to your organization.");
+            if (team == null)
+                throw new ArgumentException("Team does not exist.");
         }
 
         var member = _mapper.Map<Member>(memberCreateDto);
-        member.OrganizationId = orgId.Value;
         if (member.TeamId.HasValue && member.TeamId.Value == Guid.Empty)
             member.TeamId = null;
         member.CreatedAt = DateTime.UtcNow;
         member.UpdatedAt = DateTime.UtcNow;
 
         var createdMember = await _memberRepository.AddAsync(member);
-        var createdTeam = createdMember.TeamId.HasValue 
-            ? await _teamRepository.GetByIdAsync(createdMember.TeamId.Value) 
+        var createdTeam = createdMember.TeamId.HasValue
+            ? await _teamRepository.GetByIdAsync(createdMember.TeamId.Value)
             : null;
         var memberDto = _mapper.Map<MemberReadDto>(createdMember);
         if (createdTeam != null)
@@ -94,39 +78,28 @@ public class MemberService : IMemberService
 
     public async Task<MemberReadDto?> UpdateMemberAsync(Guid id, MemberUpdateDto memberUpdateDto)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         var member = await _memberRepository.GetByIdAsync(id);
-        if (member == null || member.OrganizationId != orgId.Value)
-            return null;
+        if (member == null) return null;
+
         if (memberUpdateDto.TeamId.HasValue && memberUpdateDto.TeamId.Value != Guid.Empty)
         {
             var team = await _teamRepository.GetByIdAsync(memberUpdateDto.TeamId.Value);
-            if (team == null || team.OrganizationId != orgId.Value)
-                throw new ArgumentException("Team does not exist or does not belong to your organization.");
+            if (team == null)
+                throw new ArgumentException("Team does not exist.");
         }
 
         _mapper.Map(memberUpdateDto, member);
-        // Ensure TeamId is null if it's empty
         if (member.TeamId.HasValue && member.TeamId.Value == Guid.Empty)
-        {
             member.TeamId = null;
-        }
-        // Ensure CreatedAt is UTC (PostgreSQL requires UTC for timestamp with time zone)
         if (member.CreatedAt.Kind == DateTimeKind.Unspecified)
-        {
             member.CreatedAt = DateTime.SpecifyKind(member.CreatedAt, DateTimeKind.Utc);
-        }
         else if (member.CreatedAt.Kind != DateTimeKind.Utc)
-        {
             member.CreatedAt = member.CreatedAt.ToUniversalTime();
-        }
         member.UpdatedAt = DateTime.UtcNow;
 
         var updatedMember = await _memberRepository.UpdateAsync(member);
-        var updatedTeam = updatedMember.TeamId.HasValue 
-            ? await _teamRepository.GetByIdAsync(updatedMember.TeamId.Value) 
+        var updatedTeam = updatedMember.TeamId.HasValue
+            ? await _teamRepository.GetByIdAsync(updatedMember.TeamId.Value)
             : null;
         var memberDto = _mapper.Map<MemberReadDto>(updatedMember);
         if (updatedTeam != null)
@@ -137,12 +110,8 @@ public class MemberService : IMemberService
 
     public async Task<bool> DeleteMemberAsync(Guid id)
     {
-        var orgId = _orgAccessor.GetCurrentOrganizationId();
-        if (!orgId.HasValue)
-            throw new UnauthorizedAccessException("Organization context required.");
         var member = await _memberRepository.GetByIdAsync(id);
-        if (member == null || member.OrganizationId != orgId.Value)
-            return false;
+        if (member == null) return false;
         return await _memberRepository.DeleteAsync(id);
     }
 
@@ -152,4 +121,3 @@ public class MemberService : IMemberService
         return _mapper.Map<IEnumerable<TaskReadDto>>(tasks);
     }
 }
-
