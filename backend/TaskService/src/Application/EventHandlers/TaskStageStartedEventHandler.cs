@@ -1,3 +1,4 @@
+using TaskService.Infrastructure.Http;
 using Shared.Contracts.EventContracts;
 using Shared.Contracts.Constants;
 using Shared.Messaging;
@@ -26,13 +27,13 @@ public class TaskStageStartedEventHandler
     public TaskStageStartedEventHandler(
         ITaskRepository repository,
         IEventBus eventBus,
-        HttpClient httpClient,
+        IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
         ILogger<TaskStageStartedEventHandler> logger)
     {
         _repository = repository;
         _eventBus = eventBus;
-        _httpClient = httpClient;
+        _httpClient = httpClientFactory.CreateClient(WorkflowManagementApiClientNames.ClientName);
         _configuration = configuration;
         _logger = logger;
     }

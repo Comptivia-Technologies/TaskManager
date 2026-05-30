@@ -540,6 +540,14 @@ public class AwsEventBus : IEventBus, IDisposable
         }
         catch (QueueDoesNotExistException)
         {
+            if (!_options.AutoCreateQueues)
+            {
+                _logger.LogError(
+                    "SQS queue {QueueName} does not exist and AutoCreateQueues is disabled.",
+                    fullQueueName);
+                throw;
+            }
+
             // Create queue with DLQ
             var dlqName = $"{fullQueueName}-dlq";
             var dlqRequest = new CreateQueueRequest

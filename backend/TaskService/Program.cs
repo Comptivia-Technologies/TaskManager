@@ -4,6 +4,7 @@ using TaskService.Application.Interfaces;
 using TaskService.Infrastructure.Repositories;
 using TaskService.Application.Services;
 using TaskService.Application.EventHandlers;
+using TaskService.Infrastructure.Http;
 using Shared.Messaging;
 using Shared.Contracts.Constants;
 using Shared.Contracts.EventContracts;
@@ -36,6 +37,9 @@ builder.Services.AddDbContext<TaskDbContext>(options =>
 builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
 builder.Services.AddSingleton<AwsEventBus>();
 
+builder.Services.Configure<RabbitMQEventBusOptions>(builder.Configuration.GetSection("EventBus:RabbitMQ"));
+builder.Services.AddSingleton<RabbitMQEventBus>();
+
 builder.Services.Configure<AzureEventBusOptions>(builder.Configuration.GetSection("EventBus:Azure"));
 builder.Services.AddSingleton<AzureEventBus>();
 
@@ -47,7 +51,7 @@ builder.Services.AddSingleton<IEventBusFactory, EventBusFactory>();
 builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFactory>().CreateEventBus());
 
 // HTTP Client for syncing to WorkflowManagement.API
-builder.Services.AddHttpClient();
+builder.Services.AddWorkflowManagementApiClient(builder.Configuration);
 
 // Repositories
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();

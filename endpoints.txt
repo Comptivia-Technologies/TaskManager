@@ -1,4 +1,168 @@
 ================================================================================
+                    LOCAL DEVELOPMENT SETUP
+================================================================================
+
+Prerequisites:
+- .NET 8 SDK
+- Node.js 18+
+- PostgreSQL (local)
+- Docker Desktop (for RabbitMQ)
+
+PostgreSQL databases required:
+- WorkflowManagement  (WorkflowManagement.API, SLAConfiguration.API, Workload.API,
+                       WorkflowService, WorkloadService, SLAManagerService)
+- TaskService           (TaskService)
+- PriorityRuleEngine    (PriorityRuleEngine.API)
+
+Update connection strings in each service's appsettings.Local.json or
+appsettings.Development.json with your local postgres username/password.
+
+--------------------------------------------------------------------------------
+Step 1: Start RabbitMQ
+--------------------------------------------------------------------------------
+
+From the repo root:
+
+  docker compose -f docker-compose.local.yml up -d
+
+RabbitMQ ports (mapped to avoid conflicts with a local RabbitMQ install):
+- AMQP:       localhost:5673   (default 5672 inside container)
+- Management: localhost:15673  (default 15672 inside container)
+
+Management UI: http://localhost:15673
+Credentials:   guest / guest
+
+The local image includes the delayed-message exchange plugin (used for SLA
+timeouts and scheduled events).
+
+Stop RabbitMQ:
+
+  docker compose -f docker-compose.local.yml down
+
+--------------------------------------------------------------------------------
+Step 2: Start backend services
+--------------------------------------------------------------------------------
+
+Event-driven services MUST use the "Local" launch profile so
+appsettings.Local.json loads with EventBus:Provider = RabbitMQ.
+
+Run each in a separate terminal from the repo root:
+
+  cd backend/WorkflowManagement.API && dotnet run
+  cd backend/SLAConfiguration.API && dotnet run
+  cd backend/PriorityRuleEngine.API && dotnet run --launch-profile Local
+  cd backend/Workload.API && dotnet run
+  cd backend/APIGateway && dotnet run --launch-profile Local
+  cd backend/TaskService && dotnet run --launch-profile Local
+  cd backend/WorkflowService && dotnet run --launch-profile Local
+  cd backend/SLAManagerService && dotnet run --launch-profile Local
+  cd backend/WorkloadService && dotnet run --launch-profile Local
+
+Service ports:
+
+  Service                  Port    RabbitMQ    Notes
+  ---------------------------------------------------------------------------
+  WorkflowManagement.API   5000    No          CRUD (workflows, teams, tasks)
+  SLAConfiguration.API     5002    No          SLA config CRUD
+  Workload.API             5003    No          Workload queries
+  APIGateway               5004    Yes         Single entry point for APIs
+  TaskService              5005    Yes         Task create / stage / status
+  WorkflowService          5006    Yes         Workflow selection, stage flow
+  SLAManagerService        5007    Yes         SLA deadlines and overdue
+  WorkloadService          5008    Yes         Task assignment
+  PriorityRuleEngine.API   5010    Yes         Priority evaluation
+
+All external API calls go through APIGateway at http://localhost:5004.
+
+--------------------------------------------------------------------------------
+Step 3: Start frontend
+--------------------------------------------------------------------------------
+
+  cd frontend/workflow
+  npm install
+  npm run start:dev
+
+Frontend: http://localhost:3000
+API base: http://localhost:5004 (set in .env.development as REACT_APP_API_URL)
+
+--------------------------------------------------------------------------------
+Startup order (recommended)
+--------------------------------------------------------------------------------
+
+1. PostgreSQL
+2. RabbitMQ (docker compose)
+3. WorkflowManagement.API (other services depend on it)
+4. Remaining CRUD APIs (SLAConfiguration, PriorityRuleEngine, Workload)
+5. Event-driven microservices (TaskService, WorkflowService, SLAManager,
+   WorkloadService)
+6. APIGateway (last backend service)
+7. Frontend
+
+After create-task, wait 2-5 seconds for RabbitMQ-driven orchestration
+(workflow selection -> priority -> SLA -> assignment -> stage start).
+
+================================================================================
+                         RABBITMQ EVENT BUS
+================================================================================
+
+Local development uses RabbitMQ instead of AWS EventBridge. Production/QA
+still use AWS (or Azure/GCP) via EventBus:Provider in appsettings.
+
+Provider selection (EventBusFactory):
+- appsettings.Local.json sets "Provider": "RabbitMQ" for Local environment
+- Override at runtime: EVENTBUS_PROVIDER=RabbitMQ
+
+Shared config (appsettings.Local.json in each event service):
+
+  "EventBus": {
+    "Provider": "RabbitMQ",
+    "RabbitMQ": {
+      "HostName": "localhost",
+      "Port": 5673,
+      "UserName": "guest",
+      "Password": "guest",
+      "VirtualHost": "/",
+      "ServicePrefix": "task-manager-local",
+      "ExchangeName": "task-manager-events",
+      "PrefetchCount": 10
+    }
+  }
+
+Exchange:
+- Name: task-manager-local-task-manager-events (ServicePrefix + ExchangeName)
+- Type: x-delayed-message (supports scheduled/delayed events for SLA timeouts)
+
+Queues (per service, prefixed with task-manager-local-):
+- task-manager-local-task-service       (TaskService)
+- task-manager-local-workflow-service   (WorkflowService)
+- task-manager-local-sla-service        (SLAManagerService)
+- task-manager-local-workload-service   (WorkloadService)
+- task-manager-local-priority-service   (PriorityRuleEngine)
+
+Routing keys / detail types (EventBusConstants):
+- TaskCreated, TaskCreatedForPriority, PriorityAssigned
+- WorkflowSelected, SLAConfigured, TaskAssigned
+- TaskStageStarted, TaskStageCompleted, TaskStageEscalated
+- TaskStageEscalationTriggered, TaskStageReassignmentNeeded
+- TaskOverdue, TaskStatusUpdated, TaskCompleted
+
+Example flow after POST /api/task-service:
+  TaskService publishes TaskCreated
+    -> PriorityRuleEngine (priority)
+    -> WorkflowService (workflow selection)
+    -> SLAManagerService (SLA deadline)
+    -> WorkloadService (assignment)
+    -> TaskService (stage start)
+
+Implementation: backend/Shared/Shared.Messaging/RabbitMQEventBus.cs
+Docker image:   docker/rabbitmq/Dockerfile (rabbitmq:3.13-management + delayed plugin)
+
+Verify RabbitMQ is working:
+- Management UI at http://localhost:15673 shows the exchange and queues
+- Service logs show: "RabbitMQEventBus initialized. Host=localhost:5673 ..."
+- After create-task, queues receive messages and task status progresses
+
+================================================================================
                     TASK OPERATIONS API DOCUMENTATION
 ================================================================================
 
@@ -41,7 +205,8 @@ Output:
 Status Code: 202 Accepted
 
 Note: 
-- Task creation triggers event-driven orchestration (workflow selection, SLA configuration, assignment)
+- Task creation triggers event-driven orchestration via RabbitMQ locally
+  (workflow selection, SLA configuration, assignment)
 - Wait a few seconds after creation before retrieving full details
 - Use the returned taskId to get task details
 
@@ -128,7 +293,23 @@ Error Responses:
 - 500 Internal Server Error: Server error
 
 ================================================================================
-4. ESCALATE STAGE
+4. COMPLETE TASK
+================================================================================
+
+There is no dedicated /complete-task endpoint. Use one of:
+
+Option A — set status directly (recommended):
+PUT http://localhost:5004/api/task-service/status/{taskId}
+{
+  "status": "Completed"
+}
+
+Option B — complete the final stage:
+POST http://localhost:5004/api/task-service/complete-stage/{taskId}
+If no next stage exists, the task is marked completed automatically.
+
+================================================================================
+5. ESCALATE STAGE
 ================================================================================
 
 Local Endpoint:
@@ -164,7 +345,7 @@ Error Responses:
 - 500 Internal Server Error: Server error
 
 ================================================================================
-5. GET ENRICHED TASK BY ID
+6. GET ENRICHED TASK BY ID
 ================================================================================
 
 Local Endpoint:
@@ -218,7 +399,7 @@ Error Responses:
 - 500 Internal Server Error: Server error
 
 ================================================================================
-6. GET ALL TASKS
+7. GET ALL TASKS
 ================================================================================
 
 Local Endpoint:
@@ -298,7 +479,7 @@ Error Responses:
 - 500 Internal Server Error: Server error
 
 ================================================================================
-7. GET TASKS ASSIGNED TO MEMBER BY USER ID
+8. GET TASKS ASSIGNED TO MEMBER BY USER ID
 ================================================================================
 
 Resolves Members.UserId (e.g. auth subject from token) to MemberId in the current organization,
@@ -429,5 +610,5 @@ Production:
 - Include Bearer Token: Authorization: Bearer YOUR_TOKEN
 
 ================================================================================
-Last Updated: March 2026
+Last Updated: May 2026
 ================================================================================

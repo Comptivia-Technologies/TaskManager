@@ -1,5 +1,5 @@
-using System.Net.Http;
 using TaskService.Application.DTOs;
+using TaskService.Infrastructure.Http;
 using TaskService.Application.Interfaces;
 using TaskService.Domain.Entities;
 using TaskService.Domain.Enums;
@@ -35,7 +35,7 @@ public class TaskService : ITaskService
         _eventBus = eventBus;
         _logger = logger;
         _configuration = configuration;
-        _httpClient = httpClientFactory.CreateClient();
+        _httpClient = httpClientFactory.CreateClient(WorkflowManagementApiClientNames.ClientName);
     }
 
     public async System.Threading.Tasks.Task<TaskReadDto> CreateTaskAsync(TaskCreateDto createDto)

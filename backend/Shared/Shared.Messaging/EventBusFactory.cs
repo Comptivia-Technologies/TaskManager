@@ -28,15 +28,20 @@ public class EventBusFactory : IEventBusFactory
         var provider = Environment.GetEnvironmentVariable("EVENTBUS_PROVIDER")
             ?? _configuration["EventBus:Provider"]
             ?? "AWS";
-        
-        _logger.LogInformation("Creating EventBus with provider: {Provider}", provider);
+        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+
+        _logger.LogInformation(
+            "Creating EventBus with provider: {Provider} (Environment: {Environment})",
+            provider,
+            environment);
 
         return provider.ToUpperInvariant() switch
         {
             "AWS" => _serviceProvider.GetRequiredService<AwsEventBus>(),
+            "RABBITMQ" => _serviceProvider.GetRequiredService<RabbitMQEventBus>(),
             "AZURE" => _serviceProvider.GetRequiredService<AzureEventBus>(),
             "GCP" => _serviceProvider.GetRequiredService<GcpEventBus>(),
-            _ => throw new NotSupportedException($"Event bus provider '{provider}' is not supported. Supported providers: AWS, Azure, GCP")
+            _ => throw new NotSupportedException($"Event bus provider '{provider}' is not supported. Supported providers: AWS, RabbitMQ, Azure, GCP")
         };
     }
 }

@@ -1,5 +1,6 @@
 using Shared.Contracts.EventContracts;
 using TaskService.Application.Interfaces;
+using TaskService.Infrastructure.Http;
 using TaskService.Domain.Entities;
 using TaskService.Domain.Enums;
 using Microsoft.Extensions.Logging;
@@ -30,7 +31,7 @@ public class TaskOverdueEventHandler
         _repository = repository;
         _logger = logger;
         _configuration = configuration;
-        _httpClient = httpClientFactory.CreateClient();
+        _httpClient = httpClientFactory.CreateClient(WorkflowManagementApiClientNames.ClientName);
     }
 
     public async System.Threading.Tasks.Task HandleAsync(TaskOverdueEvent @event, Guid correlationId)

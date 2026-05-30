@@ -67,6 +67,8 @@ jobs:
         env:
           DB_PASSWORD: ${{ secrets.QA_DB_PASSWORD }}
           ROLES_API_KEY: ${{ secrets.ROLES_API_KEY }}
+          WM_SERVICE_EMAIL: ${{ secrets.QA_WM_SERVICE_EMAIL }}
+          WM_SERVICE_PASSWORD: ${{ secrets.QA_WM_SERVICE_PASSWORD }}
         run: |
           # Format: service_dir:family_name:container_name:port:db_name:ecs_service_name
           SERVICES=(
@@ -122,8 +124,10 @@ jobs:
             ]")
             
             if [ "$service_dir" = "TaskService" ]; then
-              ENV_JSON=$(echo "$ENV_JSON" | jq '. += [
-                {"name":"WorkflowManagementApi__BaseUrl","value":"http://task-manager-workflow-management-api-qa.workflow-automation/api"}
+              ENV_JSON=$(echo "$ENV_JSON" | jq --arg email "$WM_SERVICE_EMAIL" --arg password "$WM_SERVICE_PASSWORD" '. += [
+                {"name":"WorkflowManagementApi__BaseUrl","value":"http://task-manager-workflow-management-api-qa.workflow-automation/api"},
+                {"name":"WorkflowManagementApi__ServiceEmail","value":$email},
+                {"name":"WorkflowManagementApi__ServicePassword","value":$password}
               ]')
             fi
             

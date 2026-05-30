@@ -1,5 +1,6 @@
 using Shared.Contracts.EventContracts;
 using TaskService.Application.Interfaces;
+using TaskService.Infrastructure.Http;
 using TaskService.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using System.Net.Http.Json;
@@ -28,7 +29,7 @@ public class PriorityAssignedEventHandler
     {
         _repository = repository;
         _logger = logger;
-        _httpClient = httpClientFactory.CreateClient();
+        _httpClient = httpClientFactory.CreateClient(WorkflowManagementApiClientNames.ClientName);
         _configuration = configuration;
     }
 

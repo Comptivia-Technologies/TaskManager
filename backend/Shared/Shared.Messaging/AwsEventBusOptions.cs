@@ -11,6 +11,7 @@ public class AwsEventBusOptions : EventBusOptions
     
     // SNS/SQS configuration
     public string ServicePrefix { get; set; } = "task-manager";
+    public bool AutoCreateQueues { get; set; } = true;
     public int VisibilityTimeoutSeconds { get; set; } = 300;
     public int MaxReceiveCount { get; set; } = 3;
     

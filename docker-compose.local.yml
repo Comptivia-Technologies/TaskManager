@@ -1,0 +1,17 @@
+services:
+  rabbitmq:
+    build:
+      context: ./docker/rabbitmq
+    image: task-manager-rabbitmq:local
+    container_name: task-manager-rabbitmq
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20

@@ -62,6 +62,8 @@ jobs:
         env:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           ROLES_API_KEY: ${{ secrets.ROLES_API_KEY }}
+          WM_SERVICE_EMAIL: ${{ secrets.WM_SERVICE_EMAIL }}
+          WM_SERVICE_PASSWORD: ${{ secrets.WM_SERVICE_PASSWORD }}
         run: |
           # Deploy each service
           # Format: service_dir:family_name:container_name:port:db_name:actual_service_name
@@ -120,10 +122,12 @@ jobs:
               {\"name\":\"DB_NAME\",\"value\":\"$db_name\"}
             ]")
             
-            # Add WorkflowManagementApi__BaseUrl for TaskService
+            # Add WorkflowManagementApi settings for TaskService
             if [ "$service_dir" = "TaskService" ]; then
-              ENV_JSON=$(echo "$ENV_JSON" | jq '. += [
-                {"name":"WorkflowManagementApi__BaseUrl","value":"http://workflow-management-api-service.workflow-automation/api"}
+              ENV_JSON=$(echo "$ENV_JSON" | jq --arg email "$WM_SERVICE_EMAIL" --arg password "$WM_SERVICE_PASSWORD" '. += [
+                {"name":"WorkflowManagementApi__BaseUrl","value":"http://workflow-management-api-service.workflow-automation/api"},
+                {"name":"WorkflowManagementApi__ServiceEmail","value":$email},
+                {"name":"WorkflowManagementApi__ServicePassword","value":$password}
               ]')
             fi
             

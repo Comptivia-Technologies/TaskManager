@@ -36,6 +36,9 @@ builder.Services.AddDbContext<WorkloadDbContext>(options =>
 builder.Services.Configure<AwsEventBusOptions>(builder.Configuration.GetSection("EventBus:AWS"));
 builder.Services.AddSingleton<AwsEventBus>();
 
+builder.Services.Configure<RabbitMQEventBusOptions>(builder.Configuration.GetSection("EventBus:RabbitMQ"));
+builder.Services.AddSingleton<RabbitMQEventBus>();
+
 builder.Services.Configure<AzureEventBusOptions>(builder.Configuration.GetSection("EventBus:Azure"));
 builder.Services.AddSingleton<AzureEventBus>();
 
