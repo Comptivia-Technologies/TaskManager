@@ -524,6 +524,154 @@ Note:
 - Routed through API Gateway to WorkflowManagement.API when using the gateway base URL above.
 
 ================================================================================
+9. GET TASK AUDIT HISTORY (WORK TIMELINE)
+================================================================================
+
+Ordered timeline of who worked on a task (assignments, stage completions, escalations,
+task completed). Stored in WorkflowManagement.TaskAuditEntries; written by TaskService
+via internal HTTP (Option B), not from controllers directly.
+
+Local Endpoint:
+GET http://localhost:5004/api/tasks/{taskId}/audit
+
+Deployed Endpoint:
+GET https://api.workflowautomation.enginuo.com/api/tasks/{taskId}/audit
+
+Permission: tasks.view
+
+Payload: None
+
+Output (array, oldest to newest by occurredAt):
+[
+  {
+    "auditId": "uuid",
+    "taskId": "uuid",
+    "actionType": "StageCompleted",
+    "memberId": "uuid",
+    "memberName": "Noel Joseph",
+    "fromMemberId": null,
+    "fromMemberName": null,
+    "toMemberId": null,
+    "toMemberName": null,
+    "stageId": "uuid",
+    "stageName": "L1",
+    "nextStageId": "uuid",
+    "nextStageName": "L2",
+    "reason": null,
+    "correlationId": "uuid",
+    "occurredAt": "2026-06-04T10:00:00Z"
+  }
+]
+
+Action types (actionType):
+- Assigned, Reassigned, StageCompleted, StageEscalated, TaskCompleted
+
+Note:
+- Not recorded yet: MarkedOverdue (overdue is status on task only)
+- UI: Tasks page and Member detail — clock icon opens audit modal
+- Idempotent writes use eventId (see section 10)
+
+================================================================================
+10. RECORD TASK AUDIT ENTRY (INTERNAL / TASKSERVICE)
+================================================================================
+
+Local Endpoint:
+POST http://localhost:5004/api/tasks/{taskId}/audit
+
+Permission: tasks.manage (TaskService service account)
+
+Payload:
+{
+  "eventId": "uuid",
+  "actionType": "StageCompleted",
+  "memberId": "uuid",
+  "fromMemberId": null,
+  "toMemberId": null,
+  "stageId": "uuid",
+  "stageName": "L1",
+  "nextStageId": "uuid",
+  "nextStageName": "L2",
+  "reason": null,
+  "correlationId": "uuid",
+  "occurredAt": "2026-06-04T10:00:00Z"
+}
+
+Output: TaskAuditEntryReadDto (same shape as one element in section 9)
+
+Status Code: 200 OK
+
+Note:
+- Duplicate eventId returns existing row (idempotent)
+- TaskService records after: complete-stage, escalate-stage, assignment/reassignment,
+  task completed event handler
+- Failures are logged; orchestration is not rolled back
+
+================================================================================
+11. GET MEMBER TASK SUMMARY (PAST WORK)
+================================================================================
+
+Member-centric view: currently assigned + tasks where member completed a stage or
+escalated (excludes tasks still assigned to them from completed/escalated lists).
+
+Local Endpoint:
+GET http://localhost:5004/api/tasks/member/summary/{memberId}
+
+Deployed Endpoint:
+GET https://api.workflowautomation.enginuo.com/api/tasks/member/summary/{memberId}
+
+Permission: tasks.view (via gateway / WorkflowManagement)
+
+Payload: None
+
+Output:
+{
+  "assignedToMe": [ /* TaskReadDto[] — same shape as section 7 */ ],
+  "completedByMe": [ /* tasks where CompletedByMemberIds contains memberId */ ],
+  "escalatedByMe": [ /* tasks where EscalatedByMemberIds contains memberId */ ]
+}
+
+Note:
+- All lists use TaskReadDto enrichment (stageName, assignedToMemberName, workflowName)
+- Frontend Member detail merges completedByMe + escalatedByMe (Escalated wins on duplicate)
+  with assigned tasks in one table (see FRONTEND — MEMBER DETAIL below)
+
+================================================================================
+12. GET MEMBER TASKS (ASSIGNED ONLY)
+================================================================================
+
+Local Endpoint:
+GET http://localhost:5004/api/members/{memberId}/tasks
+
+Alternative (same enrichment):
+GET http://localhost:5004/api/tasks/member/{memberId}
+
+Permission: tasks.view (members route); tasks.view (tasks route)
+
+Output: TaskReadDto[] for tasks where AssignedToMemberId = memberId
+
+Note:
+- GET /api/members/{id}/tasks and GET /api/tasks/member/{id} both return enriched DTOs
+  (stageName, assignedToMemberName) via TaskReadDtoEnricher
+- Overdue is a task status / isOverdue flag — not a separate member list
+
+================================================================================
+FRONTEND — TASKS & MEMBER DETAIL (RECENT)
+================================================================================
+
+Tasks page (/tasks):
+- Clock icon per row → TaskAuditModal (GET /api/tasks/{id}/audit)
+- Assigned label in audit: "Assigned to {memberName}"
+
+Member detail (/members/:id):
+- Single "Tasks" table combining:
+  - Currently assigned (Member status: Assigned)
+  - Past work (Stage completed | Escalated) from member summary API
+- Columns: Task, Member status, Current status, Priority, Current stage, Due date,
+  Days overdue, Currently assigned to, History (audit modal)
+- Overdue shown in Current status column only (no separate overdue table)
+- App shell: fixed sidebar; main content scrolls (no double page scrollbar)
+
+================================================================================
 COMPLETE TASK LIFECYCLE EXAMPLE
 ================================================================================
 
@@ -610,5 +758,5 @@ Production:
 - Include Bearer Token: Authorization: Bearer YOUR_TOKEN
 
 ================================================================================
-Last Updated: May 2026
+Last Updated: June 2026
 ================================================================================

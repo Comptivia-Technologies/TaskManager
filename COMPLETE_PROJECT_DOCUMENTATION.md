@@ -42,6 +42,8 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 - ✅ Workload-based task assignment
 - ✅ Priority rule engine with condition-based evaluation
 - ✅ Kanban board for task visualization
+- ✅ **Task work-history audit** (per-task timeline API + UI modal)
+- ✅ **Member task view** (assigned + past stage work in one table)
 - ✅ Real-time SLA monitoring
 - ✅ **Multi-cloud event bus architecture** (AWS EventBridge, Azure Service Bus, GCP Pub/Sub)
 - ✅ **Factory pattern for cloud provider abstraction**
@@ -159,7 +161,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 - `MembersController` - Member CRUD operations
 - `WorkflowsController` - Workflow CRUD operations
 - `StagesController` - Stage CRUD operations (with StageType, TransitionPolicy)
-- `TasksController` - Task CRUD operations
+- `TasksController` - Task CRUD operations, task audit read/write, member task summary
 
 **Services**:
 - `TeamService` - Team business logic
@@ -167,9 +169,19 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 - `WorkflowService` - Workflow business logic
 - `StageService` - Stage business logic
 - `TaskService` - Task business logic
+- `TaskAuditService` - Task work-history timeline (read + idempotent write)
 
 **Database**: `WorkflowManagement`
-**Tables**: Teams, Members, Workflows, Stages, Tasks
+**Tables**: Teams, Members, Workflows, Stages, Tasks, TaskAuditEntries
+
+**Task audit (Option B)**:
+- `GET /api/tasks/{id}/audit` — ordered timeline (`tasks.view`)
+- `POST /api/tasks/{id}/audit` — idempotent append by `eventId` (`tasks.manage`; TaskService)
+- Writes from TaskService `TaskAuditRecorder` after stage complete/escalate, assignment, task completed
+- Action types: `Assigned`, `Reassigned`, `StageCompleted`, `StageEscalated`, `TaskCompleted`
+- Not recorded: overdue (`TaskOverdue` handler unchanged)
+
+**DTO enrichment**: `TaskReadDtoEnricher` fills `stageName`, `workflowName`, `assignedToMemberName` for all task list endpoints (including `GET /api/members/{id}/tasks`)
 
 #### 3.1.2 SLAConfiguration.API (Port 5002)
 **Purpose**: SLA configuration management
@@ -194,6 +206,8 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 
 **Database**: `WorkflowManagement`
 **Tables**: Workloads (history), Members, Tasks (reference)
+
+**Schema note**: Member/Task reference models do not use `OrganizationId` (column removed from shared WorkflowManagement DB via bootstrap). Workload.API EF models align with this schema.
 
 #### 3.1.4 PriorityRuleEngine.API (Port 5002)
 **Purpose**: Priority rule management
@@ -266,6 +280,7 @@ This is a **comprehensive Task Management System** with **Generic Workflow Orche
 
 **Services**:
 - `TaskService` - Task business logic, task creation orchestration, stage completion API
+- `TaskAuditRecorder` - Best-effort HTTP POST to WorkflowManagement audit API after lifecycle actions
 
 **Event Publishing**:
 - `TaskCreatedEvent` - Published when task is created (entry point for orchestration flow)
@@ -456,6 +471,26 @@ CREATE TABLE "Workloads" (
 );
 ```
 
+#### TaskAuditEntries Table (WorkflowManagement)
+```sql
+CREATE TABLE "TaskAuditEntries" (
+    "AuditId" UUID PRIMARY KEY,
+    "TaskId" UUID NOT NULL REFERENCES "Tasks"("TaskId") ON DELETE CASCADE,
+    "EventId" UUID NOT NULL UNIQUE,
+    "ActionType" VARCHAR(50) NOT NULL,
+    "MemberId" UUID NULL,
+    "FromMemberId" UUID NULL,
+    "ToMemberId" UUID NULL,
+    "StageId" UUID NULL,
+    "StageName" VARCHAR(200) NULL,
+    "NextStageId" UUID NULL,
+    "NextStageName" VARCHAR(200) NULL,
+    "Reason" VARCHAR(500) NULL,
+    "CorrelationId" UUID NOT NULL,
+    "OccurredAt" TIMESTAMP WITH TIME ZONE NOT NULL
+);
+```
+
 ### 4.2 TaskService Database
 
 #### Tasks Table (Microservice - Enhanced with Stage Tracking)
@@ -594,7 +629,7 @@ CREATE TABLE "PriorityRules" (
 | POST | `/api/members` | Create member (TeamId optional) |
 | PUT | `/api/members/{id}` | Update member |
 | DELETE | `/api/members/{id}` | Delete member |
-| GET | `/api/members/{id}/tasks` | Get member's tasks |
+| GET | `/api/members/{id}/tasks` | Get tasks currently assigned to member (enriched TaskReadDto) |
 
 #### Workflows
 | Method | Endpoint | Description |
@@ -628,7 +663,11 @@ CREATE TABLE "PriorityRules" (
 | DELETE | `/api/tasks/{id}` | Delete task |
 | GET | `/api/tasks/workflow/{workflowId}` | Get tasks by workflow |
 | GET | `/api/tasks/stage/{stageId}` | Get tasks by stage |
-| GET | `/api/tasks/member/{memberId}` | Get tasks by member |
+| GET | `/api/tasks/member/{memberId}` | Get tasks assigned to member (enriched TaskReadDto) |
+| GET | `/api/tasks/member/summary/{memberId}` | Member task summary: `assignedToMe`, `completedByMe`, `escalatedByMe` |
+| GET | `/api/tasks/{id}/audit` | Get task work-history timeline (`tasks.view`) |
+| POST | `/api/tasks/{id}/audit` | Record audit entry — idempotent on `eventId` (`tasks.manage`; TaskService) |
+| GET | `/api/tasks/assigned/me` | Tasks assigned to member resolved from JWT email |
 
 #### Roles
 | Method | Endpoint | Description |
@@ -1232,6 +1271,8 @@ frontend/workflow/src/
 │   ├── KanbanBoard.tsx       # Kanban board for tasks
 │   ├── KanbanColumn.tsx      # Kanban column component
 │   ├── TaskCard.tsx          # Task card component
+│   ├── TaskAuditModal.tsx    # Task work-history timeline modal
+│   ├── AppShell.tsx          # Layout: fixed sidebar, scrollable main
 │   └── ConditionBuilder.tsx  # Priority rule condition builder
 │
 ├── pages/              # Page components
@@ -1240,7 +1281,8 @@ frontend/workflow/src/
 │   ├── WorkflowDetail.tsx # Workflow detail view
 │   ├── Teams.tsx       # Teams management
 │   ├── Members.tsx     # Members management
-│   ├── Tasks.tsx       # Tasks management
+│   ├── MemberDetail.tsx  # Member profile + unified tasks table + audit
+│   ├── Tasks.tsx       # Tasks management (audit clock per row)
 │   ├── SLAConfiguration.tsx # SLA configuration page
 │   ├── WorkloadConfiguration.tsx # Workload monitoring
 │   └── PriorityRules.tsx # Priority rules management
@@ -1254,7 +1296,7 @@ frontend/workflow/src/
 │   ├── teamService.ts
 │   ├── memberService.ts
 │   ├── stageService.ts
-│   └── taskService.ts
+│   └── taskService.ts   # includes getAudit, getMemberSummary
 │
 ├── hooks/              # Custom React hooks
 │   ├── useWorkflows.ts
@@ -1276,6 +1318,7 @@ frontend/workflow/src/
 | `/workflows/:id` | WorkflowDetail | Workflow detail page |
 | `/teams` | Teams | Teams management |
 | `/members` | Members | Members management |
+| `/members/:id` | MemberDetail | Member profile; single Tasks table (assigned + past work) |
 | `/tasks` | Tasks | Tasks management |
 | `/sla-configuration` | SLAConfiguration | SLA configuration |
 | `/workload-configuration` | WorkloadConfiguration | Workload monitoring |
@@ -2192,11 +2235,12 @@ If issues occur, you can:
 
 ---
 
-**Document Version**: 3.2  
-**Last Updated**: February 2026  
+**Document Version**: 3.3  
+**Last Updated**: June 2026  
 **Author**: System Documentation
 
 **Version History**:
+- **v3.3** (June 2026): Task audit API (`GET`/`POST /api/tasks/{id}/audit`, `TaskAuditEntries` table, TaskService `TaskAuditRecorder`); member task summary (`GET /api/tasks/member/summary/{memberId}`); `TaskReadDtoEnricher` for consistent `stageName`/`assignedToMemberName` on member task lists; frontend `TaskAuditModal`, Tasks page history icon, Member detail unified Tasks table; Workload.API schema aligned (no `OrganizationId` on Members/Tasks); see `endpoints.txt` sections 9–12
 - **v3.2** (February 2026): Added `GET /api/roles/all` (API key via `X-Api-Key`); gateway `Auth:ExcludedPathPrefixes` includes `/api/roles/all`; WorkflowManagement.API `ApiKeys:GetAllRoles` and deploy `ROLES_API_KEY`
 - **v3.1** (February 2026): Added Auth proxy endpoint `GET /api/auth/organizationuser` for active organization users (product_id + tenant_id from JWT); frontend `REACT_APP_PRODUCT_ID` env and `userService.getActiveOrganizationUsers` for Users, Members, Workflow Wizard pages
 - **v3.0** (January 2026): Migrated from RabbitMQ to multi-cloud event bus architecture (AWS/Azure/GCP)
