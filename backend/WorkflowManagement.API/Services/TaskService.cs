@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using WorkflowManagement.API.DTOs;
+using WorkflowManagement.API.Mappings;
 using WorkflowManagement.API.Repositories;
 
 namespace WorkflowManagement.API.Services;
@@ -202,26 +203,13 @@ public class TaskService : ITaskService
         return MapSingle(task);
     }
 
-    private List<TaskReadDto> MapTaskList(List<Models.Task> tasks)
-    {
-        var dtos = _mapper.Map<List<TaskReadDto>>(tasks);
-        for (var i = 0; i < dtos.Count; i++)
-            EnrichDto(dtos[i], tasks[i]);
-        return dtos;
-    }
+    private List<TaskReadDto> MapTaskList(List<Models.Task> tasks) =>
+        TaskReadDtoEnricher.MapList(_mapper, tasks);
 
     private TaskReadDto MapSingle(Models.Task task)
     {
         var dto = _mapper.Map<TaskReadDto>(task);
-        EnrichDto(dto, task);
+        TaskReadDtoEnricher.Enrich(dto, task);
         return dto;
-    }
-
-    private static void EnrichDto(TaskReadDto dto, Models.Task task)
-    {
-        if (task.Stage != null) dto.StageName = task.Stage.StageName;
-        if (task.Workflow != null) dto.WorkflowName = task.Workflow.WorkflowName;
-        if (task.AssignedToMember != null)
-            dto.AssignedToMemberName = $"{task.AssignedToMember.FirstName} {task.AssignedToMember.LastName}";
     }
 }

@@ -1,5 +1,6 @@
 using AutoMapper;
 using WorkflowManagement.API.DTOs;
+using WorkflowManagement.API.Mappings;
 using WorkflowManagement.API.Models;
 using WorkflowManagement.API.Repositories;
 
@@ -117,7 +118,7 @@ public class MemberService : IMemberService
 
     public async Task<IEnumerable<TaskReadDto>> GetTasksByMemberAsync(Guid memberId)
     {
-        var tasks = await _taskRepository.GetTasksByMemberAsync(memberId);
-        return _mapper.Map<IEnumerable<TaskReadDto>>(tasks);
+        var tasks = (await _taskRepository.GetTasksByMemberAsync(memberId)).ToList();
+        return TaskReadDtoEnricher.MapList(_mapper, tasks);
     }
 }
