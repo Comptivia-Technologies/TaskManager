@@ -1,5 +1,5 @@
 import api from './api';
-import { Task, TaskAuditEntry, TaskUpdate, PaginatedTasksResponse } from '../types';
+import { Task, TaskAuditEntry, TaskUpdate, PaginatedTasksResponse, MemberTaskSummary } from '../types';
 
 export const taskService = {
   getAll: async (): Promise<Task[]> => {
@@ -60,6 +60,16 @@ export const taskService = {
   getAudit: async (taskId: string): Promise<TaskAuditEntry[]> => {
     const response = await api.get<TaskAuditEntry[]>(`/api/tasks/${taskId}/audit`);
     return response.data ?? [];
+  },
+
+  getMemberSummary: async (memberId: string): Promise<MemberTaskSummary> => {
+    const response = await api.get<MemberTaskSummary>(`/api/tasks/member/summary/${memberId}`);
+    const data = response.data;
+    return {
+      assignedToMe: Array.isArray(data?.assignedToMe) ? data.assignedToMe : [],
+      completedByMe: Array.isArray(data?.completedByMe) ? data.completedByMe : [],
+      escalatedByMe: Array.isArray(data?.escalatedByMe) ? data.escalatedByMe : [],
+    };
   },
 };
 

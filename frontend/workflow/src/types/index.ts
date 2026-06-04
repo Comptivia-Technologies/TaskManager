@@ -125,6 +125,12 @@ export interface TaskAuditEntry {
   occurredAt: string;
 }
 
+export interface MemberTaskSummary {
+  assignedToMe: Task[];
+  completedByMe: Task[];
+  escalatedByMe: Task[];
+}
+
 export interface Task {
   taskId: string;
   taskName: string;

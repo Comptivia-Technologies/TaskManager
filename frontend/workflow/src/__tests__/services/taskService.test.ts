@@ -58,6 +58,20 @@ describe('taskService', () => {
     expect(mockedApi.delete).toHaveBeenCalledWith('/api/tasks/1');
   });
 
+  it('getMemberSummary calls api.get and normalizes arrays', async () => {
+    mockedApi.get.mockResolvedValue({
+      data: {
+        assignedToMe: [],
+        completedByMe: [{ taskId: '1', taskName: 'T', status: 'In Progress', priority: 'High', workflowId: 'w1', createdAt: '', updatedAt: '' }],
+        escalatedByMe: [],
+      },
+    });
+    const result = await taskService.getMemberSummary('m1');
+    expect(mockedApi.get).toHaveBeenCalledWith('/api/tasks/member/summary/m1');
+    expect(result.completedByMe).toHaveLength(1);
+    expect(result.escalatedByMe).toEqual([]);
+  });
+
   it('getAudit calls api.get with audit path', async () => {
     mockedApi.get.mockResolvedValue({ data: [] });
     await taskService.getAudit('task-1');
