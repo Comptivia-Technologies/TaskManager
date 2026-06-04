@@ -4,6 +4,7 @@ import { workflowService } from '../services/workflowService';
 import { Task, Workflow } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { FiCheckCircle, FiClock, FiUser, FiLayers, FiCalendar, FiAlertCircle } from 'react-icons/fi';
+import TaskAuditModal from '../components/TaskAuditModal';
 import { useNavigate } from 'react-router-dom';
 import { formatDateToIST } from '../utils/dateUtils';
 
@@ -19,6 +20,7 @@ const Tasks = () => {
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [auditTask, setAuditTask] = useState<Task | null>(null);
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -139,8 +141,8 @@ const Tasks = () => {
   }
 
   return (
-    <div className="p-8 lg:p-10 bg-white min-h-screen font-sans">
-      <div className="max-w-7xl mx-auto">
+    <div className="p-8 lg:p-10 bg-white font-sans w-full min-w-0">
+      <div className="max-w-7xl mx-auto w-full min-w-0">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-semibold text-black mb-2 font-sans tracking-tight">
@@ -242,8 +244,8 @@ const Tasks = () => {
               <p className="text-black/70 text-base font-sans">No tasks found. Create your first task to get started.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full min-w-[960px]">
                 <thead className="bg-[#434E78]/5 border-b border-[#434E78]/20">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
@@ -270,6 +272,10 @@ const Tasks = () => {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
                       Created
                     </th>
+                    <th className="px-4 py-4 text-center text-xs font-semibold text-black uppercase tracking-wider font-sans w-16">
+                      <span className="sr-only">History</span>
+                      <FiClock className="inline-block text-[#434E78] text-base" aria-hidden />
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-[#434E78]/10">
@@ -280,17 +286,15 @@ const Tasks = () => {
                       onClick={() => navigate(`/workflows/${task.workflowId}`)}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div>
-                            <div className="text-sm font-semibold text-black font-sans">
-                              {task.taskName}
-                            </div>
-                            {task.description && (
-                              <div className="text-xs text-black/60 font-sans mt-1 line-clamp-1">
-                                {task.description}
-                              </div>
-                            )}
+                        <div>
+                          <div className="text-sm font-semibold text-black font-sans">
+                            {task.taskName}
                           </div>
+                          {task.description && (
+                            <div className="text-xs text-black/60 font-sans mt-1 line-clamp-1">
+                              {task.description}
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -358,6 +362,20 @@ const Tasks = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-black/60 font-sans">
                         {formatDate(task.createdAt)}
                       </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-center w-16">
+                        <button
+                          type="button"
+                          title="View task history"
+                          aria-label={`View history for ${task.taskName}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAuditTask(task);
+                          }}
+                          className="inline-flex items-center justify-center text-[#434E78]/70 hover:text-[#434E78] hover:bg-[#434E78]/10 p-2 rounded-azure-sm transition-colors"
+                        >
+                          <FiClock className="text-lg" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -400,6 +418,14 @@ const Tasks = () => {
           </button>
         </div>
       </div>
+
+      {auditTask && (
+        <TaskAuditModal
+          taskId={auditTask.taskId}
+          taskName={auditTask.taskName}
+          onClose={() => setAuditTask(null)}
+        />
+      )}
     </div>
   );
 };

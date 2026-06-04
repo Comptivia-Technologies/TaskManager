@@ -1,5 +1,5 @@
 import api from './api';
-import { Task, TaskUpdate, PaginatedTasksResponse } from '../types';
+import { Task, TaskAuditEntry, TaskUpdate, PaginatedTasksResponse } from '../types';
 
 export const taskService = {
   getAll: async (): Promise<Task[]> => {
@@ -55,6 +55,11 @@ export const taskService = {
   getByMember: async (memberId: string): Promise<Task[]> => {
     const response = await api.get<Task[]>(`/api/tasks/member/${memberId}`);
     return response.data;
+  },
+
+  getAudit: async (taskId: string): Promise<TaskAuditEntry[]> => {
+    const response = await api.get<TaskAuditEntry[]>(`/api/tasks/${taskId}/audit`);
+    return response.data ?? [];
   },
 };
 

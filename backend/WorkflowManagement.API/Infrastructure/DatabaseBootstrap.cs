@@ -23,6 +23,7 @@ public static class DatabaseBootstrap
         {
             await DropOrganizationColumnsIfExistAsync(connection, logger);
             await EnsureAppUsersTableAsync(connection, logger);
+            await EnsureTaskAuditEntriesTableAsync(connection, logger);
             await SeedPermissionsAsync(connection, logger);
             await SeedAdminRoleAndUserAsync(dbContext, config, logger);
         }
@@ -76,6 +77,33 @@ public static class DatabaseBootstrap
             CREATE UNIQUE INDEX IF NOT EXISTS ""IX_AppUsers_Email"" ON ""AppUsers"" (""Email"");";
         await cmd.ExecuteNonQueryAsync();
         logger.LogInformation("AppUsers table ensured.");
+    }
+
+    private static async System.Threading.Tasks.Task EnsureTaskAuditEntriesTableAsync(System.Data.Common.DbConnection connection, ILogger logger)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = @"
+            CREATE TABLE IF NOT EXISTS ""TaskAuditEntries"" (
+                ""AuditId"" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                ""TaskId"" UUID NOT NULL,
+                ""EventId"" UUID NOT NULL,
+                ""ActionType"" VARCHAR(50) NOT NULL,
+                ""MemberId"" UUID NULL,
+                ""FromMemberId"" UUID NULL,
+                ""ToMemberId"" UUID NULL,
+                ""StageId"" UUID NULL,
+                ""StageName"" VARCHAR(200) NULL,
+                ""NextStageId"" UUID NULL,
+                ""NextStageName"" VARCHAR(200) NULL,
+                ""Reason"" VARCHAR(500) NULL,
+                ""CorrelationId"" UUID NOT NULL,
+                ""OccurredAt"" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT ""FK_TaskAuditEntries_Tasks"" FOREIGN KEY (""TaskId"") REFERENCES ""Tasks""(""TaskId"") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TaskAuditEntries_EventId"" ON ""TaskAuditEntries"" (""EventId"");
+            CREATE INDEX IF NOT EXISTS ""IX_TaskAuditEntries_TaskId_OccurredAt"" ON ""TaskAuditEntries"" (""TaskId"", ""OccurredAt"");";
+        await cmd.ExecuteNonQueryAsync();
+        logger.LogInformation("TaskAuditEntries table ensured.");
     }
 
     private static async System.Threading.Tasks.Task SeedPermissionsAsync(System.Data.Common.DbConnection connection, ILogger logger)

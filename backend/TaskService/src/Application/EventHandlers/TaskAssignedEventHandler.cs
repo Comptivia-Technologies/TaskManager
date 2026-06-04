@@ -1,4 +1,6 @@
 using Shared.Contracts.EventContracts;
+using TaskService.Application;
+using TaskService.Application.DTOs;
 using TaskService.Application.Interfaces;
 using TaskService.Infrastructure.Http;
 using TaskService.Domain.Enums;
@@ -18,17 +20,20 @@ namespace TaskService.Application.EventHandlers;
 public class TaskAssignedEventHandler
 {
     private readonly ITaskRepository _repository;
+    private readonly ITaskAuditRecorder _taskAuditRecorder;
     private readonly ILogger<TaskAssignedEventHandler> _logger;
     private readonly IConfiguration _configuration;
     private readonly HttpClient _httpClient;
 
     public TaskAssignedEventHandler(
         ITaskRepository repository,
+        ITaskAuditRecorder taskAuditRecorder,
         ILogger<TaskAssignedEventHandler> logger,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory)
     {
         _repository = repository;
+        _taskAuditRecorder = taskAuditRecorder;
         _logger = logger;
         _configuration = configuration;
         _httpClient = httpClientFactory.CreateClient(WorkflowManagementApiClientNames.ClientName);
@@ -109,7 +114,7 @@ public class TaskAssignedEventHandler
                 task.TaskId, task.Priority, task.WorkflowId);
 
             // Sync task to WorkflowManagement.API so frontend can see it
-            await SyncTaskToWorkflowManagementAPIAsync(task);
+            await SyncTaskToWorkflowManagementAPIAsync(task, @event, correlationId);
         }
         catch (Exception ex)
         {
@@ -124,7 +129,10 @@ public class TaskAssignedEventHandler
     /// Syncs task to WorkflowManagement.API so frontend can display it
     /// Creates new task if not exists, updates if already exists (for reassignments)
     /// </summary>
-    private async System.Threading.Tasks.Task SyncTaskToWorkflowManagementAPIAsync(DomainTask task)
+    private async System.Threading.Tasks.Task SyncTaskToWorkflowManagementAPIAsync(
+        DomainTask task,
+        TaskAssignedEvent assignedEvent,
+        Guid correlationId)
     {
         try
         {
@@ -264,6 +272,23 @@ public class TaskAssignedEventHandler
                     _logger.LogInformation(
                         "Task updated in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, Response: {Response}",
                         task.TaskId, existingWorkflowTask.TaskId, responseContent);
+
+                    var isReassignment = existingWorkflowTask.AssignedToMemberId.HasValue &&
+                        existingWorkflowTask.AssignedToMemberId.Value != task.MemberId.Value;
+                    var auditEventId = isReassignment
+                        ? Guid.NewGuid()
+                        : (correlationId != Guid.Empty ? correlationId : Guid.NewGuid());
+                    await _taskAuditRecorder.TryRecordAsync(existingWorkflowTask.TaskId, new TaskAuditRecordDto
+                    {
+                        EventId = auditEventId,
+                        ActionType = isReassignment ? TaskAuditActionTypes.Reassigned : TaskAuditActionTypes.Assigned,
+                        MemberId = task.MemberId.Value,
+                        FromMemberId = isReassignment ? existingWorkflowTask.AssignedToMemberId : null,
+                        ToMemberId = isReassignment ? task.MemberId.Value : null,
+                        StageId = task.CurrentStageId,
+                        CorrelationId = correlationId != Guid.Empty ? correlationId : assignedEvent.CorrelationId,
+                        OccurredAt = assignedEvent.AssignedAt
+                    });
                 }
                 else
                 {
@@ -312,6 +337,19 @@ public class TaskAssignedEventHandler
                     _logger.LogInformation(
                         "Task created in WorkflowManagement.API. TaskId: {TaskId}, Response: {Response}",
                         task.TaskId, responseContent);
+
+                    var auditEventId = correlationId != Guid.Empty
+                        ? correlationId
+                        : Guid.NewGuid();
+                    await _taskAuditRecorder.TryRecordAsync(task.TaskId, new TaskAuditRecordDto
+                    {
+                        EventId = auditEventId,
+                        ActionType = TaskAuditActionTypes.Assigned,
+                        MemberId = task.MemberId.Value,
+                        StageId = task.CurrentStageId,
+                        CorrelationId = correlationId != Guid.Empty ? correlationId : assignedEvent.CorrelationId,
+                        OccurredAt = assignedEvent.AssignedAt
+                    });
                 }
                 else
                 {

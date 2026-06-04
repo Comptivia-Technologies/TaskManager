@@ -1,4 +1,6 @@
 using Shared.Contracts.EventContracts;
+using TaskService.Application;
+using TaskService.Application.DTOs;
 using TaskService.Application.Interfaces;
 using TaskService.Domain.Enums;
 using Microsoft.Extensions.Logging;
@@ -14,15 +16,18 @@ public class TaskCompletedEventHandler
 {
     private readonly ITaskRepository _repository;
     private readonly ITaskService _taskService;
+    private readonly ITaskAuditRecorder _taskAuditRecorder;
     private readonly ILogger<TaskCompletedEventHandler> _logger;
 
     public TaskCompletedEventHandler(
         ITaskRepository repository,
         ITaskService taskService,
+        ITaskAuditRecorder taskAuditRecorder,
         ILogger<TaskCompletedEventHandler> logger)
     {
         _repository = repository;
         _taskService = taskService;
+        _taskAuditRecorder = taskAuditRecorder;
         _logger = logger;
     }
 
@@ -62,6 +67,20 @@ public class TaskCompletedEventHandler
             await _repository.UpdateAsync(task);
 
             await _taskService.SyncTaskStatusToWorkflowManagementAsync(@event.TaskId);
+
+            var auditEventId = @event.CorrelationId != Guid.Empty
+                ? @event.CorrelationId
+                : Guid.NewGuid();
+            await _taskAuditRecorder.TryRecordAsync(@event.TaskId, new TaskAuditRecordDto
+            {
+                EventId = auditEventId,
+                ActionType = TaskAuditActionTypes.TaskCompleted,
+                MemberId = task.MemberId,
+                StageId = @event.FinalStageId,
+                StageName = @event.FinalStageName,
+                CorrelationId = @event.CorrelationId != Guid.Empty ? @event.CorrelationId : auditEventId,
+                OccurredAt = @event.CompletedAt
+            });
 
             _logger.LogInformation(
                 "Task marked as completed. TaskId: {TaskId}, WorkflowId: {WorkflowId}, FinalStageId: {FinalStageId}",

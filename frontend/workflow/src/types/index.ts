@@ -106,6 +106,25 @@ export interface StageUpdate {
   timeoutMinutes?: number;
 }
 
+export interface TaskAuditEntry {
+  auditId: string;
+  taskId: string;
+  actionType: string;
+  memberId?: string;
+  memberName?: string;
+  fromMemberId?: string;
+  fromMemberName?: string;
+  toMemberId?: string;
+  toMemberName?: string;
+  stageId?: string;
+  stageName?: string;
+  nextStageId?: string;
+  nextStageName?: string;
+  reason?: string;
+  correlationId: string;
+  occurredAt: string;
+}
+
 export interface Task {
   taskId: string;
   taskName: string;

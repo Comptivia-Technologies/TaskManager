@@ -20,6 +20,7 @@ public class TaskService : ITaskService
 {
     private readonly ITaskRepository _repository;
     private readonly IEventBus _eventBus;
+    private readonly ITaskAuditRecorder _taskAuditRecorder;
     private readonly ILogger<TaskService> _logger;
     private readonly IConfiguration _configuration;
     private readonly HttpClient _httpClient;
@@ -27,12 +28,14 @@ public class TaskService : ITaskService
     public TaskService(
         ITaskRepository repository,
         IEventBus eventBus,
+        ITaskAuditRecorder taskAuditRecorder,
         ILogger<TaskService> logger,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory)
     {
         _repository = repository;
         _eventBus = eventBus;
+        _taskAuditRecorder = taskAuditRecorder;
         _logger = logger;
         _configuration = configuration;
         _httpClient = httpClientFactory.CreateClient(WorkflowManagementApiClientNames.ClientName);
@@ -849,8 +852,22 @@ public class TaskService : ITaskService
 
         var nextStage = orderedStages.FirstOrDefault(s => s.StageOrder > currentStage.StageOrder);
 
-        // Publish TaskStageCompletedEvent
         var correlationId = Guid.NewGuid();
+
+        await _taskAuditRecorder.TryRecordAsync(taskId, new TaskAuditRecordDto
+        {
+            EventId = correlationId,
+            ActionType = TaskAuditActionTypes.StageCompleted,
+            MemberId = task.MemberId,
+            StageId = currentStage.StageId,
+            StageName = currentStage.StageName,
+            NextStageId = nextStage?.StageId,
+            NextStageName = nextStage?.StageName,
+            CorrelationId = correlationId,
+            OccurredAt = DateTime.UtcNow
+        });
+
+        // Publish TaskStageCompletedEvent
         var stageCompletedEvent = new TaskStageCompletedEvent
         {
             TaskId = taskId,
@@ -934,8 +951,23 @@ public class TaskService : ITaskService
 
         var nextStage = orderedStages.FirstOrDefault(s => s.StageOrder > currentStage.StageOrder);
 
-        // Publish TaskStageEscalatedEvent (does NOT update CompletedByMemberIds)
         var correlationId = Guid.NewGuid();
+
+        await _taskAuditRecorder.TryRecordAsync(taskId, new TaskAuditRecordDto
+        {
+            EventId = correlationId,
+            ActionType = TaskAuditActionTypes.StageEscalated,
+            MemberId = task.MemberId,
+            StageId = currentStage.StageId,
+            StageName = currentStage.StageName,
+            NextStageId = nextStage?.StageId,
+            NextStageName = nextStage?.StageName,
+            Reason = escalationReason,
+            CorrelationId = correlationId,
+            OccurredAt = DateTime.UtcNow
+        });
+
+        // Publish TaskStageEscalatedEvent (does NOT update CompletedByMemberIds)
         var stageEscalatedEvent = new TaskStageEscalatedEvent
         {
             TaskId = taskId,

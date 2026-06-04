@@ -14,6 +14,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Workflow> Workflows { get; set; }
     public DbSet<Stage> Stages { get; set; }
     public DbSet<Models.Task> Tasks { get; set; }
+    public DbSet<TaskAuditEntry> TaskAuditEntries { get; set; }
     public DbSet<Permission> Permissions { get; set; }
     public DbSet<Role> Roles { get; set; }
     public DbSet<RolePermission> RolePermissions { get; set; }
@@ -77,6 +78,21 @@ public class ApplicationDbContext : DbContext
             entity.HasOne(t => t.Workflow).WithMany(w => w.Tasks).HasForeignKey(t => t.WorkflowId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(t => t.Stage).WithMany(s => s.Tasks).HasForeignKey(t => t.StageId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(t => t.AssignedToMember).WithMany(m => m.AssignedTasks).HasForeignKey(t => t.AssignedToMemberId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<TaskAuditEntry>(entity =>
+        {
+            entity.HasKey(e => e.AuditId);
+            entity.HasIndex(e => e.EventId).IsUnique();
+            entity.HasIndex(e => new { e.TaskId, e.OccurredAt });
+            entity.Property(e => e.ActionType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.StageName).HasMaxLength(200);
+            entity.Property(e => e.NextStageName).HasMaxLength(200);
+            entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.HasOne<Models.Task>()
+                .WithMany()
+                .HasForeignKey(e => e.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Permission>(entity =>

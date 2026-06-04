@@ -3,8 +3,8 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import AppShell from './components/AppShell';
 import { Login } from './pages/Login';
-import Sidebar from './components/Sidebar';
 import Workflows from './pages/Workflows';
 import WorkflowDetail from './pages/WorkflowDetail';
 import Teams from './pages/Teams';
@@ -27,12 +27,9 @@ function App() {
             path="/"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <Navigate to="/workflows" replace />
-                  </div>
-                </div>
+                <AppShell>
+                  <Navigate to="/workflows" replace />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -40,12 +37,9 @@ function App() {
             path="/workflows"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <Workflows />
-                  </div>
-                </div>
+                <AppShell>
+                  <Workflows />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -53,12 +47,9 @@ function App() {
             path="/workflows/:id"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <WorkflowDetail />
-                  </div>
-                </div>
+                <AppShell>
+                  <WorkflowDetail />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -66,12 +57,9 @@ function App() {
             path="/teams"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <Teams />
-                  </div>
-                </div>
+                <AppShell>
+                  <Teams />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -79,12 +67,9 @@ function App() {
             path="/members"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <Members />
-                  </div>
-                </div>
+                <AppShell>
+                  <Members />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -92,12 +77,9 @@ function App() {
             path="/members/:id"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <MemberDetail />
-                  </div>
-                </div>
+                <AppShell>
+                  <MemberDetail />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -105,12 +87,9 @@ function App() {
             path="/tasks"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <Tasks />
-                  </div>
-                </div>
+                <AppShell>
+                  <Tasks />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -118,12 +97,9 @@ function App() {
             path="/sla-configuration"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <SLAConfiguration />
-                  </div>
-                </div>
+                <AppShell>
+                  <SLAConfiguration />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -131,12 +107,9 @@ function App() {
             path="/workload-configuration"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <WorkloadConfiguration />
-                  </div>
-                </div>
+                <AppShell>
+                  <WorkloadConfiguration />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -144,12 +117,9 @@ function App() {
             path="/priority-rules"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <PriorityRules />
-                  </div>
-                </div>
+                <AppShell>
+                  <PriorityRules />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -157,12 +127,9 @@ function App() {
             path="/users"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <AppUsers />
-                  </div>
-                </div>
+                <AppShell>
+                  <AppUsers />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -170,12 +137,9 @@ function App() {
             path="/roles-permissions"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <RolesPermissions />
-                  </div>
-                </div>
+                <AppShell>
+                  <RolesPermissions />
+                </AppShell>
               </ProtectedRoute>
             }
           />
@@ -199,6 +163,3 @@ function App() {
 }
 
 export default App;
-
-
-

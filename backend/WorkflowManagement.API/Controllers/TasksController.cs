@@ -12,11 +12,16 @@ namespace WorkflowManagement.API.Controllers;
 public class TasksController : ControllerBase
 {
     private readonly ITaskService _taskService;
+    private readonly ITaskAuditService _taskAuditService;
     private readonly ILogger<TasksController> _logger;
 
-    public TasksController(ITaskService taskService, ILogger<TasksController> logger)
+    public TasksController(
+        ITaskService taskService,
+        ITaskAuditService taskAuditService,
+        ILogger<TasksController> logger)
     {
         _taskService = taskService;
+        _taskAuditService = taskAuditService;
         _logger = logger;
     }
 
@@ -56,6 +61,48 @@ public class TasksController : ControllerBase
         {
             _logger.LogError(ex, "Error getting all tasks");
             return StatusCode(500, "An error occurred while retrieving tasks");
+        }
+    }
+
+    [HttpGet("{id:guid}/audit")]
+    [RequirePermission("tasks.view")]
+    public async Task<ActionResult<IEnumerable<TaskAuditEntryReadDto>>> GetTaskAudit(Guid id)
+    {
+        try
+        {
+            var task = await _taskService.GetTaskByIdAsync(id);
+            if (task == null)
+                return NotFound($"Task with ID {id} not found");
+
+            var audit = await _taskAuditService.GetAuditByTaskIdAsync(id);
+            return Ok(audit);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting audit for task {TaskId}", id);
+            return StatusCode(500, "An error occurred while retrieving task audit history");
+        }
+    }
+
+    [HttpPost("{id:guid}/audit")]
+    [RequirePermission("tasks.manage")]
+    public async Task<ActionResult<TaskAuditEntryReadDto>> RecordTaskAudit(Guid id, [FromBody] TaskAuditEntryCreateDto dto)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var entry = await _taskAuditService.RecordAuditEntryAsync(id, dto);
+            if (entry == null)
+                return NotFound($"Task with ID {id} not found");
+
+            return Ok(entry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording audit for task {TaskId}", id);
+            return StatusCode(500, "An error occurred while recording task audit entry");
         }
     }
 

@@ -58,6 +58,7 @@ builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 
 // Services
 builder.Services.AddScoped<ITaskService, TaskService.Application.Services.TaskService>();
+builder.Services.AddScoped<ITaskAuditRecorder, TaskService.Application.Services.TaskAuditRecorder>();
 
 // Event Handlers
 builder.Services.AddScoped<TaskCreatedEventHandler>();

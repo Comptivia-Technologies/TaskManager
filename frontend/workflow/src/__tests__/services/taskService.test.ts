@@ -58,6 +58,12 @@ describe('taskService', () => {
     expect(mockedApi.delete).toHaveBeenCalledWith('/api/tasks/1');
   });
 
+  it('getAudit calls api.get with audit path', async () => {
+    mockedApi.get.mockResolvedValue({ data: [] });
+    await taskService.getAudit('task-1');
+    expect(mockedApi.get).toHaveBeenCalledWith('/api/tasks/task-1/audit');
+  });
+
   it('getByWorkflow, getByStage, getByMember call correct endpoints', async () => {
     mockedApi.get.mockResolvedValue({ data: [] });
     await taskService.getByWorkflow('w1');
