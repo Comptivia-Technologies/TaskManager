@@ -83,11 +83,13 @@ function mapInvitationToUser(inv: ApiInvitation, organisationId: string): User {
 }
 
 export const userService = {
-  getActiveOrganizationUsers: async (organizationId: string, tenantId?: string | null): Promise<User[]> => {
+  getActiveOrganizationUsers: async (organizationId: string): Promise<User[]> => {
     const productId = process.env.REACT_APP_PRODUCT_ID;
     if (!productId) return [];
-    const params = new URLSearchParams({ product_id: productId });
-    if (tenantId?.trim()) params.set('tenant_id', tenantId.trim());
+    const params = new URLSearchParams({
+      product_id: productId,
+      organization_id: organizationId,
+    });
     const response = await api.get<UsersResponse | { data?: ApiUser[]; users?: ApiUser[] }>(
       `/api/auth/organizationuser?${params.toString()}`
     );

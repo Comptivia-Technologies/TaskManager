@@ -19,7 +19,7 @@ function splitFullName(fullName: string): { firstName: string; lastName: string 
 }
 
 const Members = () => {
-  const { organizationId, currentTenantId } = useAuth();
+  const { organizationId } = useAuth();
   const { members, loading, refetch } = useMembers();
   const { teams } = useTeams();
   const navigate = useNavigate();
@@ -43,12 +43,12 @@ const Members = () => {
   const loadProductHubUsers = useCallback(async () => {
     if (!organizationId) return;
     try {
-      const users = await userService.getActiveOrganizationUsers(organizationId, currentTenantId);
+      const users = await userService.getActiveOrganizationUsers(organizationId);
       setProductHubUsers(users.filter((u) => u.status === 'Active'));
     } catch {
       setProductHubUsers([]);
     }
-  }, [organizationId, currentTenantId]);
+  }, [organizationId]);
 
   useEffect(() => {
     loadProductHubUsers();
