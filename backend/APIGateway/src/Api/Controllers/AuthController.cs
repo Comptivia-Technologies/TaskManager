@@ -122,20 +122,20 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("organizationuser")]
-    public async Task<IActionResult> GetOrganizationUsers([FromQuery] string product_id, [FromQuery] string? tenant_id)
+    public async Task<IActionResult> GetOrganizationUsers([FromQuery] string product_id, [FromQuery] string? organization_id)
     {
         if (string.IsNullOrEmpty(product_id))
             return BadRequest(new { error = "product_id is required" });
 
-        var tenantId = HttpContext.Items[OrganizationAuthMiddleware.TenantIdItemKey]?.ToString()
-            ?? (!string.IsNullOrWhiteSpace(tenant_id) ? tenant_id.Trim() : null);
-        if (string.IsNullOrEmpty(tenantId))
-            return BadRequest(new { error = "tenant_id could not be determined from token or query" });
+        var organizationId = HttpContext.Items[OrganizationAuthMiddleware.OrganizationIdItemKey]?.ToString()
+            ?? (!string.IsNullOrWhiteSpace(organization_id) ? organization_id.Trim() : null);
+        if (string.IsNullOrEmpty(organizationId))
+            return BadRequest(new { error = "organization_id could not be determined from token or query" });
 
         try
         {
             var baseUrl = GetAuthServiceBaseUrl();
-            var requestUrl = $"{baseUrl}/api/organizationuser?product_id={Uri.EscapeDataString(product_id)}&tenant_id={Uri.EscapeDataString(tenantId)}";
+            var requestUrl = $"{baseUrl}/api/organizationuser?product_id={Uri.EscapeDataString(product_id)}&organization_id={Uri.EscapeDataString(organizationId)}";
             var request = CreateRequest(HttpMethod.Get, requestUrl);
             var httpClient = _httpClientFactory.CreateClient();
             var response = await httpClient.SendAsync(request);

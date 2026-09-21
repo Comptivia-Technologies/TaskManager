@@ -38,6 +38,9 @@ builder.Services.AddSingleton<AzureEventBus>();
 builder.Services.Configure<GcpEventBusOptions>(builder.Configuration.GetSection("EventBus:GCP"));
 builder.Services.AddSingleton<GcpEventBus>();
 
+builder.Services.Configure<RabbitMQEventBusOptions>(builder.Configuration.GetSection("EventBus:RabbitMQ"));
+builder.Services.AddSingleton<RabbitMQEventBus>();
+
 // Factory pattern - resolves provider from configuration
 builder.Services.AddSingleton<IEventBusFactory, EventBusFactory>();
 builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<IEventBusFactory>().CreateEventBus());

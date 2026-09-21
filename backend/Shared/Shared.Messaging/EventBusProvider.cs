@@ -4,5 +4,6 @@ public enum EventBusProvider
 {
     AWS,
     Azure,
-    GCP
+    GCP,
+    RabbitMQ
 }
