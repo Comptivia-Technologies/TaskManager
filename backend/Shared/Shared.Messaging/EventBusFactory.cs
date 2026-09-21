@@ -36,7 +36,8 @@ public class EventBusFactory : IEventBusFactory
             "AWS" => _serviceProvider.GetRequiredService<AwsEventBus>(),
             "AZURE" => _serviceProvider.GetRequiredService<AzureEventBus>(),
             "GCP" => _serviceProvider.GetRequiredService<GcpEventBus>(),
-            _ => throw new NotSupportedException($"Event bus provider '{provider}' is not supported. Supported providers: AWS, Azure, GCP")
+            "RABBITMQ" => _serviceProvider.GetRequiredService<RabbitMQEventBus>(),
+            _ => throw new NotSupportedException($"Event bus provider '{provider}' is not supported. Supported providers: AWS, Azure, GCP, RabbitMQ")
         };
     }
 }

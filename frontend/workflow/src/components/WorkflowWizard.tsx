@@ -50,7 +50,7 @@ interface StageForm {
 }
 
 const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
-  const { organizationId, currentTenantId } = useAuth();
+  const { organizationId } = useAuth();
   const { teams, refetch: refetchTeams } = useTeams();
   const { members: existingMembers, refetch: refetchMembers } = useMembers();
   const [currentStep, setCurrentStep] = useState(1);
@@ -75,12 +75,12 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
   const loadProductHubUsers = useCallback(async () => {
     if (!organizationId) return;
     try {
-      const users = await userService.getActiveOrganizationUsers(organizationId, currentTenantId);
+      const users = await userService.getActiveOrganizationUsers(organizationId);
       setProductHubUsers(users);
     } catch {
       setProductHubUsers([]);
     }
-  }, [organizationId, currentTenantId]);
+  }, [organizationId]);
 
   useEffect(() => {
     if (currentStep === 2) loadProductHubUsers();

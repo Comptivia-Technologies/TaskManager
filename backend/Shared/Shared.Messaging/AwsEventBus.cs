@@ -508,26 +508,7 @@ public class AwsEventBus : IEventBus, IDisposable
 
     // Helper method to get detail-type from event type
     private string GetDetailTypeFromEventType<T>() where T : class
-    {
-        var typeName = typeof(T).Name;
-        return typeName switch
-        {
-            nameof(TaskCreatedEvent) => EventBusConstants.TaskCreated,
-            nameof(WorkflowSelectedEvent) => EventBusConstants.WorkflowSelected,
-            nameof(PriorityAssignedEvent) => EventBusConstants.PriorityAssigned,
-            nameof(SLAConfiguredEvent) => EventBusConstants.SLAConfigured,
-            nameof(TaskAssignedEvent) => EventBusConstants.TaskAssigned,
-            nameof(TaskOverdueEvent) => EventBusConstants.TaskOverdue,
-            nameof(TaskStageStartedEvent) => EventBusConstants.TaskStageStarted,
-            nameof(TaskStageCompletedEvent) => EventBusConstants.TaskStageCompleted,
-            nameof(TaskStageEscalatedEvent) => EventBusConstants.TaskStageEscalated,
-            nameof(TaskStageEscalationTriggeredEvent) => EventBusConstants.TaskStageEscalationTriggered,
-            nameof(TaskCompletedEvent) => EventBusConstants.TaskCompleted,
-            nameof(TaskStatusUpdatedEvent) => EventBusConstants.TaskStatusUpdated,
-            nameof(TaskStageReassignmentNeededEvent) => EventBusConstants.TaskStageReassignmentNeeded,
-            _ => typeName.Replace("Event", "")
-        };
-    }
+        => EventDetailTypeMapper.GetDetailType(typeof(T));
 
     private async Task<string> GetOrCreateQueueUrlAsync(string queueName)
     {

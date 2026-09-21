@@ -67,11 +67,11 @@ describe('userService', () => {
     expect(mockedApi.patch).toHaveBeenCalledWith('/api/auth/users/u1/status', { status: 'active' });
   });
 
-  it('getActiveOrganizationUsers passes tenant_id when provided', async () => {
+  it('getActiveOrganizationUsers passes organization_id', async () => {
     mockedApi.get.mockResolvedValue({ data: { data: { users: [] } } });
-    await userService.getActiveOrganizationUsers('o1', 'ten-1');
+    await userService.getActiveOrganizationUsers('o1');
     expect(mockedApi.get).toHaveBeenCalledWith(
-      expect.stringMatching(/tenant_id=ten-1/)
+      expect.stringMatching(/organization_id=o1/)
     );
   });
 

@@ -8,7 +8,7 @@
       "applicationUrl": "http://localhost:5002",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "EVENTBUS_PROVIDER": "AWS",
+        "EVENTBUS_PROVIDER": "RabbitMQ",
         "DB_HOST": "localhost",
         "DB_PORT": "5432",
         "DB_NAME": "WorkflowManagement",
@@ -24,7 +24,7 @@
       "applicationUrl": "https://localhost:5003;http://localhost:5002",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "EVENTBUS_PROVIDER": "AWS",
+        "EVENTBUS_PROVIDER": "RabbitMQ",
         "DB_HOST": "localhost",
         "DB_PORT": "5432",
         "DB_NAME": "WorkflowManagement",
