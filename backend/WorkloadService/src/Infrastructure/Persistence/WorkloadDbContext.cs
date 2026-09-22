@@ -36,9 +36,15 @@ public class WorkloadDbContext : DbContext
             entity.Property(e => e.WorkloadScore).IsRequired();
             entity.Property(e => e.AssignmentReason).HasMaxLength(500);
             entity.Property(e => e.AssignedAt).IsRequired();
+            entity.Property(e => e.EndedAt).IsRequired(false);
 
-            entity.HasIndex(e => e.TaskId).IsUnique();
+            entity.HasIndex(e => e.TaskId).HasDatabaseName("IX_TaskAssignments_TaskId");
+            entity.HasIndex(e => e.TaskId)
+                .IsUnique()
+                .HasFilter("\"EndedAt\" IS NULL")
+                .HasDatabaseName("IX_TaskAssignments_OpenTask");
             entity.HasIndex(e => e.MemberId);
+            entity.HasIndex(e => e.CorrelationId);
         });
 
         // Reference member configuration (read-only)

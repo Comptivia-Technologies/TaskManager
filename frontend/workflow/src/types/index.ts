@@ -146,6 +146,23 @@ export interface TaskUpdate {
   assignedToMemberId?: string;
 }
 
+export interface TaskStageHistory {
+  historyId: string;
+  sequence: number;
+  action: string;
+  stageId: string;
+  stageName: string;
+  stageOrder: number;
+  memberId: string;
+  memberName: string;
+  fromStageId?: string;
+  fromStageName?: string;
+  toStageId?: string;
+  toStageName?: string;
+  reason?: string;
+  occurredAt: string;
+}
+
 export interface PaginatedTasksResponse {
   data: Task[];
   totalCount: number;

@@ -56,6 +56,7 @@ builder.Services.AddHttpContextAccessor();
 
 // Repositories
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
+builder.Services.AddScoped<ITaskStageHistoryRepository, TaskStageHistoryRepository>();
 
 // Services
 builder.Services.AddScoped<ITaskService, TaskService.Application.Services.TaskService>();
@@ -69,6 +70,7 @@ builder.Services.AddScoped<TaskAssignedEventHandler>();
 builder.Services.AddScoped<TaskOverdueEventHandler>();
 builder.Services.AddScoped<TaskStageStartedEventHandler>();
 builder.Services.AddScoped<TaskStageCompletedEventHandler>();
+builder.Services.AddScoped<TaskStageReturnedEventHandler>();
 builder.Services.AddScoped<TaskStageEscalatedEventHandler>();
 builder.Services.AddScoped<TaskStageEscalationTriggeredEventHandler>();
 builder.Services.AddScoped<TaskCompletedEventHandler>();
@@ -250,6 +252,24 @@ catch (Exception ex)
 
 try
 {
+    logger.LogInformation("Starting TaskStageReturnedEvent consumer...");
+    eventBus.StartConsuming<TaskStageReturnedEvent>(
+        EventBusConstants.TaskServiceQueue,
+        async (evt, correlationId) =>
+        {
+            using var scope = app.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TaskStageReturnedEventHandler>();
+            await handler.HandleAsync(evt, correlationId);
+        });
+    logger.LogInformation("✓ TaskStageReturnedEvent consumer started successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "✗ Failed to start TaskStageReturnedEvent consumer");
+}
+
+try
+{
     logger.LogInformation("Starting TaskStageEscalatedEvent consumer...");
     eventBus.StartConsuming<TaskStageEscalatedEvent>(
         EventBusConstants.TaskServiceQueue,
@@ -403,6 +423,34 @@ using (var scope = app.Services.CreateScope())
             {
                 logger.LogInformation("Verified: Tasks table exists.");
             }
+
+            using var historyCommand = connection.CreateCommand();
+            historyCommand.CommandText = @"
+                CREATE TABLE IF NOT EXISTS ""TaskStageHistory"" (
+                    ""HistoryId"" UUID PRIMARY KEY,
+                    ""OrganizationId"" UUID NOT NULL,
+                    ""TaskId"" UUID NOT NULL,
+                    ""Sequence"" INTEGER NOT NULL,
+                    ""Action"" VARCHAR(20) NOT NULL,
+                    ""StageId"" UUID NOT NULL,
+                    ""StageName"" VARCHAR(200) NOT NULL,
+                    ""StageOrder"" INTEGER NOT NULL,
+                    ""MemberId"" UUID NOT NULL,
+                    ""MemberName"" VARCHAR(200) NOT NULL,
+                    ""FromStageId"" UUID,
+                    ""FromStageName"" VARCHAR(200),
+                    ""ToStageId"" UUID,
+                    ""ToStageName"" VARCHAR(200),
+                    ""Reason"" TEXT,
+                    ""OccurredAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
+                    ""CorrelationId"" UUID NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ""IX_TaskStageHistory_TaskId"" ON ""TaskStageHistory"" (""TaskId"");
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TaskStageHistory_Task_Sequence"" ON ""TaskStageHistory"" (""TaskId"", ""Sequence"");
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TaskStageHistory_Correlation_Action"" ON ""TaskStageHistory"" (""CorrelationId"", ""Action"");
+            ";
+            await historyCommand.ExecuteNonQueryAsync();
+            logger.LogInformation("Verified: TaskStageHistory table exists.");
         }
         finally
         {

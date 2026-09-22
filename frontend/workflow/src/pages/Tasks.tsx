@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { taskService } from '../services/taskService';
 import { workflowService } from '../services/workflowService';
-import { Task, Workflow } from '../types';
+import { Task, TaskStageHistory, Workflow } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiCheckCircle, FiClock, FiUser, FiLayers, FiCalendar, FiAlertCircle } from 'react-icons/fi';
+import { FiCheckCircle, FiClock, FiUser, FiLayers, FiCalendar, FiAlertCircle, FiX } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { formatDateToIST } from '../utils/dateUtils';
 
@@ -19,6 +19,10 @@ const Tasks = () => {
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [historyTask, setHistoryTask] = useState<Task | null>(null);
+  const [history, setHistory] = useState<TaskStageHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -133,6 +137,35 @@ const Tasks = () => {
   };
 
   const formatDate = formatDateToIST;
+
+  const openHistory = async (task: Task, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setHistoryTask(task);
+    setHistory([]);
+    setHistoryError(null);
+    setHistoryLoading(true);
+    try {
+      const rows = await taskService.getHistory(task.taskId);
+      setHistory(rows);
+    } catch (err) {
+      setHistoryError('Failed to load history.');
+      console.error('Error loading task history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const closeHistory = () => {
+    setHistoryTask(null);
+    setHistory([]);
+    setHistoryError(null);
+  };
+
+  const actionColor = (action: string) => {
+    if (action === 'Completed') return 'bg-green-100 text-green-800 border-green-200';
+    if (action === 'Returned') return 'bg-orange-100 text-orange-800 border-orange-200';
+    return 'bg-blue-100 text-blue-800 border-blue-200';
+  };
 
   if (loading) {
     return <LoadingSpinner />;
@@ -270,6 +303,9 @@ const Tasks = () => {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
                       Created
                     </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
+                      History
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-[#434E78]/10">
@@ -358,6 +394,17 @@ const Tasks = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-black/60 font-sans">
                         {formatDate(task.createdAt)}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          type="button"
+                          title="View history"
+                          aria-label={`View history for ${task.taskName}`}
+                          onClick={(event) => openHistory(task, event)}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-azure-sm text-[#434E78] hover:bg-[#434E78]/10"
+                        >
+                          <FiClock className="text-lg" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -400,6 +447,63 @@ const Tasks = () => {
           </button>
         </div>
       </div>
+
+      {historyTask && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-azure-sm shadow-azure-xl w-full max-w-2xl border border-[#434E78]/20 max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center px-6 py-4 border-b border-[#434E78]/10">
+              <div>
+                <h2 className="text-xl font-semibold text-black font-sans">History</h2>
+                <p className="text-sm text-black/60 font-sans">{historyTask.taskName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeHistory}
+                aria-label="Close history"
+                className="text-black/70 hover:text-black hover:bg-[#434E78]/10 p-1 rounded-azure-sm"
+              >
+                <FiX className="text-lg" />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-6 py-4">
+              {historyLoading && (
+                <p className="text-sm text-black/60 font-sans py-6 text-center">Loading history...</p>
+              )}
+              {historyError && (
+                <p className="text-sm text-red-600 font-sans py-6 text-center">{historyError}</p>
+              )}
+              {!historyLoading && !historyError && history.length === 0 && (
+                <p className="text-sm text-black/60 font-sans py-6 text-center">No history yet.</p>
+              )}
+              {!historyLoading && !historyError && history.length > 0 && (
+                <ol className="space-y-3">
+                  {history.map((entry) => (
+                    <li key={entry.historyId} className="border border-[#434E78]/15 rounded-azure-sm px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-azure-sm text-xs font-medium border font-sans ${actionColor(entry.action)}`}>
+                          {entry.action}
+                        </span>
+                        <span className="text-xs text-black/60 font-sans">{formatDate(entry.occurredAt)}</span>
+                      </div>
+                      <p className="mt-2 text-sm text-black font-sans">
+                        {entry.memberName} · {entry.stageName}
+                      </p>
+                      {(entry.fromStageName || entry.toStageName) && (
+                        <p className="mt-1 text-xs text-black/70 font-sans">
+                          {entry.fromStageName || '—'} → {entry.toStageName || '—'}
+                        </p>
+                      )}
+                      {entry.reason && (
+                        <p className="mt-1 text-xs text-black/70 font-sans">{entry.reason}</p>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

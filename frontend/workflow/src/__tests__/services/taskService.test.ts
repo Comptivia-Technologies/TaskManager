@@ -58,6 +58,14 @@ describe('taskService', () => {
     expect(mockedApi.delete).toHaveBeenCalledWith('/api/tasks/1');
   });
 
+  it('getHistory calls the task-service history endpoint', async () => {
+    const history = [{ historyId: 'h1', sequence: 1, action: 'Assigned', stageId: 's1', stageName: 'L1', stageOrder: 1, memberId: 'm1', memberName: 'Sreejith', occurredAt: '2026-09-22T04:00:00Z' }];
+    mockedApi.get.mockResolvedValue({ data: history });
+    const result = await taskService.getHistory('task-1');
+    expect(mockedApi.get).toHaveBeenCalledWith('/api/task-service/task-1/history');
+    expect(result).toEqual(history);
+  });
+
   it('getByWorkflow, getByStage, getByMember call correct endpoints', async () => {
     mockedApi.get.mockResolvedValue({ data: [] });
     await taskService.getByWorkflow('w1');

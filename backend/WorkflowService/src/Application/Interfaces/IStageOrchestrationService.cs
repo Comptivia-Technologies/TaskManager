@@ -21,5 +21,10 @@ public interface IStageOrchestrationService
     /// Handles escalation timeout and transitions to next stage
     /// </summary>
     Task HandleEscalationTimeoutAsync(TaskStageEscalationTriggeredEvent escalationEvent);
+
+    /// <summary>
+    /// Starts the stage a task was returned to, restoring the previous assignee.
+    /// </summary>
+    Task HandleStageReturnedAsync(TaskStageReturnedEvent stageReturnedEvent);
 }
 

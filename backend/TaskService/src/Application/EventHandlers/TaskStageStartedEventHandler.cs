@@ -2,6 +2,7 @@ using Shared.Contracts.EventContracts;
 using Shared.Contracts.Constants;
 using Shared.Messaging;
 using TaskService.Application.Interfaces;
+using TaskService.Domain.Entities;
 using TaskService.Domain.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +19,7 @@ namespace TaskService.Application.EventHandlers;
 public class TaskStageStartedEventHandler
 {
     private readonly ITaskRepository _repository;
+    private readonly ITaskStageHistoryRepository _historyRepository;
     private readonly IEventBus _eventBus;
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
@@ -25,12 +27,14 @@ public class TaskStageStartedEventHandler
 
     public TaskStageStartedEventHandler(
         ITaskRepository repository,
+        ITaskStageHistoryRepository historyRepository,
         IEventBus eventBus,
         HttpClient httpClient,
         IConfiguration configuration,
         ILogger<TaskStageStartedEventHandler> logger)
     {
         _repository = repository;
+        _historyRepository = historyRepository;
         _eventBus = eventBus;
         _httpClient = httpClient;
         _configuration = configuration;
@@ -77,8 +81,17 @@ public class TaskStageStartedEventHandler
                 return;
             }
 
-            // Check if we need to trigger reassignment (team change)
-            var needsReassignment = await CheckIfReassignmentNeededAsync(task, @event);
+            var preferredMemberId = @event.PreferredMemberId;
+            if (!preferredMemberId.HasValue)
+            {
+                var lastAssignment = await _historyRepository.GetLastAssignmentAsync(@event.TaskId, @event.StageId);
+                preferredMemberId = lastAssignment?.MemberId;
+            }
+
+            var teamChanged = await CheckIfReassignmentNeededAsync(task, @event);
+            var restorePreviousMember = preferredMemberId.HasValue && task.MemberId != preferredMemberId;
+            var needsReassignment = restorePreviousMember || (teamChanged && !preferredMemberId.HasValue);
+            var preferredForReassignment = restorePreviousMember ? preferredMemberId : null;
 
             // Update task with stage information
             task.CurrentStageId = @event.StageId;
@@ -112,6 +125,7 @@ public class TaskStageStartedEventHandler
                     PreviousMemberId = task.MemberId,
                     PreviousTeamId = needsReassignment ? await GetMemberTeamIdAsync(task.MemberId, task.OrganizationId) : null,
                     TaskPriority = task.Priority,
+                    PreferredMemberId = preferredForReassignment,
                     RequestedAt = DateTime.UtcNow,
                     CorrelationId = correlationId
                 };
@@ -125,6 +139,25 @@ public class TaskStageStartedEventHandler
                 _logger.LogInformation(
                     "Task reassignment requested due to team change. TaskId: {TaskId}, NewTeamId: {NewTeamId}, PreviousMemberId: {PreviousMemberId}, CorrelationId: {CorrelationId}",
                     task.TaskId, @event.TeamId, task.MemberId, correlationId);
+            }
+            else if (task.MemberId.HasValue)
+            {
+                var memberName = await GetMemberNameAsync(task.MemberId.Value, task.OrganizationId);
+                await _historyRepository.AppendAsync(new TaskStageHistory
+                {
+                    OrganizationId = task.OrganizationId,
+                    TaskId = task.TaskId,
+                    Action = TaskStageHistory.Assigned,
+                    StageId = @event.StageId,
+                    StageName = @event.StageName,
+                    StageOrder = @event.StageOrder,
+                    MemberId = task.MemberId.Value,
+                    MemberName = memberName,
+                    ToStageId = @event.StageId,
+                    ToStageName = @event.StageName,
+                    OccurredAt = @event.StartedAt,
+                    CorrelationId = correlationId
+                });
             }
         }
         catch (Exception ex)
@@ -218,10 +251,39 @@ public class TaskStageStartedEventHandler
         }
     }
 
+    private async Task<string> GetMemberNameAsync(Guid memberId, Guid organizationId)
+    {
+        try
+        {
+            var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"]
+                ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
+
+            var response = await GetWithOrgHeaderAsync($"{workflowManagementApiUrl}/members/{memberId}", organizationId);
+            if (!response.IsSuccessStatusCode)
+                return memberId.ToString();
+
+            var json = await response.Content.ReadAsStringAsync();
+            var memberData = JsonSerializer.Deserialize<MemberInfo>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            var name = $"{memberData?.FirstName} {memberData?.LastName}".Trim();
+            return string.IsNullOrEmpty(name) ? memberId.ToString() : name;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not resolve member name. MemberId: {MemberId}", memberId);
+            return memberId.ToString();
+        }
+    }
+
     private class MemberInfo
     {
         public Guid MemberId { get; set; }
         public Guid? TeamId { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
     }
 
     /// <summary>

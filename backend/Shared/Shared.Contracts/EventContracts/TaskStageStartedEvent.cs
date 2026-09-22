@@ -14,6 +14,11 @@ public class TaskStageStartedEvent
     public Guid TeamId { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? StageTimeoutAt { get; set; } // For escalation stages
+    /// <summary>
+    /// When set, the task must be assigned to this member instead of a workload pick.
+    /// Used when returning a stage to the person who last held it.
+    /// </summary>
+    public Guid? PreferredMemberId { get; set; }
     public Guid CorrelationId { get; set; }
 }
 

@@ -196,6 +196,60 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
+    /// Return the task to an earlier stage. The previous assignee of that stage receives it again.
+    /// </summary>
+    [HttpPost("return-stage/{id}")]
+    public async Task<ActionResult> ReturnStage(Guid id, [FromBody] ReturnStageRequest request)
+    {
+        try
+        {
+            if (request.TargetStageId == Guid.Empty)
+                return BadRequest(new { error = "targetStageId is required" });
+
+            await _taskService.ReturnToStageAsync(id, request.TargetStageId, request.Reason ?? string.Empty);
+            return Ok(new { message = "Task returned to the previous stage. The previous assignee will receive it." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Task not found: {TaskId}", id);
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Cannot return stage for task {TaskId}: {Message}", id, ex.Message);
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error returning stage for task {TaskId}", id);
+            return StatusCode(500, new { error = "An error occurred while returning the stage" });
+        }
+    }
+
+    /// <summary>
+    /// Full stage history for a task: assignments, completions, and returns, with UTC timestamps.
+    /// </summary>
+    [HttpGet("{id}/history")]
+    public async Task<ActionResult<IReadOnlyList<TaskStageHistoryReadDto>>> GetHistory(Guid id)
+    {
+        try
+        {
+            var history = await _taskService.GetStageHistoryAsync(id);
+            return Ok(history);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Task not found: {TaskId}", id);
+            return NotFound(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting history for task {TaskId}", id);
+            return StatusCode(500, new { error = "An error occurred while retrieving task history" });
+        }
+    }
+
+    /// <summary>
     /// Escalate the current stage of a task to the next stage
     /// Unlike CompleteStage, this does NOT increment the member's completion count
     /// Used when a member cannot handle the task and needs to pass it to the next stage
@@ -232,6 +286,15 @@ public class TasksController : ControllerBase
 /// </summary>
 public class EscalateStageRequest
 {
+    public string? Reason { get; set; }
+}
+
+/// <summary>
+/// Request DTO for returning a task to an earlier stage
+/// </summary>
+public class ReturnStageRequest
+{
+    public Guid TargetStageId { get; set; }
     public string? Reason { get; set; }
 }
 

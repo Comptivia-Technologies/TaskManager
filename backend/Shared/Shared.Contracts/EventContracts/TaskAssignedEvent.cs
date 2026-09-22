@@ -12,6 +12,9 @@ public class TaskAssignedEvent
     public string MemberEmail { get; set; } = string.Empty;
     public double WorkloadScore { get; set; }
     public DateTime AssignedAt { get; set; }
+    public Guid? StageId { get; set; }
+    public string? StageName { get; set; }
+    public int? StageOrder { get; set; }
     public Guid CorrelationId { get; set; }
 }
 

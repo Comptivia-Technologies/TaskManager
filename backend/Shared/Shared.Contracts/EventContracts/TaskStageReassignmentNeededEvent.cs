@@ -15,6 +15,10 @@ public class TaskStageReassignmentNeededEvent
     public Guid? PreviousMemberId { get; set; }
     public Guid? PreviousTeamId { get; set; }
     public string? TaskPriority { get; set; }
+    /// <summary>
+    /// When set, assign this member if they are still on the stage team.
+    /// </summary>
+    public Guid? PreferredMemberId { get; set; }
     public DateTime RequestedAt { get; set; }
     public Guid CorrelationId { get; set; }
 }

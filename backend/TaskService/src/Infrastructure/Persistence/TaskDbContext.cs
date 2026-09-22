@@ -14,6 +14,7 @@ public class TaskDbContext : DbContext
     }
 
     public DbSet<DomainTask> Tasks { get; set; }
+    public DbSet<TaskStageHistory> TaskStageHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -55,6 +56,28 @@ public class TaskDbContext : DbContext
             entity.HasIndex(e => e.TaskStageEscalatedEventId);
             entity.HasIndex(e => e.TaskStageEscalationTriggeredEventId);
             entity.HasIndex(e => e.TaskCompletedEventId);
+        });
+
+        modelBuilder.Entity<TaskStageHistory>(entity =>
+        {
+            entity.ToTable("TaskStageHistory");
+            entity.HasKey(e => e.HistoryId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.Property(e => e.TaskId).IsRequired();
+            entity.Property(e => e.Sequence).IsRequired();
+            entity.Property(e => e.Action).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.StageId).IsRequired();
+            entity.Property(e => e.StageName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.StageOrder).IsRequired();
+            entity.Property(e => e.MemberId).IsRequired();
+            entity.Property(e => e.MemberName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.FromStageName).HasMaxLength(200);
+            entity.Property(e => e.ToStageName).HasMaxLength(200);
+            entity.Property(e => e.OccurredAt).IsRequired().HasColumnType("timestamp with time zone");
+            entity.Property(e => e.CorrelationId).IsRequired();
+            entity.HasIndex(e => e.TaskId);
+            entity.HasIndex(e => new { e.TaskId, e.Sequence }).IsUnique();
+            entity.HasIndex(e => new { e.CorrelationId, e.Action }).IsUnique();
         });
     }
 }
