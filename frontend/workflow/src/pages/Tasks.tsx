@@ -314,7 +314,7 @@ const Tasks = () => {
                     <tr
                       key={task.taskId}
                       className="hover:bg-[#434E78]/5 transition-colors duration-150 cursor-pointer"
-                      onClick={() => navigate(`/workflows/${task.workflowId}`)}
+                      onClick={() => navigate(`/tasks/${task.taskId}`)}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">

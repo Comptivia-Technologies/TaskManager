@@ -13,6 +13,7 @@ import MemberDetail from './pages/MemberDetail';
 import SLAConfiguration from './pages/SLAConfiguration';
 import WorkloadConfiguration from './pages/WorkloadConfiguration';
 import Tasks from './pages/Tasks';
+import TaskDetail from './pages/TaskDetail';
 import PriorityRules from './pages/PriorityRules';
 import Users from './pages/Users';
 import RolesPermissions from './pages/RolesPermissions';
@@ -109,6 +110,19 @@ function App() {
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
                     <Tasks />
+                  </div>
+                </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tasks/:id"
+            element={
+              <ProtectedRoute>
+                <div className="flex min-h-screen bg-white font-sans">
+                  <Sidebar />
+                  <div className="flex-1 ml-64 font-sans bg-white">
+                    <TaskDetail />
                   </div>
                 </div>
               </ProtectedRoute>

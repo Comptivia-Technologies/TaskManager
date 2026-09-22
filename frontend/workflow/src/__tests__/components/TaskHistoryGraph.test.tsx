@@ -30,6 +30,17 @@ describe('TaskHistoryGraph', () => {
     expect(graph.edges[3]).toMatchObject({ from: 1, to: 2, kind: 'forward' });
   });
 
+  it('includes workflow stages the task has not reached', () => {
+    const graph = buildStageGraph(history, [
+      { stageId: 's1', stageName: 'L1', stageOrder: 1 },
+      { stageId: 's2', stageName: 'L2', stageOrder: 2 },
+      { stageId: 's3', stageName: 'L3', stageOrder: 3 },
+      { stageId: 's4', stageName: 'L4', stageOrder: 4 },
+    ]);
+
+    expect(graph.nodes.map((node) => node.name)).toEqual(['L1', 'L2', 'L3', 'L4']);
+  });
+
   it('renders stage names and a returned path', () => {
     render(<TaskHistoryGraph history={history} />);
 
