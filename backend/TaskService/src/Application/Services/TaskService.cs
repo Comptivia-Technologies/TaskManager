@@ -19,6 +19,7 @@ namespace TaskService.Application.Services;
 public class TaskService : ITaskService
 {
     private readonly ITaskRepository _repository;
+    private readonly ITaskStageHistoryRepository _historyRepository;
     private readonly IEventBus _eventBus;
     private readonly ILogger<TaskService> _logger;
     private readonly IConfiguration _configuration;
@@ -27,6 +28,7 @@ public class TaskService : ITaskService
 
     public TaskService(
         ITaskRepository repository,
+        ITaskStageHistoryRepository historyRepository,
         IEventBus eventBus,
         ILogger<TaskService> logger,
         IConfiguration configuration,
@@ -34,6 +36,7 @@ public class TaskService : ITaskService
         IHttpContextAccessor httpContextAccessor)
     {
         _repository = repository;
+        _historyRepository = historyRepository;
         _eventBus = eventBus;
         _logger = logger;
         _configuration = configuration;
@@ -879,6 +882,7 @@ public class TaskService : ITaskService
             TaskId = taskId,
             StageId = currentStage.StageId,
             StageName = currentStage.StageName,
+            StageOrder = currentStage.StageOrder,
             WorkflowId = task.WorkflowId.Value,
             NextStageId = nextStage?.StageId,
             NextStageName = nextStage?.StageName,
@@ -895,6 +899,108 @@ public class TaskService : ITaskService
         _logger.LogInformation(
             "Stage completed for task. TaskId: {TaskId}, StageId: {StageId}, StageName: {StageName}, NextStageId: {NextStageId}, CorrelationId: {CorrelationId}",
             taskId, currentStage.StageId, currentStage.StageName, nextStage?.StageId, correlationId);
+    }
+
+    public async System.Threading.Tasks.Task<IReadOnlyList<TaskStageHistoryReadDto>> GetStageHistoryAsync(Guid taskId)
+    {
+        var task = await _repository.GetByIdAsync(taskId);
+        if (task == null)
+            throw new KeyNotFoundException($"Task with ID {taskId} not found");
+
+        var history = await _historyRepository.GetByTaskIdAsync(taskId);
+        return history.Select(h => new TaskStageHistoryReadDto
+        {
+            HistoryId = h.HistoryId,
+            Sequence = h.Sequence,
+            Action = h.Action,
+            StageId = h.StageId,
+            StageName = h.StageName,
+            StageOrder = h.StageOrder,
+            MemberId = h.MemberId,
+            MemberName = h.MemberName,
+            FromStageId = h.FromStageId,
+            FromStageName = h.FromStageName,
+            ToStageId = h.ToStageId,
+            ToStageName = h.ToStageName,
+            Reason = h.Reason,
+            OccurredAt = h.OccurredAt
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Sends the task back to an earlier stage and to the member who last held that stage.
+    /// </summary>
+    public async System.Threading.Tasks.Task ReturnToStageAsync(Guid taskId, Guid targetStageId, string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("A reason is required to return a task to a previous stage");
+
+        var task = await _repository.GetByIdAsync(taskId);
+        if (task == null)
+            throw new KeyNotFoundException($"Task with ID {taskId} not found");
+
+        if (task.Status == DomainTaskStatus.Completed)
+            throw new InvalidOperationException($"Task {taskId} is already completed");
+
+        if (!task.CurrentStageId.HasValue)
+            throw new InvalidOperationException($"Task {taskId} is not currently in any stage");
+
+        if (!task.WorkflowId.HasValue)
+            throw new InvalidOperationException($"Task {taskId} does not have a workflow assigned");
+
+        if (!task.MemberId.HasValue)
+            throw new InvalidOperationException($"Task {taskId} has no assignee");
+
+        var orderedStages = await GetOrderedStagesAsync(task);
+        var currentStage = orderedStages.FirstOrDefault(s => s.StageId == task.CurrentStageId.Value);
+        if (currentStage == null)
+            throw new InvalidOperationException($"Current stage {task.CurrentStageId.Value} not found in workflow");
+
+        var targetStage = orderedStages.FirstOrDefault(s => s.StageId == targetStageId);
+        if (targetStage == null)
+            throw new InvalidOperationException("Target stage is not part of this workflow");
+
+        if (targetStage.StageOrder >= currentStage.StageOrder)
+            throw new InvalidOperationException("A task can only be returned to an earlier stage");
+
+        var previousAssignee = await _historyRepository.GetLastAssignmentAsync(taskId, targetStage.StageId);
+        if (previousAssignee == null)
+            throw new InvalidOperationException($"Stage {targetStage.StageName} has no previous assignee");
+
+        var returner = await _historyRepository.GetLastAssignmentAsync(taskId, currentStage.StageId);
+        var returnerName = returner != null && returner.MemberId == task.MemberId.Value
+            ? returner.MemberName
+            : task.MemberId.Value.ToString();
+
+        var correlationId = Guid.NewGuid();
+        var returnedEvent = new TaskStageReturnedEvent
+        {
+            TaskId = taskId,
+            WorkflowId = task.WorkflowId.Value,
+            FromStageId = currentStage.StageId,
+            FromStageName = currentStage.StageName,
+            FromStageOrder = currentStage.StageOrder,
+            ToStageId = targetStage.StageId,
+            ToStageName = targetStage.StageName,
+            ToStageOrder = targetStage.StageOrder,
+            ReturnedByMemberId = task.MemberId.Value,
+            ReturnedByMemberName = returnerName,
+            ToMemberId = previousAssignee.MemberId,
+            ToMemberName = previousAssignee.MemberName,
+            Reason = reason.Trim(),
+            ReturnedAt = DateTime.UtcNow,
+            CorrelationId = correlationId
+        };
+
+        await _eventBus.PublishAsync(
+            returnedEvent,
+            EventBusConstants.TaskSource,
+            EventBusConstants.TaskStageReturned,
+            correlationId);
+
+        _logger.LogInformation(
+            "Stage return requested. TaskId: {TaskId}, FromStageId: {FromStageId}, ToStageId: {ToStageId}, ToMemberId: {ToMemberId}, CorrelationId: {CorrelationId}",
+            taskId, currentStage.StageId, targetStage.StageId, previousAssignee.MemberId, correlationId);
     }
 
     /// <summary>
@@ -982,6 +1088,38 @@ public class TaskService : ITaskService
         _logger.LogInformation(
             "Stage escalated for task. TaskId: {TaskId}, StageId: {StageId}, StageName: {StageName}, NextStageId: {NextStageId}, Reason: {Reason}, CorrelationId: {CorrelationId}",
             taskId, currentStage.StageId, currentStage.StageName, nextStage?.StageId, escalationReason, correlationId);
+    }
+
+    private async System.Threading.Tasks.Task<List<StageInfo>> GetOrderedStagesAsync(DomainTask task)
+    {
+        if (!task.WorkflowId.HasValue)
+            throw new InvalidOperationException($"Task {task.TaskId} does not have a workflow assigned");
+
+        var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"]
+            ?? "http://localhost:5000/api";
+
+        var stagesResponse = await GetWithOrgHeaderAsync(
+            $"{workflowManagementApiUrl}/stages/workflow/{task.WorkflowId.Value}",
+            task.OrganizationId);
+
+        if (!stagesResponse.IsSuccessStatusCode)
+        {
+            _logger.LogError(
+                "Failed to get stages for workflow. TaskId: {TaskId}, WorkflowId: {WorkflowId}, StatusCode: {StatusCode}",
+                task.TaskId, task.WorkflowId.Value, stagesResponse.StatusCode);
+            throw new InvalidOperationException("Failed to get workflow stages");
+        }
+
+        var stagesJson = await stagesResponse.Content.ReadAsStringAsync();
+        var stages = System.Text.Json.JsonSerializer.Deserialize<List<StageInfo>>(stagesJson, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        if (stages == null || !stages.Any())
+            throw new InvalidOperationException($"No stages found for workflow {task.WorkflowId.Value}");
+
+        return stages.OrderBy(s => s.StageOrder).ToList();
     }
 
     private async System.Threading.Tasks.Task<HttpResponseMessage> GetWithOrgHeaderAsync(string url, Guid organizationId)

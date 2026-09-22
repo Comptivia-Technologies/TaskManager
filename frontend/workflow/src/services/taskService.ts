@@ -1,5 +1,5 @@
 import api from './api';
-import { Task, TaskUpdate, PaginatedTasksResponse } from '../types';
+import { Task, TaskUpdate, PaginatedTasksResponse, TaskStageHistory } from '../types';
 
 export const taskService = {
   getAll: async (): Promise<Task[]> => {
@@ -55,6 +55,11 @@ export const taskService = {
   getByMember: async (memberId: string): Promise<Task[]> => {
     const response = await api.get<Task[]>(`/api/tasks/member/${memberId}`);
     return response.data;
+  },
+
+  getHistory: async (id: string): Promise<TaskStageHistory[]> => {
+    const response = await api.get<TaskStageHistory[]>(`/api/task-service/${id}/history`);
+    return Array.isArray(response.data) ? response.data : [];
   },
 };
 

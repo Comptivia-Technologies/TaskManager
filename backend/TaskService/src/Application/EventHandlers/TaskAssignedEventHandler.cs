@@ -17,17 +17,20 @@ namespace TaskService.Application.EventHandlers;
 public class TaskAssignedEventHandler
 {
     private readonly ITaskRepository _repository;
+    private readonly ITaskStageHistoryRepository _historyRepository;
     private readonly ILogger<TaskAssignedEventHandler> _logger;
     private readonly IConfiguration _configuration;
     private readonly HttpClient _httpClient;
 
     public TaskAssignedEventHandler(
         ITaskRepository repository,
+        ITaskStageHistoryRepository historyRepository,
         ILogger<TaskAssignedEventHandler> logger,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory)
     {
         _repository = repository;
+        _historyRepository = historyRepository;
         _logger = logger;
         _configuration = configuration;
         _httpClient = httpClientFactory.CreateClient();
@@ -52,6 +55,7 @@ public class TaskAssignedEventHandler
                     _logger.LogWarning(
                         "TaskAssignedEvent already processed (same member). TaskId: {TaskId}, AssignmentId: {AssignmentId}, MemberId: {MemberId}, CorrelationId: {CorrelationId}",
                         @event.TaskId, @event.AssignmentId, @event.MemberId, correlationId);
+                    await AppendAssignmentHistoryAsync(existingTask, @event);
                     return;
                 }
                 else
@@ -107,6 +111,8 @@ public class TaskAssignedEventHandler
                 "Refreshed task before sync. TaskId: {TaskId}, Priority: {Priority}, WorkflowId: {WorkflowId}",
                 task.TaskId, task.Priority, task.WorkflowId);
 
+            await AppendAssignmentHistoryAsync(task, @event);
+
             // Sync task to WorkflowManagement.API so frontend can see it
             await SyncTaskToWorkflowManagementAPIAsync(task);
         }
@@ -117,6 +123,84 @@ public class TaskAssignedEventHandler
                 @event.TaskId, @event.AssignmentId, correlationId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Records an Assigned history row when the stage is known.
+    /// Reassignment events carry the stage. The initial assignment is recorded here only if the stage
+    /// was started first and no assignment row exists yet.
+    /// </summary>
+    private async System.Threading.Tasks.Task AppendAssignmentHistoryAsync(DomainTask task, TaskAssignedEvent @event)
+    {
+        Guid stageId;
+        string stageName;
+        int stageOrder;
+
+        if (@event.StageId.HasValue)
+        {
+            stageId = @event.StageId.Value;
+            stageName = string.IsNullOrWhiteSpace(@event.StageName) ? "Stage" : @event.StageName;
+            stageOrder = @event.StageOrder ?? 0;
+        }
+        else if (task.CurrentStageId.HasValue)
+        {
+            var existing = await _historyRepository.GetLastAssignmentAsync(task.TaskId, task.CurrentStageId.Value);
+            if (existing != null)
+                return;
+
+            stageId = task.CurrentStageId.Value;
+            var stage = await GetStageAsync(stageId, task.OrganizationId);
+            stageName = stage?.StageName ?? "Stage";
+            stageOrder = stage?.StageOrder ?? 0;
+        }
+        else
+        {
+            return;
+        }
+
+        await _historyRepository.AppendAsync(new TaskStageHistory
+        {
+            OrganizationId = task.OrganizationId,
+            TaskId = task.TaskId,
+            Action = TaskStageHistory.Assigned,
+            StageId = stageId,
+            StageName = stageName,
+            StageOrder = stageOrder,
+            MemberId = @event.MemberId,
+            MemberName = string.IsNullOrWhiteSpace(@event.MemberName) ? @event.MemberId.ToString() : @event.MemberName,
+            ToStageId = stageId,
+            ToStageName = stageName,
+            OccurredAt = @event.AssignedAt,
+            CorrelationId = @event.AssignmentId
+        });
+    }
+
+    private async System.Threading.Tasks.Task<StageInfo?> GetStageAsync(Guid stageId, Guid organizationId)
+    {
+        try
+        {
+            var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"]
+                ?? "http://localhost:5000/api";
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{workflowManagementApiUrl}/stages/{stageId}");
+            request.Headers.TryAddWithoutValidation("X-Organization-Id", organizationId.ToString());
+            var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            return await response.Content.ReadFromJsonAsync<StageInfo>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load stage {StageId} for assignment history", stageId);
+            return null;
+        }
+    }
+
+    private class StageInfo
+    {
+        public Guid StageId { get; set; }
+        public string StageName { get; set; } = string.Empty;
+        public int StageOrder { get; set; }
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using Shared.Contracts.EventContracts;
 using TaskService.Application.Interfaces;
+using TaskService.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace TaskService.Application.EventHandlers;
@@ -11,13 +12,16 @@ namespace TaskService.Application.EventHandlers;
 public class TaskStageCompletedEventHandler
 {
     private readonly ITaskRepository _repository;
+    private readonly ITaskStageHistoryRepository _historyRepository;
     private readonly ILogger<TaskStageCompletedEventHandler> _logger;
 
     public TaskStageCompletedEventHandler(
         ITaskRepository repository,
+        ITaskStageHistoryRepository historyRepository,
         ILogger<TaskStageCompletedEventHandler> logger)
     {
         _repository = repository;
+        _historyRepository = historyRepository;
         _logger = logger;
     }
 
@@ -47,6 +51,30 @@ public class TaskStageCompletedEventHandler
                     @event.TaskId, correlationId);
                 return;
             }
+
+            var lastAssignment = await _historyRepository.GetLastAssignmentAsync(task.TaskId, @event.StageId);
+            var memberId = task.MemberId ?? lastAssignment?.MemberId ?? Guid.Empty;
+            var memberName = lastAssignment != null && lastAssignment.MemberId == memberId
+                ? lastAssignment.MemberName
+                : memberId.ToString();
+
+            await _historyRepository.AppendAsync(new TaskStageHistory
+            {
+                OrganizationId = task.OrganizationId,
+                TaskId = task.TaskId,
+                Action = TaskStageHistory.Completed,
+                StageId = @event.StageId,
+                StageName = @event.StageName,
+                StageOrder = @event.StageOrder != 0 ? @event.StageOrder : lastAssignment?.StageOrder ?? 0,
+                MemberId = memberId,
+                MemberName = memberName,
+                FromStageId = @event.StageId,
+                FromStageName = @event.StageName,
+                ToStageId = @event.NextStageId,
+                ToStageName = @event.NextStageName,
+                OccurredAt = @event.CompletedAt,
+                CorrelationId = correlationId
+            });
 
             // Intermediate stages: clear so TaskStageStartedEvent can set the next stage.
             // Final stage: keep CurrentStageId on the completed stage; TaskCompletedEvent marks status Completed.

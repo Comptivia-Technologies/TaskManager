@@ -11,8 +11,10 @@ public class TaskAssignment
     public double WorkloadScore { get; set; }
     public string AssignmentReason { get; set; } = string.Empty;
     public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? EndedAt { get; set; }
     
     // Idempotency
     public Guid? SLAConfiguredEventId { get; set; }
+    public Guid? CorrelationId { get; set; }
 }
 

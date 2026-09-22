@@ -163,15 +163,30 @@ using (var scope = app.Services.CreateScope())
                     ""WorkloadScore"" DOUBLE PRECISION NOT NULL,
                     ""AssignmentReason"" VARCHAR(500),
                     ""AssignedAt"" TIMESTAMP NOT NULL,
-                    ""SLAConfiguredEventId"" UUID
+                    ""EndedAt"" TIMESTAMP,
+                    ""SLAConfiguredEventId"" UUID,
+                    ""CorrelationId"" UUID
                 )";
             dbContext.Database.ExecuteSqlRawAsync(createTableSql).GetAwaiter().GetResult();
             dbContext.Database.ExecuteSqlRawAsync(@"
-                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TaskAssignments_TaskId"" ON ""TaskAssignments"" (""TaskId"")").GetAwaiter().GetResult();
+                CREATE INDEX IF NOT EXISTS ""IX_TaskAssignments_TaskId"" ON ""TaskAssignments"" (""TaskId"")").GetAwaiter().GetResult();
+            dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TaskAssignments_OpenTask"" ON ""TaskAssignments"" (""TaskId"") WHERE ""EndedAt"" IS NULL").GetAwaiter().GetResult();
             dbContext.Database.ExecuteSqlRawAsync(@"
                 CREATE INDEX IF NOT EXISTS ""IX_TaskAssignments_MemberId"" ON ""TaskAssignments"" (""MemberId"")").GetAwaiter().GetResult();
             logger.LogInformation("TaskAssignments table created manually.");
         }
+
+        dbContext.Database.ExecuteSqlRawAsync(@"
+            ALTER TABLE ""TaskAssignments"" ADD COLUMN IF NOT EXISTS ""EndedAt"" TIMESTAMP;
+            ALTER TABLE ""TaskAssignments"" ADD COLUMN IF NOT EXISTS ""CorrelationId"" UUID;
+        ").GetAwaiter().GetResult();
+        dbContext.Database.ExecuteSqlRawAsync(@"DROP INDEX IF EXISTS ""IX_TaskAssignments_TaskId"";").GetAwaiter().GetResult();
+        dbContext.Database.ExecuteSqlRawAsync(@"
+            CREATE INDEX IF NOT EXISTS ""IX_TaskAssignments_TaskId"" ON ""TaskAssignments"" (""TaskId"");
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TaskAssignments_OpenTask"" ON ""TaskAssignments"" (""TaskId"") WHERE ""EndedAt"" IS NULL;
+            CREATE INDEX IF NOT EXISTS ""IX_TaskAssignments_CorrelationId"" ON ""TaskAssignments"" (""CorrelationId"");
+        ").GetAwaiter().GetResult();
     }
     catch (Exception ex)
     {

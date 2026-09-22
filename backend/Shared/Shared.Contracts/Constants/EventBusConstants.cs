@@ -26,6 +26,7 @@ public static class EventBusConstants
     public const string TaskStageEscalated = "TaskStageEscalated";
     public const string TaskStageEscalationTriggered = "TaskStageEscalationTriggered";
     public const string TaskStageReassignmentNeeded = "TaskStageReassignmentNeeded";
+    public const string TaskStageReturned = "TaskStageReturned";
     public const string TaskCompleted = "TaskCompleted";
 
     // Queue Names (per service)

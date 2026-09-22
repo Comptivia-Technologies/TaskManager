@@ -23,6 +23,7 @@ internal static class EventDetailTypeMapper
             nameof(TaskCompletedEvent) => EventBusConstants.TaskCompleted,
             nameof(TaskStatusUpdatedEvent) => EventBusConstants.TaskStatusUpdated,
             nameof(TaskStageReassignmentNeededEvent) => EventBusConstants.TaskStageReassignmentNeeded,
+            nameof(TaskStageReturnedEvent) => EventBusConstants.TaskStageReturned,
             _ => typeName.Replace("Event", "")
         };
     }

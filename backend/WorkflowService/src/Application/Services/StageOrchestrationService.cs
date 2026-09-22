@@ -470,5 +470,62 @@ public class StageOrchestrationService : IStageOrchestrationService
             throw;
         }
     }
+
+    /// <summary>
+    /// Starts the target stage of a return and asks assignment to restore the previous member.
+    /// </summary>
+    public async Task HandleStageReturnedAsync(TaskStageReturnedEvent stageReturnedEvent)
+    {
+        try
+        {
+            var stages = await _workflowRepository.GetStagesByWorkflowIdAsync(stageReturnedEvent.WorkflowId);
+            var targetStage = stages.FirstOrDefault(s => s.StageId == stageReturnedEvent.ToStageId);
+            if (targetStage == null)
+            {
+                _logger.LogWarning(
+                    "Return target stage not found. TaskId: {TaskId}, ToStageId: {ToStageId}, CorrelationId: {CorrelationId}",
+                    stageReturnedEvent.TaskId, stageReturnedEvent.ToStageId, stageReturnedEvent.CorrelationId);
+                return;
+            }
+
+            DateTime? stageTimeoutAt = null;
+            if (targetStage.StageType == "Escalation" && targetStage.TimeoutMinutes.HasValue)
+            {
+                stageTimeoutAt = DateTime.UtcNow.AddMinutes(targetStage.TimeoutMinutes.Value);
+            }
+
+            var stageStartedEvent = new TaskStageStartedEvent
+            {
+                TaskId = stageReturnedEvent.TaskId,
+                StageId = targetStage.StageId,
+                StageName = targetStage.StageName,
+                StageOrder = targetStage.StageOrder,
+                StageType = targetStage.StageType,
+                WorkflowId = stageReturnedEvent.WorkflowId,
+                TeamId = targetStage.TeamId,
+                StartedAt = DateTime.UtcNow,
+                StageTimeoutAt = stageTimeoutAt,
+                PreferredMemberId = stageReturnedEvent.ToMemberId,
+                CorrelationId = stageReturnedEvent.CorrelationId
+            };
+
+            await _eventBus.PublishAsync(
+                stageStartedEvent,
+                EventBusConstants.WorkflowSource,
+                EventBusConstants.TaskStageStarted,
+                stageReturnedEvent.CorrelationId);
+
+            _logger.LogInformation(
+                "Task returned to previous stage. TaskId: {TaskId}, ToStageId: {ToStageId}, ToMemberId: {ToMemberId}, CorrelationId: {CorrelationId}",
+                stageReturnedEvent.TaskId, targetStage.StageId, stageReturnedEvent.ToMemberId, stageReturnedEvent.CorrelationId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error handling stage return. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
+                stageReturnedEvent.TaskId, stageReturnedEvent.CorrelationId);
+            throw;
+        }
+    }
 }
 

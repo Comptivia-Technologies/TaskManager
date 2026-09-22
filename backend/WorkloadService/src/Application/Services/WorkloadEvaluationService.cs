@@ -294,8 +294,26 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
         try
         {
             _logger.LogInformation(
-                "Processing task reassignment. TaskId: {TaskId}, NewTeamId: {NewTeamId}, StageName: {StageName}, CorrelationId: {CorrelationId}",
-                reassignmentEvent.TaskId, reassignmentEvent.NewTeamId, reassignmentEvent.StageName, reassignmentEvent.CorrelationId);
+                "Processing task reassignment. TaskId: {TaskId}, NewTeamId: {NewTeamId}, StageName: {StageName}, PreferredMemberId: {PreferredMemberId}, CorrelationId: {CorrelationId}",
+                reassignmentEvent.TaskId, reassignmentEvent.NewTeamId, reassignmentEvent.StageName, reassignmentEvent.PreferredMemberId, reassignmentEvent.CorrelationId);
+
+            var alreadyRecorded = await _repository.GetAssignmentByCorrelationIdAsync(reassignmentEvent.CorrelationId);
+            if (alreadyRecorded != null)
+            {
+                _logger.LogInformation(
+                    "Reassignment already recorded. Republishing assignment. TaskId: {TaskId}, AssignmentId: {AssignmentId}, CorrelationId: {CorrelationId}",
+                    reassignmentEvent.TaskId, alreadyRecorded.AssignmentId, reassignmentEvent.CorrelationId);
+
+                var recordedMember = (await _repository.GetMembersByTeamIdAsync(reassignmentEvent.NewTeamId))
+                    .FirstOrDefault(m => m.MemberId == alreadyRecorded.MemberId);
+                await PublishTaskAssignedAsync(
+                    alreadyRecorded,
+                    reassignmentEvent,
+                    recordedMember?.FirstName,
+                    recordedMember?.LastName,
+                    recordedMember?.Email);
+                return;
+            }
 
             // Get members from the new team
             var members = await _repository.GetMembersByTeamIdAsync(reassignmentEvent.NewTeamId);
@@ -375,50 +393,50 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
                 }
             }
 
-            // Prefer members without conflicts
-            var bestMember = membersWithoutConflict.Any()
-                ? membersWithoutConflict.OrderBy(ms => ms.WorkloadScore).First()
-                : membersWithConflict.OrderBy(ms => ms.WorkloadScore).First();
+            // Prefer the previous holder of this stage. Otherwise the least-loaded member.
+            var restoredMember = reassignmentEvent.PreferredMemberId.HasValue
+                ? memberScores.FirstOrDefault(ms => ms.Member.MemberId == reassignmentEvent.PreferredMemberId.Value)
+                : default;
+            var bestMember = restoredMember.Member != null
+                ? restoredMember
+                : membersWithoutConflict.Any()
+                    ? membersWithoutConflict.OrderBy(ms => ms.WorkloadScore).First()
+                    : membersWithConflict.OrderBy(ms => ms.WorkloadScore).First();
+
+            if (reassignmentEvent.PreferredMemberId.HasValue && restoredMember.Member == null)
+            {
+                _logger.LogWarning(
+                    "Preferred member is not on the stage team. Using workload selection. TaskId: {TaskId}, PreferredMemberId: {PreferredMemberId}, TeamId: {TeamId}, CorrelationId: {CorrelationId}",
+                    reassignmentEvent.TaskId, reassignmentEvent.PreferredMemberId, reassignmentEvent.NewTeamId, reassignmentEvent.CorrelationId);
+            }
 
             _logger.LogInformation(
-                "Selected best member for reassignment. MemberId: {MemberId}, MemberName: {MemberName}, WorkloadScore: {WorkloadScore}, TaskId: {TaskId}, TeamId: {TeamId}, CorrelationId: {CorrelationId}",
-                bestMember.Member.MemberId, $"{bestMember.Member.FirstName} {bestMember.Member.LastName}", bestMember.WorkloadScore, reassignmentEvent.TaskId, reassignmentEvent.NewTeamId, reassignmentEvent.CorrelationId);
+                "Selected member for reassignment. MemberId: {MemberId}, MemberName: {MemberName}, WorkloadScore: {WorkloadScore}, RestoredPreviousAssignee: {Restored}, TaskId: {TaskId}, TeamId: {TeamId}, CorrelationId: {CorrelationId}",
+                bestMember.Member.MemberId, $"{bestMember.Member.FirstName} {bestMember.Member.LastName}", bestMember.WorkloadScore, restoredMember.Member != null, reassignmentEvent.TaskId, reassignmentEvent.NewTeamId, reassignmentEvent.CorrelationId);
 
-            // Check if task already has an assignment
             var existingAssignment = await _repository.GetAssignmentByTaskIdAsync(reassignmentEvent.TaskId);
-            TaskAssignment assignment;
-
             if (existingAssignment != null)
             {
-                // Update existing assignment
-                existingAssignment.MemberId = bestMember.Member.MemberId;
-                existingAssignment.WorkloadScore = bestMember.WorkloadScore;
-                existingAssignment.AssignmentReason = $"Stage reassignment to {reassignmentEvent.StageName} (prev: {reassignmentEvent.PreviousMemberId}): {bestMember.Reason}";
-                existingAssignment.AssignedAt = DateTime.UtcNow;
-                assignment = await _repository.UpdateAssignmentAsync(existingAssignment);
-                
-                _logger.LogInformation(
-                    "Updated existing assignment for task. TaskId: {TaskId}, AssignmentId: {AssignmentId}",
-                    reassignmentEvent.TaskId, assignment.AssignmentId);
+                existingAssignment.EndedAt = DateTime.UtcNow;
+                await _repository.UpdateAssignmentAsync(existingAssignment);
             }
-            else
+
+            var assignmentReason = restoredMember.Member != null
+                ? $"Restored previous assignee on {reassignmentEvent.StageName}"
+                : $"Stage reassignment to {reassignmentEvent.StageName}: {bestMember.Reason}";
+            if (assignmentReason.Length > 500)
+                assignmentReason = assignmentReason[..500];
+
+            var assignment = await _repository.CreateAssignmentAsync(new TaskAssignment
             {
-                // Create new assignment record
-                assignment = new TaskAssignment
-                {
-                    TaskId = reassignmentEvent.TaskId,
-                    MemberId = bestMember.Member.MemberId,
-                    WorkloadScore = bestMember.WorkloadScore,
-                    AssignmentReason = $"Stage reassignment to {reassignmentEvent.StageName}: {bestMember.Reason}",
-                    AssignedAt = DateTime.UtcNow,
-                    SLAConfiguredEventId = Guid.NewGuid() // Generate new ID for this reassignment
-                };
-                assignment = await _repository.CreateAssignmentAsync(assignment);
-                
-                _logger.LogInformation(
-                    "Created new assignment for task. TaskId: {TaskId}, AssignmentId: {AssignmentId}",
-                    reassignmentEvent.TaskId, assignment.AssignmentId);
-            }
+                TaskId = reassignmentEvent.TaskId,
+                MemberId = bestMember.Member.MemberId,
+                WorkloadScore = bestMember.WorkloadScore,
+                AssignmentReason = assignmentReason,
+                AssignedAt = DateTime.UtcNow,
+                SLAConfiguredEventId = Guid.NewGuid(),
+                CorrelationId = reassignmentEvent.CorrelationId
+            });
 
             // Publish TaskAssignedEvent so TaskService updates the task
             var taskAssignedEvent = new TaskAssignedEvent
@@ -430,6 +448,9 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
                 MemberEmail = bestMember.Member.Email,
                 WorkloadScore = bestMember.WorkloadScore,
                 AssignedAt = DateTime.UtcNow,
+                StageId = reassignmentEvent.StageId,
+                StageName = reassignmentEvent.StageName,
+                StageOrder = reassignmentEvent.StageOrder,
                 CorrelationId = reassignmentEvent.CorrelationId
             };
 
@@ -450,6 +471,39 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
                 reassignmentEvent.TaskId, reassignmentEvent.NewTeamId, reassignmentEvent.CorrelationId);
             throw;
         }
+    }
+
+    private async System.Threading.Tasks.Task PublishTaskAssignedAsync(
+        TaskAssignment assignment,
+        TaskStageReassignmentNeededEvent reassignmentEvent,
+        string? firstName,
+        string? lastName,
+        string? email)
+    {
+        var memberName = $"{firstName} {lastName}".Trim();
+        if (string.IsNullOrEmpty(memberName))
+            memberName = assignment.MemberId.ToString();
+
+        var taskAssignedEvent = new TaskAssignedEvent
+        {
+            AssignmentId = assignment.AssignmentId,
+            TaskId = reassignmentEvent.TaskId,
+            MemberId = assignment.MemberId,
+            MemberName = memberName,
+            MemberEmail = email ?? string.Empty,
+            WorkloadScore = assignment.WorkloadScore,
+            AssignedAt = DateTime.UtcNow,
+            StageId = reassignmentEvent.StageId,
+            StageName = reassignmentEvent.StageName,
+            StageOrder = reassignmentEvent.StageOrder,
+            CorrelationId = reassignmentEvent.CorrelationId
+        };
+
+        await _eventBus.PublishAsync(
+            taskAssignedEvent,
+            EventBusConstants.WorkloadSource,
+            EventBusConstants.TaskAssigned,
+            reassignmentEvent.CorrelationId);
     }
 }
 
