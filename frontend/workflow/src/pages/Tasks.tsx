@@ -3,6 +3,7 @@ import { taskService } from '../services/taskService';
 import { workflowService } from '../services/workflowService';
 import { Task, TaskStageHistory, Workflow } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
+import TaskHistoryGraph from '../components/TaskHistoryGraph';
 import { FiCheckCircle, FiClock, FiUser, FiLayers, FiCalendar, FiAlertCircle, FiX } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { formatDateToIST } from '../utils/dateUtils';
@@ -450,7 +451,7 @@ const Tasks = () => {
 
       {historyTask && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-azure-sm shadow-azure-xl w-full max-w-2xl border border-[#434E78]/20 max-h-[80vh] flex flex-col">
+          <div className="bg-white rounded-azure-sm shadow-azure-xl w-full max-w-4xl border border-[#434E78]/20 max-h-[80vh] flex flex-col">
             <div className="flex justify-between items-center px-6 py-4 border-b border-[#434E78]/10">
               <div>
                 <h2 className="text-xl font-semibold text-black font-sans">History</h2>
@@ -476,7 +477,9 @@ const Tasks = () => {
                 <p className="text-sm text-black/60 font-sans py-6 text-center">No history yet.</p>
               )}
               {!historyLoading && !historyError && history.length > 0 && (
-                <ol className="space-y-3">
+                <>
+                  <TaskHistoryGraph history={history} currentStageId={historyTask.stageId} />
+                  <ol className="space-y-3">
                   {history.map((entry) => (
                     <li key={entry.historyId} className="border border-[#434E78]/15 rounded-azure-sm px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
@@ -499,6 +502,7 @@ const Tasks = () => {
                     </li>
                   ))}
                 </ol>
+                </>
               )}
             </div>
           </div>
