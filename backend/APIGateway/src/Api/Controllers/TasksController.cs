@@ -220,6 +220,7 @@ public class TasksController : ControllerBase
                 priority = priority,
                 workflowId = workflowId,
                 workflowName = workflowName,
+                stageId = currentStageId,
                 stageName = stageName,
                 assignedToMemberId = memberId,
                 assignedToMemberName = assigneeName,

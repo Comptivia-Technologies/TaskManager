@@ -20,7 +20,7 @@ const Sidebar = () => {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   const isActive = (path: string) => {
-    return location.pathname === path;
+    return location.pathname === path || location.pathname.startsWith(`${path}/`);
   };
 
   const handleSignOut = async () => {

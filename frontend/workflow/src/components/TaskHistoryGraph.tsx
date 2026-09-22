@@ -39,7 +39,13 @@ const takeLane = (occupied: OccupiedLane[], from: number, to: number) => {
   return lane;
 };
 
-export const buildStageGraph = (history: TaskStageHistory[]) => {
+export interface StageGraphSource {
+  stageId: string;
+  stageName: string;
+  stageOrder: number;
+}
+
+export const buildStageGraph = (history: TaskStageHistory[], stages?: StageGraphSource[]) => {
   const ordered = [...history].sort((a, b) => a.sequence - b.sequence);
   const nodes = new Map<string, StageGraphNode>();
 
@@ -53,6 +59,8 @@ export const buildStageGraph = (history: TaskStageHistory[]) => {
     if (name?.trim()) current.name = name.trim();
     if (order != null && order > 0) current.order = order;
   };
+
+  stages?.forEach((stage) => touch(stage.stageId, stage.stageName, stage.stageOrder));
 
   ordered.forEach((entry) => {
     touch(entry.stageId, entry.stageName, entry.stageOrder);
@@ -107,14 +115,21 @@ const captionLines = (name: string) => {
   return [`${clean.slice(0, 17)}…`];
 };
 
-const resolveCurrentStageId = (nodes: StageGraphNode[], history: TaskStageHistory[], currentStageId?: string) => {
-  if (currentStageId && nodes.some((node) => node.id === currentStageId)) return currentStageId;
+const sameStageId = (left?: string, right?: string) => !!left && !!right && left.toLowerCase() === right.toLowerCase();
+
+export const resolveCurrentStageId = (nodes: StageGraphNode[], history: TaskStageHistory[], currentStageId?: string) => {
+  const named = nodes.find((node) => sameStageId(node.id, currentStageId));
+  if (named) return named.id;
   const ordered = [...history].sort((a, b) => b.sequence - a.sequence);
   for (const entry of ordered) {
-    if (entry.fromStageId && entry.toStageId && entry.fromStageId !== entry.toStageId && nodes.some((node) => node.id === entry.toStageId)) {
-      return entry.toStageId;
+    if (entry.fromStageId && entry.toStageId && !sameStageId(entry.fromStageId, entry.toStageId)) {
+      const target = nodes.find((node) => sameStageId(node.id, entry.toStageId));
+      if (target) return target.id;
     }
-    if (entry.action === 'Assigned' && nodes.some((node) => node.id === entry.stageId)) return entry.stageId;
+    if (entry.action === 'Assigned') {
+      const assigned = nodes.find((node) => sameStageId(node.id, entry.stageId));
+      if (assigned) return assigned.id;
+    }
   }
   return nodes[nodes.length - 1]?.id;
 };
@@ -133,15 +148,16 @@ const pathLabel = (nodes: StageGraphNode[], edges: StageGraphEdge[]) => {
 interface TaskHistoryGraphProps {
   history: TaskStageHistory[];
   currentStageId?: string;
+  stages?: StageGraphSource[];
 }
 
 const BRAND = '#434E78';
 const RETURNED = '#ea580c';
 const GLOW = 20;
 
-const TaskHistoryGraph = ({ history, currentStageId }: TaskHistoryGraphProps) => {
+const TaskHistoryGraph = ({ history, currentStageId, stages }: TaskHistoryGraphProps) => {
   const markerScope = useId().replace(/:/g, '');
-  const graph = useMemo(() => buildStageGraph(history), [history]);
+  const graph = useMemo(() => buildStageGraph(history, stages), [history, stages]);
   const { nodes, edges } = graph;
   const activeId = useMemo(
     () => resolveCurrentStageId(nodes, history, currentStageId),
@@ -261,30 +277,35 @@ const TaskHistoryGraph = ({ history, currentStageId }: TaskHistoryGraphProps) =>
           })}
           {nodes.map((node, index) => {
             const lines = captions[index];
-            const current = node.id === activeId;
+            const activeNode = nodes.find((item) => item.id === activeId);
+            const status = node.id === activeId ? 'current' : activeNode && node.order < activeNode.order ? 'completed' : 'upcoming';
             const orderLabel = node.order > 0 && node.order < Number.MAX_SAFE_INTEGER ? String(node.order) : String(index + 1);
             const x = xAt(index);
+            const fill = status === 'current' ? BRAND : status === 'completed' ? '#059669' : '#f8f9fb';
+            const stroke = status === 'upcoming' ? '#d1d5db' : '#ffffff';
+            const numberFill = status === 'upcoming' ? '#6b7280' : '#ffffff';
+            const nameFill = status === 'current' ? BRAND : status === 'completed' ? '#047857' : '#6b7280';
             return (
-              <g key={node.id} data-current={current ? 'true' : 'false'}>
+              <g key={node.id} data-current={status === 'current' ? 'true' : 'false'} data-status={status}>
                 <title>{node.name}</title>
-                {current && (
+                {status === 'current' && (
                   <circle className="stage-current-ping" cx={x} cy={centerY} r={RADIUS} fill={BRAND} />
                 )}
                 <circle
                   cx={x}
                   cy={centerY}
                   r={RADIUS}
-                  fill={current ? BRAND : '#ffffff'}
-                  stroke={current ? '#ffffff' : BRAND}
-                  strokeWidth={current ? 3 : 2}
-                  filter={`url(#${shadowId})`}
+                  fill={fill}
+                  stroke={status === 'completed' ? '#059669' : stroke}
+                  strokeWidth={status === 'current' ? 3 : 2}
+                  filter={status === 'upcoming' ? undefined : `url(#${shadowId})`}
                 />
                 <text
                   x={x}
                   y={centerY}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  fill={current ? '#ffffff' : BRAND}
+                  fill={numberFill}
                   fontSize="11"
                   fontWeight="600"
                   fontFamily="inherit"
@@ -295,7 +316,7 @@ const TaskHistoryGraph = ({ history, currentStageId }: TaskHistoryGraphProps) =>
                   x={x}
                   y={centerY + RADIUS + 14}
                   textAnchor="middle"
-                  fill={current ? BRAND : '#1a1a1a'}
+                  fill={nameFill}
                   fontSize="11"
                   fontWeight="600"
                   fontFamily="inherit"

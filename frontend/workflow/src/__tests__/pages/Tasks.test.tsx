@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Tasks from '../../pages/Tasks';
 import { taskService } from '../../services/taskService';
 import { workflowService } from '../../services/workflowService';
@@ -65,5 +65,25 @@ describe('Tasks', () => {
     await waitFor(() => {
       expect(screen.getByText('T1')).toBeInTheDocument();
     }, { timeout: 3000 });
+  });
+
+  it('opens task details when a task row is clicked', async () => {
+    mockGetAllPaginated.mockResolvedValue({
+      data: [{ taskId: '1', taskName: 'T1', status: 'Open', priority: 'High', workflowId: 'w1', createdAt: '', updatedAt: '' }],
+      totalCount: 1,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+    });
+    render(
+      <MemoryRouter initialEntries={['/tasks']}>
+        <Routes>
+          <Route path="/tasks" element={<Tasks />} />
+          <Route path="/tasks/:id" element={<div>Task details</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    fireEvent.click(await screen.findByText('T1'));
+    expect(await screen.findByText('Task details')).toBeInTheDocument();
   });
 });
