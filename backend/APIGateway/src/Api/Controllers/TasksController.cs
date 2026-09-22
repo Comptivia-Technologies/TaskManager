@@ -142,6 +142,7 @@ public class TasksController : ControllerBase
             var taskName = GetStringProperty(taskServiceRoot, "taskName", "TaskName") ?? "";
             var description = GetStringProperty(taskServiceRoot, "description", "Description");
             var createdAt = GetStringProperty(taskServiceRoot, "createdAt", "CreatedAt");
+            var dueDate = GetStringProperty(taskServiceRoot, "slaDeadline", "SLADeadline");
 
             // Step 2: Get workflow name
             string? workflowName = null;
@@ -224,6 +225,7 @@ public class TasksController : ControllerBase
                 stageName = stageName,
                 assignedToMemberId = memberId,
                 assignedToMemberName = assigneeName,
+                dueDate = dueDate,
                 createdAt = createdAt
             };
         }

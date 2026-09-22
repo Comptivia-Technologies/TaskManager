@@ -77,6 +77,14 @@ const TaskDetail = () => {
       .reverse()
       .find((entry) => entry.action === 'Completed' && (entry.stageId === stageId || entry.fromStageId === stageId))
       ?.memberName;
+  const assigneeFor = (stageId?: string) =>
+    stageId
+      ? [...history]
+          .reverse()
+          .find((entry) => entry.action === 'Assigned' && (entry.stageId === stageId || entry.toStageId === stageId))
+          ?.memberName
+      : undefined;
+  const workingNow = task.assignedToMemberName || assigneeFor(currentStageId) || 'Unassigned';
 
   const stageStatus = (stage: Stage) => {
     const isCurrent = stage.stageId === currentStageId;
@@ -136,7 +144,7 @@ const TaskDetail = () => {
               <p className="text-xs text-black/60">Working now</p>
               <p className="font-semibold text-black inline-flex items-center">
                 <FiUser className="mr-1.5 text-[#434E78]/60" />
-                {task.assignedToMemberName || 'Unassigned'}
+                {workingNow}
               </p>
             </div>
             <div>
@@ -169,12 +177,8 @@ const TaskDetail = () => {
                 {stages.map((stage) => {
                   const status = stageStatus(stage);
                   const completer = completerFor(stage.stageId);
-                  const latestAssignee = [...history]
-                    .reverse()
-                    .find((entry) => entry.action === 'Assigned' && (entry.stageId === stage.stageId || entry.toStageId === stage.stageId))
-                    ?.memberName;
                   const person = status === 'Current'
-                    ? task.assignedToMemberName || latestAssignee || 'Unassigned'
+                    ? task.assignedToMemberName || assigneeFor(stage.stageId) || 'Unassigned'
                     : completer || '—';
                   return (
                     <tr key={stage.stageId}>

@@ -86,7 +86,6 @@ describe('TaskDetail', () => {
       status: 'InProgress',
       priority: 'High',
       workflowId: 'w1',
-      assignedToMemberName: 'Ajith PR',
       createdAt: '2026-09-22T04:00:00Z',
       updatedAt: '2026-09-22T04:00:00Z',
     });
@@ -109,6 +108,7 @@ describe('TaskDetail', () => {
     expect(screen.getByText('1. Admin').closest('tr')).toHaveTextContent('Shilpa S');
     expect(screen.getByText('2. Team Lead').closest('tr')).toHaveTextContent('Current');
     expect(screen.getByText('2. Team Lead').closest('tr')).toHaveTextContent('Ajith PR');
+    expect(screen.getByText('Working now').parentElement).toHaveTextContent('Ajith PR');
     expect(screen.getByText('3. Director').closest('tr')).toHaveTextContent('Upcoming');
   });
 });
