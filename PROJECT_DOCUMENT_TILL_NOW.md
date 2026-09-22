@@ -2,7 +2,7 @@
 
 **Task Management & Workflow Orchestration System**  
 **Audience:** anyone taking over the repo with no prior context  
-**Code snapshot:** current workspace as of 17 Sep 2026 (includes local RabbitMQ event bus work)
+**Code snapshot:** current workspace as of 22 Sep 2026 (includes task detail, stage history, and return-stage)
 
 There is an older file `COMPLETE_PROJECT_DOCUMENTATION.md`. Treat **this document** as the current working picture; that older file still describes AWS EventBridge as the default local path.
 
@@ -198,7 +198,7 @@ Default CRA port: **3000**. After login, app lands on `/workflows`.
 frontend/workflow/src/
   App.tsx                 routes
   pages/                  screens
-  components/             Sidebar, wizard, SLA, conditions, etc.
+  components/             Sidebar, wizard, SLA, conditions, TaskHistoryGraph, etc.
   contexts/AuthContext.tsx
   services/               axios clients (never fetch from pages except tenant lookup)
   hooks/                  useWorkflows, useTeams, useMembers
@@ -224,7 +224,8 @@ All pages except `/login` wrap **Sidebar + ProtectedRoute**. Sidebar is fixed 25
 | `/teams` | `Teams.tsx` | Team CRUD, assign members, nested member CRUD, related workflows |
 | `/members` | `Members.tsx` | Member CRUD, team filter, pick Product Hub users on create |
 | `/members/:id` | `MemberDetail.tsx` | Read-only member + categorized tasks |
-| `/tasks` | `Tasks.tsx` | Paginated task **list** + priority filter. Click row → workflow detail. **No create/edit/delete UI** |
+| `/tasks` | `Tasks.tsx` | Paginated task **list** + priority filter. Click row → `/tasks/:id`. Workflow name → workflow detail. History icon opens a modal. **No create/edit/delete UI** |
+| `/tasks/:id` | `TaskDetail.tsx` | Read-only task: status, priority, current stage, assignee, due date, stage graph, stage table, activity list |
 | `/sla-configuration` | `SLAConfiguration.tsx` | SLA cards per workflow; open configure modal. No delete button |
 | `/workload-configuration` | `WorkloadConfiguration.tsx` | Read-only workload scores per member |
 | `/priority-rules` | `PriorityRules.tsx` | CRUD rules; ConditionBuilder; global vs workflow-scoped |
@@ -278,15 +279,33 @@ This is the intended “configure a new process” path. After that, tasks are e
 - `taskService.getAllPaginated` → **`GET /api/tasks?priority&page&limit`**
 - That hits **WorkflowManagement** (CRUD copy), not TaskService.
 - `PAGE_SIZE = 10`; refetch on window focus / visibility / online.
-- Completing/escalating a stage is **not** exposed in this page. APIs exist: `POST /api/task-service/complete-stage/{id}` and `escalate-stage/{id}`.
+- Row click → `/tasks/{taskId}`. Workflow name click stays on `/workflows/{workflowId}`.
+- History button calls `taskService.getHistory` → **`GET /api/task-service/{id}/history`** and shows actions `Assigned`, `Completed`, `Returned` in a modal.
+- Completing, escalating, or returning a stage is **not** a button on this page. Those APIs exist (see 9.8).
 
-### 6.5 SLA / Workload / Priority
+### 6.5 Task detail (`TaskDetail.tsx`)
+
+Loads in parallel:
+
+1. `taskService.getById` → gateway `GET /api/tasks/{guid}` (enriched task)
+2. `workflowService.getById` (stages via `getStages` if the workflow payload has none)
+3. `taskService.getHistory` → `GET /api/task-service/{id}/history` (empty list if that call fails)
+
+`TaskHistoryGraph` draws stage nodes from workflow stages plus history. Current stage comes from history (`resolveCurrentStageId`), then the task’s `stageId` / `stageName`.
+
+Stage table marks each stage **Current**, **Completed**, or **Upcoming**. Person column uses the latest `Assigned` member for the current stage and the latest `Completed` member for earlier stages.
+
+Activity list is the history sorted by `sequence`: action, IST time, member, stage, from → to, optional reason.
+
+This page does **not** call complete-stage, escalate-stage, or return-stage.
+
+### 6.6 SLA / Workload / Priority
 
 - SLA: JSON map of priority name → `{ responseTime: minutes }`.
 - Workload page is display-only (`GET /api/workload/{memberId}`).
 - Priority rules: `conditionsJson` like `{ "all": [{ "path": "$.taskType", "op": "eq", "value": "..." }] }`. `salience` = evaluation order (higher first). `workflowId` null = global rule.
 
-### 6.6 Users / Roles
+### 6.7 Users / Roles
 
 - Users live in **Product Hub**, not in WorkflowManagement DB.
 - Roles/permissions live in **WorkflowManagement** (`Roles`, `Permissions`, `RolePermissions`).
@@ -452,6 +471,8 @@ CRUD + `GET /{id}/tasks`.
 | DELETE | `/{id}` | Deletes TaskService + WorkflowManagement copies |
 | POST | `/complete-stage/{id}` | Process advance → `TaskStageCompletedEvent` |
 | POST | `/escalate-stage/{id}` | `{ reason? }` — does **not** increment member completion count |
+| POST | `/return-stage/{id}` | `{ targetStageId, reason? }` — returns the task to an earlier stage and reassigns the previous assignee of that stage. Publishes `TaskStageReturnedEvent`. |
+| GET | `/{id}/history` | Ordered `TaskStageHistory` rows: `historyId`, `sequence`, `action` (`Assigned` \| `Completed` \| `Returned`), stage, member, optional from/to stage, `reason`, `occurredAt` (UTC) |
 | POST | `/sync-overdue` | Maintenance |
 | POST | `/cleanup-orphaned` | Remove WF-Management rows missing in TaskService |
 | POST | `/sync-from-workflow-management` | Pull CRUD tasks into TaskService |
@@ -527,6 +548,8 @@ Owns the **runtime Task** row and the event-id columns used for idempotency:
 
 `CreateTaskAsync` persists then publishes `TaskCreatedEvent`. Returns immediately (202).
 
+Also owns append-only `TaskStageHistory` (written by Assigned / Completed / Returned handlers) and `ReturnToStageAsync` (`POST /return-stage/{id}`).
+
 ### 10.4 WorkflowService (`:5006`)
 
 **Selection** (`WorkflowSelectionService`) on `TaskCreatedEvent`, same org only:
@@ -595,7 +618,8 @@ POST /api/task-service
   → SLAConfiguredEvent             (SLAManager)
   → TaskAssignedEvent              (WorkloadService)
   → TaskStageStartedEvent          (WorkflowService)
-  → complete-stage  OR  timeout/manual escalate
+  → complete-stage  OR  timeout/manual escalate  OR  return-stage
+  → return-stage publishes TaskStageReturnedEvent (previous assignee of the target stage)
   → maybe TaskStageReassignmentNeededEvent → new TaskAssignedEvent
   → … next stages …
   → TaskCompletedEvent
@@ -607,7 +631,7 @@ File: `backend/Shared/Shared.Contracts/Constants/EventBusConstants.cs`
 
 **Sources:** `task-manager.task|workflow|sla|workload|priority`
 
-**Detail types (routing keys on RabbitMQ):** `TaskCreated`, `TaskCreatedForPriority`, `PriorityAssigned`, `WorkflowSelected`, `SLAConfigured`, `TaskAssigned`, `TaskOverdue`, `TaskStatusUpdated`, `TaskStageStarted`, `TaskStageCompleted`, `TaskStageEscalated`, `TaskStageEscalationTriggered`, `TaskStageReassignmentNeeded`, `TaskCompleted`
+**Detail types (routing keys on RabbitMQ):** `TaskCreated`, `TaskCreatedForPriority`, `PriorityAssigned`, `WorkflowSelected`, `SLAConfigured`, `TaskAssigned`, `TaskOverdue`, `TaskStatusUpdated`, `TaskStageStarted`, `TaskStageCompleted`, `TaskStageEscalated`, `TaskStageEscalationTriggered`, `TaskStageReturned`, `TaskStageReassignmentNeeded`, `TaskCompleted`
 
 **Queues:** `task-service`, `workflow-service`, `sla-service`, `workload-service`, `priority-service`
 
@@ -615,8 +639,8 @@ File: `backend/Shared/Shared.Contracts/Constants/EventBusConstants.cs`
 
 | Queue | Service | Events |
 |-------|---------|--------|
-| task-service | TaskService | Created, WorkflowSelected, PriorityAssigned, SLAConfigured, Assigned, Overdue, StageStarted/Completed/Escalated/EscalationTriggered, Completed |
-| workflow-service | WorkflowService | TaskCreated, TaskAssigned, StageCompleted, StageEscalated, StageEscalationTriggered |
+| task-service | TaskService | Created, WorkflowSelected, PriorityAssigned, SLAConfigured, Assigned, Overdue, StageStarted/Completed/Escalated/EscalationTriggered/Returned, Completed |
+| workflow-service | WorkflowService | TaskCreated, TaskAssigned, StageCompleted, StageEscalated, StageEscalationTriggered, StageReturned |
 | priority-service | PriorityRuleEngine | WorkflowSelected |
 | sla-service | SLAManagerService | PriorityAssigned |
 | workload-service | WorkloadService | SLAConfigured, TaskStatusUpdated, TaskStageReassignmentNeeded |
@@ -642,6 +666,7 @@ Local Development json files currently use **RabbitMQ**. Production `appsettings
 **TaskService DB**
 
 - `Tasks` (orchestration copy + event-id columns)
+- `TaskStageHistory` (append-only: `Assigned`, `Completed`, `Returned`; unique on `(TaskId, Sequence)` and `(CorrelationId, Action)`)
 
 **PriorityRuleEngine DB**
 
@@ -661,7 +686,7 @@ All via `REACT_APP_API_URL` (`http://localhost:5004`):
 | `stageService.ts` | `/api/stages` |
 | `teamService.ts` | `/api/teams` |
 | `memberService.ts` | `/api/members` |
-| `taskService.ts` | `/api/tasks` (list/filter; **not** `/api/task-service`) |
+| `taskService.ts` | `/api/tasks` list/filter/get-by-id; **also** `GET /api/task-service/{id}/history` |
 | `slaService.ts` | `/api/sla-configurations` |
 | `priorityRulesService.ts` | `/api/priority-rules` |
 | `workloadService.ts` | `/api/workload/{memberId}` |
@@ -713,7 +738,7 @@ Nine containerized backends. Frontend env for QA/prod: `.env.qa`, `.env.producti
 ## 17. Known gaps / traps for the next owner
 
 1. **No task create UI.** Orchestration is `POST /api/task-service`. The Tasks page only lists WorkflowManagement data.
-2. **Kanban board is unused.** Completing a stage from the UI is not wired.
+2. **Kanban board is unused.** Task detail and the tasks history modal are read-only. Completing, escalating, or returning a stage is still API-only (`complete-stage`, `escalate-stage`, `return-stage`).
 3. **Two task stores.** CRUD `POST /api/tasks` ≠ event pipeline. Use TaskService for real tasks.
 4. **Roles don’t protect screens.** Anyone logged in can open Users, SLA, etc.
 5. **Gateway GET `/api/tasks/{guid}`** is a special enriched path; list GET still goes to WorkflowManagement.
@@ -742,7 +767,7 @@ Nine containerized backends. Frontend env for QA/prod: `.env.qa`, `.env.producti
 
 | Concern | Start here |
 |---------|------------|
-| Routes / pages | `frontend/workflow/src/App.tsx` |
+| Routes / pages | `frontend/workflow/src/App.tsx`, `pages/TaskDetail.tsx`, `components/TaskHistoryGraph.tsx` |
 | Auth UI | `AuthContext.tsx`, `Login.tsx`, `ProtectedRoute.tsx` |
 | HTTP client | `frontend/workflow/src/services/api.ts` |
 | Gateway | `backend/APIGateway/Program.cs`, `appsettings.json` (YARP) |
