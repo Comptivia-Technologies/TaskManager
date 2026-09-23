@@ -26,7 +26,6 @@ const Users = () => {
     organisationId: '',
     role: '',
   });
-  const [productRoleId, setProductRoleId] = useState('');
   const [selectedRoleId, setSelectedRoleId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -82,7 +81,6 @@ const Users = () => {
   const openAddModal = () => {
     setEditingUser(null);
     setFormData({ fullName: '', email: '', organisationId: organizationId || '', role: '' });
-    setProductRoleId('');
     setSelectedRoleId('');
     setIsModalOpen(true);
   };
@@ -104,7 +102,6 @@ const Users = () => {
     setIsModalOpen(false);
     setEditingUser(null);
     setFormData({ fullName: '', email: '', organisationId: organizationId || '', role: '' });
-    setProductRoleId('');
     setSelectedRoleId('');
   };
 
@@ -149,6 +146,11 @@ const Users = () => {
       toast.error('Organization or product not configured');
       return;
     }
+    const roleId = selectedRoleId || roles.find((r) => r.name === formData.role)?.roleId;
+    if (!roleId) {
+      toast.error('Please select a role');
+      return;
+    }
     setSubmitting(true);
     try {
       const payload: CreateOrganizationUserPayload = {
@@ -156,14 +158,9 @@ const Users = () => {
         email: formData.email,
         full_name: formData.fullName,
         user_type: 'organization',
-        role: formData.role,
-        products_data: [
-          {
-            product_id: productId,
-            role_id: productRoleId.trim() || selectedRoleId,
-            role_name: formData.role,
-          },
-        ],
+        product_id: productId,
+        role_id: roleId,
+        role_name: formData.role,
       };
       await userService.createOrganizationUser(payload);
       toast.success('User added successfully');
@@ -456,20 +453,6 @@ const Users = () => {
                   ))}
                 </select>
               </div>
-              {!editingUser && (
-                <div className="mb-6">
-                  <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                    Product role ID
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Optional – from Product Hub"
-                    value={productRoleId}
-                    onChange={(e) => setProductRoleId(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  />
-                </div>
-              )}
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
