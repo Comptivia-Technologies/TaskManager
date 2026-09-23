@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Azure-inspired Design System */
+/* Azure-inspired Design System for Workflow */
 @layer base {
   * {
     font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Oxygen',
