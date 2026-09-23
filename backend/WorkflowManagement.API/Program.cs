@@ -429,6 +429,18 @@ using (var scope = app.Services.CreateScope())
                 seedCmd.Parameters.AddWithValue("category", (object?)p.Category ?? DBNull.Value);
                 await seedCmd.ExecuteNonQueryAsync();
             }
+
+            await using (var adminPermsCmd = new NpgsqlCommand(
+                @"INSERT INTO ""RolePermissions"" (""RoleId"", ""PermissionId"")
+                  SELECT r.""RoleId"", p.""PermissionId""
+                  FROM ""Roles"" r
+                  CROSS JOIN ""Permissions"" p
+                  WHERE r.""Name"" = 'ADMIN' AND r.""OrganizationId"" IS NULL
+                  ON CONFLICT DO NOTHING",
+                npgsqlConnection))
+            {
+                await adminPermsCmd.ExecuteNonQueryAsync();
+            }
             logger.LogInformation("Permissions seed completed.");
         }
         finally
