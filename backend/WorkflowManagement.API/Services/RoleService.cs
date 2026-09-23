@@ -28,6 +28,7 @@ public class RoleService : IRoleService
     public async Task<IEnumerable<RoleReadDto>> GetAllAsync()
     {
         var roles = await _context.Roles
+            .Where(r => r.OrganizationId == null)
             .Include(r => r.RolePermissions)
             .ThenInclude(rp => rp.Permission)
             .OrderBy(r => r.Name)
