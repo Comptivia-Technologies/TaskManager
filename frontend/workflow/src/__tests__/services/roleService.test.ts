@@ -9,7 +9,10 @@ describe('roleService', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('getByOrganization maps response to Role[]', async () => {
-    const raw = [{ roleId: '1', name: 'Admin', organizationId: 'o1', permissionCodes: ['read'] }];
+    const raw = {
+      success: 'SUCCESS',
+      data: { roles: [{ id: '1', name: 'Admin', organizationId: 'o1', permissions: ['read'] }] },
+    };
     mockedApi.get.mockResolvedValue({ data: raw });
     const result = await roleService.getByOrganization('o1');
     expect(mockedApi.get).toHaveBeenCalledWith('/api/roles/organization/o1');
@@ -18,7 +21,10 @@ describe('roleService', () => {
   });
 
   it('getByOrganization maps null description to undefined', async () => {
-    const raw = [{ roleId: '1', name: 'R1', organizationId: 'o1', permissionCodes: [], description: null }];
+    const raw = {
+      success: 'SUCCESS',
+      data: { roles: [{ id: '1', name: 'R1', organizationId: 'o1', permissions: [], description: null }] },
+    };
     mockedApi.get.mockResolvedValue({ data: raw });
     const result = await roleService.getByOrganization('o1');
     expect(result[0].description).toBeUndefined();
@@ -29,19 +35,21 @@ describe('roleService', () => {
     const empty = await roleService.getByOrganization('o1');
     expect(empty).toEqual([]);
 
-    mockedApi.get.mockResolvedValue({ data: [{ roleId: '1', name: 'R1', organizationId: 'o1', permissionCodes: undefined as any }] });
+    mockedApi.get.mockResolvedValue({
+      data: { success: 'SUCCESS', data: { roles: [{ id: '1', name: 'R1', organizationId: 'o1', permissions: undefined as any }] } },
+    });
     const out = await roleService.getByOrganization('o1');
     expect(out[0].permissions).toEqual([]);
   });
 
   it('create sends organizationId and permissionCodes', async () => {
-    mockedApi.post.mockResolvedValue({ data: { roleId: '1', name: 'R1', organizationId: 'o1', permissionCodes: [] } });
+    mockedApi.post.mockResolvedValue({ data: { id: '1', name: 'R1', organizationId: 'o1', permissions: [] } });
     await roleService.create('o1', { name: 'R1' });
     expect(mockedApi.post).toHaveBeenCalledWith('/api/roles', { name: 'R1', description: null, organizationId: 'o1', permissionCodes: [] });
   });
 
   it('update and delete call correct endpoints', async () => {
-    mockedApi.put.mockResolvedValue({ data: { roleId: '1', name: 'R1', permissionCodes: [] } });
+    mockedApi.put.mockResolvedValue({ data: { id: '1', name: 'R1', permissions: [] } });
     mockedApi.delete.mockResolvedValue(undefined);
     await roleService.update('1', { name: 'R2' });
     expect(mockedApi.put).toHaveBeenCalledWith('/api/roles/1', expect.any(Object));

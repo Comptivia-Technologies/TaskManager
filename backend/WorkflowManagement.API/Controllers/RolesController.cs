@@ -20,7 +20,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpGet("all")]
-    public async Task<ActionResult<IEnumerable<RoleReadDto>>> GetAll([FromHeader(Name = "X-Api-Key")] string? apiKey)
+    public async Task<ActionResult<RolesListResponse>> GetAll([FromHeader(Name = "X-Api-Key")] string? apiKey)
     {
         var expectedKey = _configuration["ApiKeys:GetAllRoles"];
         if (string.IsNullOrEmpty(expectedKey) || string.IsNullOrEmpty(apiKey) || !string.Equals(apiKey, expectedKey, StringComparison.Ordinal))
@@ -31,7 +31,7 @@ public class RolesController : ControllerBase
         try
         {
             var roles = await _roleService.GetAllAsync();
-            return Ok(roles);
+            return Ok(new RolesListResponse { Data = new RolesListData { Roles = roles.ToList() } });
         }
         catch (Exception ex)
         {
@@ -41,12 +41,12 @@ public class RolesController : ControllerBase
     }
 
     [HttpGet("organization/{organizationId:guid}")]
-    public async Task<ActionResult<IEnumerable<RoleReadDto>>> GetByOrganization(Guid organizationId)
+    public async Task<ActionResult<RolesListResponse>> GetByOrganization(Guid organizationId)
     {
         try
         {
             var roles = await _roleService.GetByOrganizationAsync(organizationId);
-            return Ok(roles);
+            return Ok(new RolesListResponse { Data = new RolesListData { Roles = roles.ToList() } });
         }
         catch (Exception ex)
         {

@@ -2,26 +2,33 @@ import api from './api';
 import { Role, RoleCreate } from '../types';
 
 interface RoleApiResponse {
-  roleId: string;
+  id: string;
   name: string;
   description?: string | null;
   organizationId: string;
-  permissionCodes: string[];
+  permissions: string[];
+}
+
+interface RolesListResponse {
+  success: string;
+  data: {
+    roles: RoleApiResponse[];
+  };
 }
 
 function mapToRole(r: RoleApiResponse): Role {
   return {
-    roleId: r.roleId,
+    roleId: r.id,
     name: r.name,
     description: r.description ?? undefined,
-    permissions: r.permissionCodes ?? [],
+    permissions: r.permissions ?? [],
   };
 }
 
 export const roleService = {
   getByOrganization: async (organizationId: string): Promise<Role[]> => {
-    const response = await api.get<RoleApiResponse[]>(`/api/roles/organization/${organizationId}`);
-    return (response.data ?? []).map(mapToRole);
+    const response = await api.get<RolesListResponse>(`/api/roles/organization/${organizationId}`);
+    return (response.data?.data?.roles ?? []).map(mapToRole);
   },
 
   create: async (organizationId: string, data: RoleCreate): Promise<Role> => {
