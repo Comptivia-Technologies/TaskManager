@@ -1,0 +1,142 @@
+name: Deploy Backend to GCP
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend-gcp.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: gcp-backend-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT: workflow-automation-dev-509411
+  GCP_REGION: asia-south1
+  GAR_REPO: asia-south1-docker.pkg.dev/workflow-automation-dev-509411/task-manager
+  RUNTIME_SA: task-manager-run@workflow-automation-dev-509411.iam.gserviceaccount.com
+  DEPLOY_SA: github-deployer@workflow-automation-dev-509411.iam.gserviceaccount.com
+  WORKLOAD_IDENTITY_PROVIDER: projects/746256073595/locations/global/workloadIdentityPools/github/providers/github
+  PROJECT_NUMBER: "746256073595"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dir: APIGateway
+            image: api-gateway
+          - dir: TaskService
+            image: task-service
+          - dir: WorkflowService
+            image: workflow-service
+          - dir: SLAManagerService
+            image: sla-manager-service
+          - dir: WorkloadService
+            image: workload-service
+          - dir: PriorityRuleEngine.API
+            image: priority-rule-engine-api
+          - dir: WorkflowManagement.API
+            image: workflow-management-api
+          - dir: SLAConfiguration.API
+            image: sla-configuration-api
+          - dir: Workload.API
+            image: workload-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Build and push
+        working-directory: backend
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+          image="${{ env.GAR_REPO }}/${{ matrix.image }}"
+          docker build -f "${{ matrix.dir }}/Dockerfile" -t "$image:${{ github.sha }}" -t "$image:latest" .
+          docker push "$image:${{ github.sha }}"
+          docker push "$image:latest"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Deploy Cloud Run services
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          host="https://SERVICE-${PROJECT_NUMBER}.${GCP_REGION}.run.app"
+          wm="${host/SERVICE/workflow-management-api}"
+          task="${host/SERVICE/task-service}"
+          sla="${host/SERVICE/sla-configuration-api}"
+          priority="${host/SERVICE/priority-rule-engine-api}"
+          workload="${host/SERVICE/workload-api}"
+
+          base="ASPNETCORE_FORWARDEDHEADERS_ENABLED=true,EVENTBUS_PROVIDER=GCP,EventBus__GCP__ProjectId=${GCP_PROJECT},EventBus__GCP__ServicePrefix=task-manager,EventBus__GCP__SchedulerLocation=${GCP_REGION},EventBus__GCP__TasksQueueId=task-manager-schedules,EventBus__GCP__ServiceAccountEmail=${RUNTIME_SA},DB_HOST=ep-spring-field-a15ak7se-pooler.ap-southeast-1.aws.neon.tech,DB_PORT=5432,DB_USER=neondb_owner,Cors__AllowedOrigin=http://localhost:3000"
+
+          deploy() {
+            local name="$1" db="$2" min="$3" extra="${4:-}"
+            local args=(
+              run deploy "$name"
+              --project "$GCP_PROJECT"
+              --image "${GAR_REPO}/${name}:${IMAGE_TAG}"
+              --region "$GCP_REGION"
+              --service-account "$RUNTIME_SA"
+              --port 8080
+              --allow-unauthenticated
+              --memory 512Mi
+              --min-instances "$min"
+              --set-secrets "DB_PASSWORD=neon-db-password:latest"
+              --set-env-vars "${base},DB_NAME=${db}${extra}"
+              --quiet
+            )
+            if [ "$min" = "1" ]; then
+              args+=(--no-cpu-throttling)
+            fi
+            gcloud "${args[@]}"
+          }
+
+          deploy workflow-management-api WorkflowManagement 0
+          deploy sla-configuration-api WorkflowManagement 0
+          deploy workload-api WorkflowManagement 0
+          deploy priority-rule-engine-api PriorityRuleEngine 1
+          deploy sla-manager-service WorkflowManagement 1
+          deploy workload-service WorkflowManagement 1
+          deploy workflow-service WorkflowManagement 1 ",TaskServiceApi__BaseUrl=${task}/api"
+          deploy task-service TaskService 1 ",WorkflowManagementApi__BaseUrl=${wm}/api"
+
+          gcloud run deploy api-gateway \
+            --project "$GCP_PROJECT" \
+            --image "${GAR_REPO}/api-gateway:${IMAGE_TAG}" \
+            --region "$GCP_REGION" \
+            --service-account "$RUNTIME_SA" \
+            --port 8080 \
+            --allow-unauthenticated \
+            --memory 512Mi \
+            --set-env-vars "ASPNETCORE_FORWARDEDHEADERS_ENABLED=true,EVENTBUS_PROVIDER=GCP,EventBus__GCP__ProjectId=${GCP_PROJECT},EventBus__GCP__ServicePrefix=task-manager,EventBus__GCP__SchedulerLocation=${GCP_REGION},EventBus__GCP__TasksQueueId=task-manager-schedules,EventBus__GCP__ServiceAccountEmail=${RUNTIME_SA},ReverseProxy__Clusters__workflow-cluster__Destinations__destination1__Address=${wm},ReverseProxy__Clusters__sla-cluster__Destinations__destination1__Address=${sla},ReverseProxy__Clusters__priority-cluster__Destinations__destination1__Address=${priority},ReverseProxy__Clusters__workload-cluster__Destinations__destination1__Address=${workload},ReverseProxy__Clusters__task-service-cluster__Destinations__destination1__Address=${task},TaskServiceApi__BaseUrl=${task}/api,WorkflowManagementApi__BaseUrl=${wm}/api,AuthService__BaseUrl=https://dev.api.product-hub.comptivia.com,Firebase__ProjectId=product-hub-478006" \
+            --quiet

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace APIGateway.Api.Controllers;
 
 /// <summary>
-/// Health check endpoint for Load Balancer
+/// Health check endpoint for Load Balancer API Gateway
 /// </summary>
 [ApiController]
 [Route("")]
