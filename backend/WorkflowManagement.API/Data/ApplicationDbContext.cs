@@ -162,7 +162,6 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Role>(entity =>
         {
             entity.HasKey(e => e.RoleId);
-            entity.Property(e => e.OrganizationId).IsRequired();
             entity.HasIndex(e => e.OrganizationId);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Description).HasMaxLength(1000);

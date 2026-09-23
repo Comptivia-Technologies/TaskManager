@@ -364,6 +364,12 @@ using (var scope = app.Services.CreateScope())
                         ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
                     CREATE INDEX IF NOT EXISTS ""IX_Roles_OrganizationId"" ON ""Roles"" (""OrganizationId"");
+                    ALTER TABLE ""Roles"" ALTER COLUMN ""OrganizationId"" DROP NOT NULL;
+                    INSERT INTO ""Roles"" (""RoleId"", ""Name"", ""Description"", ""OrganizationId"", ""CreatedAt"", ""UpdatedAt"")
+                    SELECT gen_random_uuid(), 'ADMIN', 'Default admin role', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM ""Roles"" WHERE ""Name"" = 'ADMIN' AND ""OrganizationId"" IS NULL
+                    );
                 ";
                 await rolesTableCmd.ExecuteNonQueryAsync();
                 logger.LogInformation("Roles table ensured.");
