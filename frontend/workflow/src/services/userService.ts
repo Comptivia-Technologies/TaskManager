@@ -176,6 +176,7 @@ export interface CreateOrganizationUserPayload {
   email: string;
   full_name: string;
   user_type: string;
-  role: string;
-  products_data: { product_id: string; role_id: string; role_name: string }[];
+  product_id: string;
+  role_id: string;
+  role_name: string;
 }

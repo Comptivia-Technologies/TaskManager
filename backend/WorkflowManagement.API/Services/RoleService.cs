@@ -39,7 +39,7 @@ public class RoleService : IRoleService
     public async Task<IEnumerable<RoleReadDto>> GetByOrganizationAsync(Guid organizationId)
     {
         var roles = await _context.Roles
-            .Where(r => r.OrganizationId == organizationId)
+            .Where(r => r.OrganizationId == null || r.OrganizationId == organizationId)
             .Include(r => r.RolePermissions)
             .ThenInclude(rp => rp.Permission)
             .OrderBy(r => r.Name)

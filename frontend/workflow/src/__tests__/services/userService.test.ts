@@ -104,9 +104,10 @@ describe('userService', () => {
       organization_id: 'o1',
       email: 'e@b.com',
       full_name: 'E',
-      user_type: 'standard',
-      role: 'r',
-      products_data: [{ product_id: 'p', role_id: 'rid', role_name: 'rn' }],
+      user_type: 'organization',
+      product_id: 'p',
+      role_id: 'rid',
+      role_name: 'rn',
     };
     const out = await userService.createOrganizationUser(payload);
     expect(mockedApi.post).toHaveBeenCalledWith('/api/auth/organizationuser/create', payload);
