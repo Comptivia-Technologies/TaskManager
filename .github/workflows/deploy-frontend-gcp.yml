@@ -1,0 +1,78 @@
+name: Deploy Frontend to GCP
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend-gcp.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: gcp-frontend-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT: workflow-automation-dev-509411
+  GCP_REGION: asia-south1
+  GAR_REPO: asia-south1-docker.pkg.dev/workflow-automation-dev-509411/task-manager
+  DEPLOY_SA: github-deployer@workflow-automation-dev-509411.iam.gserviceaccount.com
+  WORKLOAD_IDENTITY_PROVIDER: projects/746256073595/locations/global/workloadIdentityPools/github/providers/github
+  REACT_APP_ENV: development
+  REACT_APP_API_URL: https://api-gateway-746256073595.asia-south1.run.app
+  REACT_APP_AUTH_API_URL: https://dev.api.product-hub.comptivia.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: frontend/workflow/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend/workflow
+        env:
+          CI: false
+          REACT_APP_PRODUCT_ID: ${{ secrets.REACT_APP_PRODUCT_ID }}
+          REACT_APP_FIREBASE_API_KEY: ${{ secrets.REACT_APP_FIREBASE_API_KEY }}
+          REACT_APP_FIREBASE_PROJECT_ID: ${{ secrets.REACT_APP_FIREBASE_PROJECT_ID }}
+          REACT_APP_FIREBASE_AUTH_DOMAIN: ${{ secrets.REACT_APP_FIREBASE_AUTH_DOMAIN }}
+        run: |
+          npm ci
+          npm run build
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Build image and deploy
+        working-directory: frontend/workflow
+        run: |
+          set -euo pipefail
+          gcloud auth configure-docker ${GCP_REGION}-docker.pkg.dev --quiet
+          image="${GAR_REPO}/frontend:${GITHUB_SHA}"
+          docker build -t "$image" .
+          docker push "$image"
+          gcloud run deploy workflowautomation \
+            --project "$GCP_PROJECT" \
+            --image "$image" \
+            --region "$GCP_REGION" \
+            --port 8080 \
+            --allow-unauthenticated \
+            --memory 256Mi \
+            --quiet
