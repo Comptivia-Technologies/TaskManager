@@ -20,6 +20,8 @@ public class TaskService : ITaskService
 {
     private readonly ITaskRepository _repository;
     private readonly ITaskStageHistoryRepository _historyRepository;
+    private readonly ITaskStageDataRepository _stageDataRepository;
+    private readonly ITaskStageNominationRepository _nominationRepository;
     private readonly IEventBus _eventBus;
     private readonly ILogger<TaskService> _logger;
     private readonly IConfiguration _configuration;
@@ -29,6 +31,8 @@ public class TaskService : ITaskService
     public TaskService(
         ITaskRepository repository,
         ITaskStageHistoryRepository historyRepository,
+        ITaskStageDataRepository stageDataRepository,
+        ITaskStageNominationRepository nominationRepository,
         IEventBus eventBus,
         ILogger<TaskService> logger,
         IConfiguration configuration,
@@ -37,6 +41,8 @@ public class TaskService : ITaskService
     {
         _repository = repository;
         _historyRepository = historyRepository;
+        _stageDataRepository = stageDataRepository;
+        _nominationRepository = nominationRepository;
         _eventBus = eventBus;
         _logger = logger;
         _configuration = configuration;
@@ -59,6 +65,10 @@ public class TaskService : ITaskService
             Priority = createDto.Priority,
             TaskType = createDto.TaskType,
             Status = DomainTaskStatus.Created,
+            CreatedByMemberId = createDto.CreatedByMemberId,
+            DataJson = createDto.TaskData != null && createDto.TaskData.Count > 0
+                ? System.Text.Json.JsonSerializer.Serialize(createDto.TaskData)
+                : null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -76,6 +86,8 @@ public class TaskService : ITaskService
             Priority = createdTask.Priority,
             TaskType = createdTask.TaskType,
             TaskData = createDto.TaskData,
+            // A manually raised enquiry goes to whoever raised it, not a workload pick.
+            PreferredMemberId = createDto.CreatedByMemberId,
             PriorityAssigned = false,
             CreatedAt = createdTask.CreatedAt,
             CorrelationId = correlationId
@@ -822,7 +834,23 @@ public class TaskService : ITaskService
     /// Complete the current stage and move to the next stage
     /// Publishes TaskStageCompletedEvent which triggers stage orchestration
     /// </summary>
-    public async System.Threading.Tasks.Task CompleteCurrentStageAsync(Guid taskId)
+    public System.Threading.Tasks.Task CompleteCurrentStageAsync(Guid taskId)
+        => CompleteCurrentStageAsync(taskId, null, null);
+
+    public System.Threading.Tasks.Task CompleteCurrentStageAsync(Guid taskId, Dictionary<string, object>? stageData)
+        => CompleteCurrentStageAsync(taskId, stageData, null, null);
+
+    public System.Threading.Tasks.Task CompleteCurrentStageAsync(
+        Guid taskId,
+        Dictionary<string, object>? stageData,
+        Guid? nextStageMemberId)
+        => CompleteCurrentStageAsync(taskId, stageData, nextStageMemberId, null);
+
+    public async System.Threading.Tasks.Task CompleteCurrentStageAsync(
+        Guid taskId,
+        Dictionary<string, object>? stageData,
+        Guid? nextStageMemberId,
+        Dictionary<string, Guid>? stageNominations)
     {
         var task = await _repository.GetByIdAsync(taskId);
         if (task == null)
@@ -875,6 +903,75 @@ public class TaskService : ITaskService
 
         var nextStage = orderedStages.FirstOrDefault(s => s.StageOrder > currentStage.StageOrder);
 
+        // Checked before anything is published. Advancing into a team with no members
+        // leaves the task stranded on the next stage with no assignee, because the
+        // downstream reassignment throws and the message is eventually dropped.
+        if (nextStage != null)
+        {
+            var nextStageMembers = await GetTeamMembersAsync(nextStage.TeamId, task.OrganizationId);
+
+            if (nextStageMembers.Count == 0)
+                throw new InvalidOperationException(
+                    $"The team for '{nextStage.StageName}' has no members, so this cannot be moved on yet. Add a member to that team first.");
+
+            if (nextStageMemberId.HasValue &&
+                !nextStageMembers.Any(m => m.MemberId == nextStageMemberId.Value))
+            {
+                throw new InvalidOperationException(
+                    $"The chosen member is not on the team for '{nextStage.StageName}'.");
+            }
+        }
+        else if (nextStageMemberId.HasValue)
+        {
+            throw new InvalidOperationException("This is the final stage, so there is nobody to assign it to.");
+        }
+
+        // Appointments for stages further ahead. Validated against the target stage's
+        // team now, so a bad choice is refused while the person is still looking at it
+        // rather than surfacing several stages later.
+        if (stageNominations != null && stageNominations.Count > 0)
+        {
+            foreach (var (stageIdText, memberId) in stageNominations)
+            {
+                if (!Guid.TryParse(stageIdText, out var nominatedStageId))
+                    throw new InvalidOperationException($"'{stageIdText}' is not a valid stage.");
+
+                var targetStage = orderedStages.FirstOrDefault(s => s.StageId == nominatedStageId)
+                    ?? throw new InvalidOperationException("A nominated stage does not belong to this workflow.");
+
+                var targetMembers = await GetTeamMembersAsync(targetStage.TeamId, task.OrganizationId);
+                if (!targetMembers.Any(m => m.MemberId == memberId))
+                    throw new InvalidOperationException(
+                        $"The person chosen for '{targetStage.StageName}' is not on that stage's team.");
+
+                await _nominationRepository.AddAsync(new TaskStageNomination
+                {
+                    OrganizationId = task.OrganizationId,
+                    TaskId = taskId,
+                    StageId = nominatedStageId,
+                    MemberId = memberId,
+                    NominatedByMemberId = task.MemberId,
+                    NominatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        // Written before the event is published so the submission is durable even if
+        // the transition is still in flight, and so the shared event contract stays
+        // free of form data that only this service cares about.
+        if (stageData != null && stageData.Count > 0)
+        {
+            await _stageDataRepository.AppendAsync(new TaskStageData
+            {
+                OrganizationId = task.OrganizationId,
+                TaskId = taskId,
+                StageId = currentStage.StageId,
+                DataJson = System.Text.Json.JsonSerializer.Serialize(stageData),
+                SubmittedByMemberId = task.MemberId,
+                SubmittedAt = DateTime.UtcNow
+            });
+        }
+
         // Publish TaskStageCompletedEvent
         var correlationId = Guid.NewGuid();
         var stageCompletedEvent = new TaskStageCompletedEvent
@@ -886,6 +983,7 @@ public class TaskService : ITaskService
             WorkflowId = task.WorkflowId.Value,
             NextStageId = nextStage?.StageId,
             NextStageName = nextStage?.StageName,
+            NextStageMemberId = nextStageMemberId,
             CompletedAt = DateTime.UtcNow,
             CorrelationId = correlationId
         };
@@ -899,6 +997,22 @@ public class TaskService : ITaskService
         _logger.LogInformation(
             "Stage completed for task. TaskId: {TaskId}, StageId: {StageId}, StageName: {StageName}, NextStageId: {NextStageId}, CorrelationId: {CorrelationId}",
             taskId, currentStage.StageId, currentStage.StageName, nextStage?.StageId, correlationId);
+    }
+
+    public async System.Threading.Tasks.Task<IReadOnlyList<TaskStageDataReadDto>> GetStageDataAsync(Guid taskId)
+    {
+        var task = await _repository.GetByIdAsync(taskId);
+        if (task == null)
+            throw new KeyNotFoundException($"Task with ID {taskId} not found");
+
+        var rows = await _stageDataRepository.GetLatestPerStageAsync(taskId);
+        return rows.Select(row => new TaskStageDataReadDto
+        {
+            StageId = row.StageId,
+            DataJson = row.DataJson,
+            SubmittedByMemberId = row.SubmittedByMemberId,
+            SubmittedAt = row.SubmittedAt
+        }).ToList();
     }
 
     public async System.Threading.Tasks.Task<IReadOnlyList<TaskStageHistoryReadDto>> GetStageHistoryAsync(Guid taskId)
@@ -1147,6 +1261,31 @@ public class TaskService : ITaskService
     /// <summary>
     /// Internal class for deserializing stage info from WorkflowManagement.API
     /// </summary>
+    private async System.Threading.Tasks.Task<List<TeamMemberInfo>> GetTeamMembersAsync(Guid teamId, Guid organizationId)
+    {
+        var baseUrl = _configuration["WorkflowManagementApi:BaseUrl"] ?? "http://localhost:5000/api";
+        var response = await GetWithOrgHeaderAsync($"{baseUrl}/teams/{teamId}/members", organizationId);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError(
+                "Failed to read members for team {TeamId}. StatusCode: {StatusCode}",
+                teamId, response.StatusCode);
+            throw new InvalidOperationException("Could not check who is on the next stage's team. Try again.");
+        }
+
+        var json = await response.Content.ReadAsStringAsync();
+        return System.Text.Json.JsonSerializer.Deserialize<List<TeamMemberInfo>>(json,
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<TeamMemberInfo>();
+    }
+
+    private class TeamMemberInfo
+    {
+        public Guid MemberId { get; set; }
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+    }
+
     private class StageInfo
     {
         public Guid StageId { get; set; }
@@ -1173,6 +1312,10 @@ public class TaskService : ITaskService
             Priority = task.Priority,
             TaskType = task.TaskType,
             Status = task.Status,
+            DataJson = task.DataJson,
+            CreatedByMemberId = task.CreatedByMemberId,
+            ReturnedAt = task.ReturnedAt,
+            ReturnReason = task.ReturnReason,
             WorkflowId = task.WorkflowId,
             MemberId = task.MemberId,
             CurrentStageId = task.CurrentStageId,

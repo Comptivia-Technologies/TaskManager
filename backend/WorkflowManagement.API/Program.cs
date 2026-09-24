@@ -245,6 +245,18 @@ using (var scope = app.Services.CreateScope())
                 logger.LogInformation($"Verified: All {tableCount} required tables exist.");
             }
             
+            // Columns added after the original schema. Unconditional because the
+            // CREATE TABLE block above only runs on a brand new database.
+            using var addTaskColumnsCommand = connection.CreateCommand();
+            addTaskColumnsCommand.CommandText = @"
+                ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""CreatedByMemberId"" UUID;
+                ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""NeedsRework"" BOOLEAN NOT NULL DEFAULT FALSE;
+                ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""ReworkReason"" VARCHAR(1000);
+                CREATE INDEX IF NOT EXISTS ""IX_Tasks_CreatedByMemberId"" ON ""Tasks"" (""CreatedByMemberId"");
+            ";
+            await addTaskColumnsCommand.ExecuteNonQueryAsync();
+            logger.LogInformation("Verified: Tasks creator and rework columns exist.");
+
             // Check and add SkillLevel column if it doesn't exist (only if Members table exists)
             using var checkCommand = connection.CreateCommand();
             checkCommand.CommandText = @"

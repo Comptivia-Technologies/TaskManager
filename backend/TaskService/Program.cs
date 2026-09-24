@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskService.Infrastructure.Persistence;
 using TaskService.Application.Interfaces;
 using TaskService.Infrastructure.Repositories;
+using TaskService.Infrastructure.Storage;
 using TaskService.Application.Services;
 using TaskService.Application.EventHandlers;
 using Shared.Messaging;
@@ -57,6 +58,13 @@ builder.Services.AddHttpContextAccessor();
 // Repositories
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<ITaskStageHistoryRepository, TaskStageHistoryRepository>();
+builder.Services.AddScoped<ITaskStageDataRepository, TaskStageDataRepository>();
+builder.Services.AddScoped<ITaskAttachmentRepository, TaskAttachmentRepository>();
+builder.Services.AddScoped<ITaskStageNominationRepository, TaskStageNominationRepository>();
+// Local disk is development-only; swap this registration for an object-store
+// implementation before deploying (see LocalFileStorage remarks).
+builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
+builder.Services.AddScoped<ITaskAttachmentService, TaskAttachmentService>();
 
 // Services
 builder.Services.AddScoped<ITaskService, TaskService.Application.Services.TaskService>();
@@ -451,6 +459,56 @@ using (var scope = app.Services.CreateScope())
             ";
             await historyCommand.ExecuteNonQueryAsync();
             logger.LogInformation("Verified: TaskStageHistory table exists.");
+
+            using var stageDataCommand = connection.CreateCommand();
+            stageDataCommand.CommandText = @"
+                CREATE TABLE IF NOT EXISTS ""TaskStageData"" (
+                    ""StageDataId"" UUID PRIMARY KEY,
+                    ""OrganizationId"" UUID NOT NULL,
+                    ""TaskId"" UUID NOT NULL,
+                    ""StageId"" UUID NOT NULL,
+                    ""DataJson"" JSONB NOT NULL DEFAULT '{}',
+                    ""SubmittedByMemberId"" UUID,
+                    ""SubmittedAt"" TIMESTAMP WITH TIME ZONE NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ""IX_TaskStageData_TaskId"" ON ""TaskStageData"" (""TaskId"");
+                CREATE INDEX IF NOT EXISTS ""IX_TaskStageData_Task_Stage"" ON ""TaskStageData"" (""TaskId"", ""StageId"");
+
+                ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""DataJson"" JSONB;
+                ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""CreatedByMemberId"" UUID;
+                ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""ReturnedAt"" TIMESTAMP WITH TIME ZONE;
+                ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""ReturnReason"" TEXT;
+                ALTER TABLE ""Tasks"" ADD COLUMN IF NOT EXISTS ""ReturnedFromStageName"" VARCHAR(200);
+
+                CREATE TABLE IF NOT EXISTS ""TaskAttachment"" (
+                    ""AttachmentId"" UUID PRIMARY KEY,
+                    ""OrganizationId"" UUID NOT NULL,
+                    ""TaskId"" UUID NOT NULL,
+                    ""StageId"" UUID,
+                    ""FileName"" VARCHAR(260) NOT NULL,
+                    ""ContentType"" VARCHAR(200) NOT NULL,
+                    ""SizeBytes"" BIGINT NOT NULL,
+                    ""StorageKey"" VARCHAR(400) NOT NULL,
+                    ""UploadedByMemberId"" UUID,
+                    ""UploadedAt"" TIMESTAMP WITH TIME ZONE NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ""IX_TaskAttachment_TaskId"" ON ""TaskAttachment"" (""TaskId"");
+                CREATE INDEX IF NOT EXISTS ""IX_TaskAttachment_Task_Stage"" ON ""TaskAttachment"" (""TaskId"", ""StageId"");
+
+                CREATE TABLE IF NOT EXISTS ""TaskStageNomination"" (
+                    ""NominationId"" UUID PRIMARY KEY,
+                    ""OrganizationId"" UUID NOT NULL,
+                    ""TaskId"" UUID NOT NULL,
+                    ""StageId"" UUID NOT NULL,
+                    ""MemberId"" UUID NOT NULL,
+                    ""NominatedByMemberId"" UUID,
+                    ""NominatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ""IX_TaskStageNomination_TaskId"" ON ""TaskStageNomination"" (""TaskId"");
+                CREATE INDEX IF NOT EXISTS ""IX_TaskStageNomination_Task_Stage"" ON ""TaskStageNomination"" (""TaskId"", ""StageId"");
+            ";
+            await stageDataCommand.ExecuteNonQueryAsync();
+            logger.LogInformation("Verified: TaskStageData, TaskAttachment tables and Tasks.DataJson column exist.");
         }
         finally
         {

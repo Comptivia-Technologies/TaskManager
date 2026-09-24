@@ -1,5 +1,5 @@
 import api from './api';
-import { Task, TaskUpdate, PaginatedTasksResponse, TaskStageHistory } from '../types';
+import { Task, TaskUpdate, PaginatedTasksResponse, TaskStageHistory, TaskStageData, TaskAttachment } from '../types';
 
 export const taskService = {
   getAll: async (): Promise<Task[]> => {
@@ -57,9 +57,91 @@ export const taskService = {
     return response.data;
   },
 
+  getByUserId: async (userId: string): Promise<Task[]> => {
+    try {
+      const response = await api.get<Task[]>(`/api/tasks/user/${userId}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error: any) {
+      if (error?.response?.status === 404) return [];
+      throw error;
+    }
+  },
+
   getHistory: async (id: string): Promise<TaskStageHistory[]> => {
     const response = await api.get<TaskStageHistory[]>(`/api/task-service/${id}/history`);
     return Array.isArray(response.data) ? response.data : [];
+  },
+
+  create: async (payload: {
+    taskName: string;
+    description?: string;
+    taskType: string;
+    taskData?: Record<string, unknown>;
+    createdByMemberId?: string;
+  }): Promise<{ taskId: string }> => {
+    const response = await api.post<{ taskId: string }>('/api/task-service', payload);
+    return response.data;
+  },
+
+  getStageData: async (id: string): Promise<TaskStageData[]> => {
+    const response = await api.get<TaskStageData[]>(`/api/task-service/${id}/stage-data`);
+    return Array.isArray(response.data) ? response.data : [];
+  },
+
+  completeStage: async (
+    id: string,
+    stageData?: Record<string, unknown>,
+    nextStageMemberId?: string,
+    stageNominations?: Record<string, string>
+  ): Promise<void> => {
+    await api.post(`/api/task-service/complete-stage/${id}`, {
+      stageData: stageData ?? null,
+      nextStageMemberId: nextStageMemberId || null,
+      stageNominations: stageNominations && Object.keys(stageNominations).length > 0 ? stageNominations : null,
+    });
+  },
+
+  returnStage: async (id: string, targetStageId: string, reason: string): Promise<void> => {
+    await api.post(`/api/task-service/return-stage/${id}`, { targetStageId, reason });
+  },
+
+  escalateStage: async (id: string, reason: string): Promise<void> => {
+    await api.post(`/api/task-service/escalate-stage/${id}`, { reason });
+  },
+
+  getAttachments: async (id: string): Promise<TaskAttachment[]> => {
+    const response = await api.get<TaskAttachment[]>(`/api/task-service/${id}/attachments`);
+    return Array.isArray(response.data) ? response.data : [];
+  },
+
+  uploadAttachment: async (id: string, file: File): Promise<TaskAttachment> => {
+    const form = new FormData();
+    form.append('file', file);
+    // Content-Type is cleared so the browser supplies it with the multipart
+    // boundary; the client's JSON default would make the body unparseable.
+    const response = await api.post<TaskAttachment>(`/api/task-service/${id}/attachments`, form, {
+      headers: { 'Content-Type': undefined },
+    });
+    return response.data;
+  },
+
+  // Downloads go through the API client so the request carries the auth token,
+  // which a plain link could not do.
+  downloadAttachment: async (attachmentId: string, fileName: string): Promise<void> => {
+    const response = await api.get(`/api/task-service/attachments/${attachmentId}`, {
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(response.data as Blob);
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   },
 };
 

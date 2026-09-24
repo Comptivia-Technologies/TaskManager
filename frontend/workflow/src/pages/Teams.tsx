@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTeams } from '../hooks/useTeams';
 import { useMembers } from '../hooks/useMembers';
+import { useAuth } from '../contexts/AuthContext';
 import { teamService } from '../services/teamService';
 import { memberService } from '../services/memberService';
-import { Team, TeamCreate, Member, MemberCreate } from '../types';
+import { userService } from '../services/userService';
+import { Team, TeamCreate, Member, MemberCreate, User } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
+import TeamMemberModal from '../components/TeamMemberModal';
 import { FiPlus, FiEdit, FiTrash2, FiEye, FiX } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import Select from 'react-select';
@@ -12,6 +15,16 @@ import Select from 'react-select';
 const Teams = () => {
   const { teams, loading, refetch } = useTeams();
   const { members: allMembers, refetch: refetchMembers } = useMembers();
+  const { organizationId } = useAuth();
+  const [productHubUsers, setProductHubUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    if (!organizationId) return;
+    userService
+      .getActiveOrganizationUsers(organizationId)
+      .then(setProductHubUsers)
+      .catch(() => setProductHubUsers([]));
+  }, [organizationId]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
@@ -193,6 +206,7 @@ const Teams = () => {
         firstName: member.firstName,
         lastName: member.lastName,
         email: member.email,
+        userId: member.userId,
         teamId: member.teamId,
         role: member.role,
         skillLevel: member.skillLevel,
@@ -203,6 +217,7 @@ const Teams = () => {
         firstName: '',
         lastName: '',
         email: '',
+        userId: undefined,
         teamId: selectedTeam.teamId,
         role: '',
         skillLevel: 1,
@@ -220,10 +235,48 @@ const Teams = () => {
       firstName: '',
       lastName: '',
       email: '',
+      userId: undefined,
       teamId: undefined,
       role: '',
       skillLevel: 1,
     });
+  };
+
+  // Team membership is a field on the member, so adding an existing person to a
+  // team is an update rather than a new record. userId is passed through so the
+  // login link survives the move.
+  // A member belongs to exactly one team, so only people who are free — plus
+  // whoever is already on this team, so they can still be removed — are offered.
+  const assignableMembers = allMembers.filter(
+    (m) => !m.teamId || (selectedTeam && m.teamId === selectedTeam.teamId)
+  );
+
+  const handleAddExistingMember = async (memberId: string) => {
+    if (!selectedTeam) return;
+    const member = allMembers.find((m) => m.memberId === memberId);
+    if (!member) return;
+
+    try {
+      await memberService.update(memberId, {
+        firstName: member.firstName,
+        lastName: member.lastName,
+        email: member.email,
+        userId: member.userId,
+        teamId: selectedTeam.teamId,
+        role: member.role,
+        skillLevel: member.skillLevel,
+      });
+      toast.success(`${member.firstName} added to ${selectedTeam.teamName}`);
+      handleCloseMemberModal();
+      const [members, workflows] = await Promise.all([
+        teamService.getMembers(selectedTeam.teamId),
+        teamService.getWorkflows(selectedTeam.teamId),
+      ]);
+      setSelectedTeam({ ...selectedTeam, members, workflows } as any);
+      await refetchMembers();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to add member to team');
+    }
   };
 
   const handleMemberSubmit = async (e: React.FormEvent) => {
@@ -387,6 +440,20 @@ const Teams = () => {
             </div>
           </div>
         )}
+
+        <TeamMemberModal
+          isOpen={isMemberModalOpen}
+          isEditMode={isMemberEditMode}
+          formData={memberFormData}
+          teams={teams}
+          productHubUsers={productHubUsers}
+          linkedUserIds={allMembers.map((m) => m.userId).filter((id): id is string => Boolean(id))}
+          availableMembers={allMembers.filter((m) => !m.teamId)}
+          onChange={setMemberFormData}
+          onSubmit={handleMemberSubmit}
+          onAddExisting={handleAddExistingMember}
+          onClose={handleCloseMemberModal}
+        />
       </div>
     );
   }
@@ -530,18 +597,18 @@ const Teams = () => {
               </div>
               
               {/* Add Members Section */}
-              {allMembers.length > 0 && (
+              {assignableMembers.length > 0 && (
                 <div className="mb-4">
                   <label className="block text-black text-sm font-semibold mb-2 font-sans">
                     Add Members
                   </label>
                   <Select
                     isMulti
-                    options={allMembers.map((member) => ({
+                    options={assignableMembers.map((member) => ({
                       value: member.memberId,
                       label: `${member.firstName} ${member.lastName}${member.teamName ? ` - Current Team: ${member.teamName}` : ''}`,
                     }))}
-                    value={allMembers
+                    value={assignableMembers
                       .filter((member) => selectedMemberIds.includes(member.memberId))
                       .map((member) => ({
                         value: member.memberId,
@@ -625,143 +692,6 @@ const Teams = () => {
                   className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
                 >
                   {isEditMode ? 'Update' : 'Create'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Member Modal */}
-      {isMemberModalOpen && selectedTeam && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-black font-sans">
-                {isMemberEditMode ? 'Edit Member' : 'Add Member'}
-              </h2>
-              <button
-                onClick={handleCloseMemberModal}
-                className="text-black/70 hover:text-black hover:bg-[#434E78]/10 p-1 rounded-azure-sm transition-colors"
-              >
-                <FiX className="text-lg" />
-              </button>
-            </div>
-            <form onSubmit={handleMemberSubmit}>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  First Name *
-                </label>
-                <input
-                  type="text"
-                  value={memberFormData.firstName}
-                  onChange={(e) =>
-                    setMemberFormData({ ...memberFormData, firstName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Last Name *
-                </label>
-                <input
-                  type="text"
-                  value={memberFormData.lastName}
-                  onChange={(e) =>
-                    setMemberFormData({ ...memberFormData, lastName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  value={memberFormData.email}
-                  onChange={(e) =>
-                    setMemberFormData({ ...memberFormData, email: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Team *
-                </label>
-                <select
-                  value={memberFormData.teamId}
-                  onChange={(e) =>
-                    setMemberFormData({
-                      ...memberFormData,
-                      teamId: e.target.value || undefined,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                >
-                  {teams.map((team) => (
-                    <option key={team.teamId} value={team.teamId}>
-                      {team.teamName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Role *
-                </label>
-                <input
-                  type="text"
-                  value={memberFormData.role}
-                  onChange={(e) =>
-                    setMemberFormData({ ...memberFormData, role: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  placeholder="e.g., Developer, Manager"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Skill Level *
-                </label>
-                <select
-                  value={memberFormData.skillLevel}
-                  onChange={(e) =>
-                    setMemberFormData({ ...memberFormData, skillLevel: parseInt(e.target.value) })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                >
-                  <option value={1}>1 - Beginner</option>
-                  <option value={2}>2 - Junior</option>
-                  <option value={3}>3 - Intermediate</option>
-                  <option value={4}>4 - Advanced</option>
-                  <option value={5}>5 - Expert</option>
-                </select>
-                <p className="text-xs text-black/60 mt-1 font-sans">
-                  Skill level (1-5) used for workload calculations
-                </p>
-              </div>
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={handleCloseMemberModal}
-                  className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                >
-                  {isMemberEditMode ? 'Update' : 'Add'}
                 </button>
               </div>
             </form>

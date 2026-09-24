@@ -97,6 +97,10 @@ public class TaskStageCompletedEventHandler
                     task.TaskId, @event.StageId);
             }
 
+            // The rework is done, so the "needs attention" flag comes off.
+            task.ReturnedAt = null;
+            task.ReturnReason = null;
+            task.ReturnedFromStageName = null;
             task.TaskStageCompletedEventId = correlationId;
             task.UpdatedAt = DateTime.UtcNow;
 

@@ -43,6 +43,7 @@ function mapApiUserToUser(apiUser: ApiUser, organisationId: string): User {
     email: apiUser.email || '',
     organisationId: apiUser.organization_id || organisationId,
     role: apiUser.product_role?.role_name ?? apiUser.role ?? '',
+    roleId: apiUser.product_role?.role_id,
     status: capitalStatus,
     createdAt: apiUser.created_at || new Date().toISOString(),
     updatedAt: apiUser.updated_at || new Date().toISOString(),

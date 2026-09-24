@@ -12,6 +12,13 @@ public class SLAConfiguredEvent
     public int ResponseTimeMinutes { get; set; }
     public DateTime SLAStartTime { get; set; }
     public DateTime SLADeadline { get; set; }
+
+    /// <summary>
+    /// When set, the first stage must go to this member instead of a workload pick.
+    /// Carries the creator of a manually raised enquiry; mail-ingested ones leave it null.
+    /// </summary>
+    public Guid? PreferredMemberId { get; set; }
+
     public Guid CorrelationId { get; set; }
 }
 

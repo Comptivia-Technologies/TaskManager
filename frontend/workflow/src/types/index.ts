@@ -45,6 +45,7 @@ export interface MemberUpdate {
   firstName: string;
   lastName: string;
   email: string;
+  userId?: string;
   teamId?: string;
   role: string;
   skillLevel: number;
@@ -108,12 +109,34 @@ export interface StageUpdate {
   timeoutMinutes?: number;
 }
 
+export interface TaskAttachment {
+  attachmentId: string;
+  taskId: string;
+  stageId?: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedByMemberId?: string;
+  uploadedAt: string;
+}
+
+export interface TaskStageData {
+  stageId: string;
+  dataJson: string;
+  submittedByMemberId?: string;
+  submittedAt: string;
+}
+
 export interface Task {
   taskId: string;
   taskName: string;
   description?: string;
   status: string;
   priority: string;
+  dataJson?: string;
+  createdByMemberId?: string;
+  needsRework?: boolean;
+  reworkReason?: string;
   dueDate?: string;
   workflowId: string;
   stageId?: string;
@@ -317,6 +340,7 @@ export interface User {
   email: string;
   organisationId: string;
   role: string;
+  roleId?: string;
   status: UserStatus;
   createdAt: string;
   updatedAt: string;

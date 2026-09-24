@@ -19,8 +19,12 @@ public interface ITaskService
     System.Threading.Tasks.Task SyncAllOverdueTasksAsync();
     System.Threading.Tasks.Task CleanupOrphanedTasksAsync();
     System.Threading.Tasks.Task CompleteCurrentStageAsync(Guid taskId);
+    System.Threading.Tasks.Task CompleteCurrentStageAsync(Guid taskId, Dictionary<string, object>? stageData);
+    System.Threading.Tasks.Task CompleteCurrentStageAsync(Guid taskId, Dictionary<string, object>? stageData, Guid? nextStageMemberId);
+    System.Threading.Tasks.Task CompleteCurrentStageAsync(Guid taskId, Dictionary<string, object>? stageData, Guid? nextStageMemberId, Dictionary<string, Guid>? stageNominations);
     System.Threading.Tasks.Task ReturnToStageAsync(Guid taskId, Guid targetStageId, string reason);
     System.Threading.Tasks.Task<IReadOnlyList<TaskStageHistoryReadDto>> GetStageHistoryAsync(Guid taskId);
+    System.Threading.Tasks.Task<IReadOnlyList<TaskStageDataReadDto>> GetStageDataAsync(Guid taskId);
     System.Threading.Tasks.Task EscalateStageAsync(Guid taskId, string escalationReason);
     System.Threading.Tasks.Task SyncAllTasksFromWorkflowManagementAsync();
 }

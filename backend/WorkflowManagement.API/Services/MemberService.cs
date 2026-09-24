@@ -62,6 +62,37 @@ public class MemberService : IMemberService
         return memberDto;
     }
 
+    // Two members sharing a UserId would make the login-to-member lookup ambiguous.
+    private async System.Threading.Tasks.Task EnsureUserIdIsUnclaimedAsync(string? userId, Guid orgId, Guid? excludingMemberId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return;
+
+        var existing = await _memberRepository.GetByUserIdAsync(userId, orgId);
+        if (existing != null && existing.MemberId != excludingMemberId)
+            throw new ArgumentException("That login is already linked to another member.");
+    }
+
+    public async Task<MemberReadDto?> GetMemberByUserIdAsync(string userId)
+    {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+
+        var member = await _memberRepository.GetByUserIdAsync(userId, orgId.Value);
+        if (member == null)
+            return null;
+
+        var team = member.TeamId.HasValue
+            ? await _teamRepository.GetByIdAsync(member.TeamId.Value)
+            : null;
+        var memberDto = _mapper.Map<MemberReadDto>(member);
+        if (team != null)
+            memberDto.TeamName = team.TeamName;
+
+        return memberDto;
+    }
+
     public async Task<MemberReadDto> CreateMemberAsync(MemberCreateDto memberCreateDto)
     {
         var orgId = _orgAccessor.GetCurrentOrganizationId();
@@ -73,6 +104,8 @@ public class MemberService : IMemberService
             if (team == null || team.OrganizationId != orgId.Value)
                 throw new ArgumentException("Team does not exist or does not belong to your organization.");
         }
+
+        await EnsureUserIdIsUnclaimedAsync(memberCreateDto.UserId, orgId.Value, null);
 
         var member = _mapper.Map<Member>(memberCreateDto);
         member.OrganizationId = orgId.Value;
@@ -107,7 +140,26 @@ public class MemberService : IMemberService
                 throw new ArgumentException("Team does not exist or does not belong to your organization.");
         }
 
+        await EnsureUserIdIsUnclaimedAsync(memberUpdateDto.UserId, orgId.Value, id);
+
+        // A member belongs to exactly one team. Moving straight from one team to
+        // another would quietly take them off the first, so the current team must be
+        // cleared first and the move made deliberately in two steps.
+        var incomingTeamId = memberUpdateDto.TeamId == Guid.Empty ? null : memberUpdateDto.TeamId;
+        if (incomingTeamId.HasValue &&
+            member.TeamId.HasValue &&
+            member.TeamId.Value != incomingTeamId.Value)
+        {
+            throw new ArgumentException(
+                "That member is already on another team. Remove them from it before adding them here.");
+        }
+
+        var existingUserId = member.UserId;
         _mapper.Map(memberUpdateDto, member);
+        if (string.IsNullOrWhiteSpace(memberUpdateDto.UserId))
+        {
+            member.UserId = existingUserId;
+        }
         // Ensure TeamId is null if it's empty
         if (member.TeamId.HasValue && member.TeamId.Value == Guid.Empty)
         {

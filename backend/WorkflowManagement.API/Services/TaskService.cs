@@ -233,7 +233,16 @@ public class TaskService : ITaskService
             }
         }
 
+        var preservedCreatedBy = task.CreatedByMemberId;
+        var preservedNeedsRework = task.NeedsRework;
+        var preservedReworkReason = task.ReworkReason;
+
         _mapper.Map(taskUpdateDto, task);
+
+        // An update that does not mention these must not erase them.
+        task.CreatedByMemberId = taskUpdateDto.CreatedByMemberId ?? preservedCreatedBy;
+        task.NeedsRework = taskUpdateDto.NeedsRework ?? preservedNeedsRework;
+        task.ReworkReason = taskUpdateDto.NeedsRework.HasValue ? taskUpdateDto.ReworkReason : preservedReworkReason;
         
         // Ensure UpdatedAt is UTC (PostgreSQL requires UTC for timestamp with time zone)
         task.UpdatedAt = DateTime.UtcNow;
@@ -329,7 +338,15 @@ public class TaskService : ITaskService
 
     public async Task<IEnumerable<TaskReadDto>> GetTasksByStageAsync(Guid stageId)
     {
-        var tasks = await _taskRepository.GetTasksByStageAsync(stageId);
+        // This is the Enquiry screen's primary query, so it must not return another
+        // organization's tasks for a guessed stage id.
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+
+        var tasks = (await _taskRepository.GetTasksByStageAsync(stageId))
+            .Where(t => t.OrganizationId == orgId.Value)
+            .ToList();
         var tasksDto = _mapper.Map<IEnumerable<TaskReadDto>>(tasks);
         var tasksList = tasksDto.ToList();
 

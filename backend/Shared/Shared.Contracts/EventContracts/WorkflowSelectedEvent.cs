@@ -15,6 +15,13 @@ public class WorkflowSelectedEvent
     public string? Description { get; set; }
     public Dictionary<string, object>? TaskData { get; set; }  // Generic task-specific data for rule evaluation
     public Guid? TeamId { get; set; }
+
+    /// <summary>
+    /// When set, the first stage must go to this member instead of a workload pick.
+    /// Carries the creator of a manually raised enquiry; mail-ingested ones leave it null.
+    /// </summary>
+    public Guid? PreferredMemberId { get; set; }
+
     public DateTime SelectedAt { get; set; }
     public Guid CorrelationId { get; set; }
 }

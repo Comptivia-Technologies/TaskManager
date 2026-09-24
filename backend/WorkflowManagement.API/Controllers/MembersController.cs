@@ -50,6 +50,27 @@ public class MembersController : ControllerBase
         }
     }
 
+    [HttpGet("by-user/{userId}")]
+    public async Task<ActionResult<MemberReadDto>> GetMemberByUserId(string userId)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                return BadRequest(new { error = "User ID is required" });
+
+            var member = await _memberService.GetMemberByUserIdAsync(userId);
+            if (member == null)
+                return NotFound($"No member is linked to user {userId} in the current organization");
+
+            return Ok(member);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting member by user ID {UserId}", userId);
+            return StatusCode(500, "An error occurred while retrieving the member");
+        }
+    }
+
     [HttpPost]
     public async Task<ActionResult<MemberReadDto>> CreateMember([FromBody] MemberCreateDto memberCreateDto)
     {

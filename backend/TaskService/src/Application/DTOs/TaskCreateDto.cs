@@ -10,5 +10,8 @@ public class TaskCreateDto
     public string Priority { get; set; } = "Medium";
     public string TaskType { get; set; } = string.Empty;
     public Dictionary<string, object>? TaskData { get; set; }
+
+    /// <summary>The member raising this enquiry; they receive the first stage.</summary>
+    public Guid? CreatedByMemberId { get; set; }
 }
 

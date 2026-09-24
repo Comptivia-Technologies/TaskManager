@@ -20,6 +20,7 @@ public class TaskStageStartedEventHandler
 {
     private readonly ITaskRepository _repository;
     private readonly ITaskStageHistoryRepository _historyRepository;
+    private readonly ITaskStageNominationRepository _nominationRepository;
     private readonly IEventBus _eventBus;
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
@@ -28,6 +29,7 @@ public class TaskStageStartedEventHandler
     public TaskStageStartedEventHandler(
         ITaskRepository repository,
         ITaskStageHistoryRepository historyRepository,
+        ITaskStageNominationRepository nominationRepository,
         IEventBus eventBus,
         HttpClient httpClient,
         IConfiguration configuration,
@@ -35,6 +37,7 @@ public class TaskStageStartedEventHandler
     {
         _repository = repository;
         _historyRepository = historyRepository;
+        _nominationRepository = nominationRepository;
         _eventBus = eventBus;
         _httpClient = httpClient;
         _configuration = configuration;
@@ -81,16 +84,30 @@ public class TaskStageStartedEventHandler
                 return;
             }
 
+            // An explicit choice wins: either a human named the assignee when completing
+            // the previous stage, or the task was sent back to its earlier holder.
             var preferredMemberId = @event.PreferredMemberId;
             if (!preferredMemberId.HasValue)
             {
+                // Then an appointment made earlier in the workflow — the team lead
+                // naming the engineer for this stage.
+                var nomination = await _nominationRepository.GetForStageAsync(@event.TaskId, @event.StageId);
+                preferredMemberId = nomination?.MemberId;
+            }
+            if (!preferredMemberId.HasValue)
+            {
+                // Otherwise, a stage the task has visited before returns to whoever held it.
                 var lastAssignment = await _historyRepository.GetLastAssignmentAsync(@event.TaskId, @event.StageId);
                 preferredMemberId = lastAssignment?.MemberId;
             }
 
             var teamChanged = await CheckIfReassignmentNeededAsync(task, @event);
             var restorePreviousMember = preferredMemberId.HasValue && task.MemberId != preferredMemberId;
-            var needsReassignment = restorePreviousMember || (teamChanged && !preferredMemberId.HasValue);
+            // A team change must always reassign. Gating it on there being no preferred
+            // member left tasks sitting on a new stage still held by someone from the
+            // previous team, because a preferred member is synthesized above whenever
+            // the stage has been visited before.
+            var needsReassignment = restorePreviousMember || teamChanged;
             var preferredForReassignment = restorePreviousMember ? preferredMemberId : null;
 
             // Update task with stage information

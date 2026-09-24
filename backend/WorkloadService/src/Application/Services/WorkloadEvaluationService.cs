@@ -183,10 +183,26 @@ public class WorkloadEvaluationService : IWorkloadEvaluationService
                 }
             }
 
+            // A manually raised enquiry names its creator, who should hold the first stage
+            // rather than whoever happens to be least loaded. Mail-ingested enquiries name
+            // nobody and fall through to the workload pick below.
+            var requestedMember = slaConfiguredEvent.PreferredMemberId.HasValue
+                ? memberScores.FirstOrDefault(ms => ms.Member.MemberId == slaConfiguredEvent.PreferredMemberId.Value)
+                : default;
+
+            if (slaConfiguredEvent.PreferredMemberId.HasValue && requestedMember.Member == null)
+            {
+                _logger.LogWarning(
+                    "Requested member {MemberId} is not on the first stage's team. Falling back to workload selection. TaskId: {TaskId}, CorrelationId: {CorrelationId}",
+                    slaConfiguredEvent.PreferredMemberId.Value, slaConfiguredEvent.TaskId, slaConfiguredEvent.CorrelationId);
+            }
+
             // Prefer members without conflicts, but fallback to members with conflicts if needed
-            var bestMember = membersWithoutConflict.Any()
-                ? membersWithoutConflict.OrderBy(ms => ms.WorkloadScore).First()
-                : membersWithConflict.OrderBy(ms => ms.WorkloadScore).First(); // Fallback if all have conflicts
+            var bestMember = requestedMember.Member != null
+                ? requestedMember
+                : membersWithoutConflict.Any()
+                    ? membersWithoutConflict.OrderBy(ms => ms.WorkloadScore).First()
+                    : membersWithConflict.OrderBy(ms => ms.WorkloadScore).First(); // Fallback if all have conflicts
 
             if (membersWithoutConflict.Any())
             {

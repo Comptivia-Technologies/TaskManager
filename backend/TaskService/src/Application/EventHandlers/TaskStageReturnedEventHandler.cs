@@ -56,6 +56,14 @@ public class TaskStageReturnedEventHandler
                 CorrelationId = correlationId
             });
 
+            // Flagged on the task so a list can show "needs attention" without reading
+            // each task's history; cleared when that stage is completed again.
+            task.ReturnedAt = @event.ReturnedAt;
+            task.ReturnReason = @event.Reason;
+            task.ReturnedFromStageName = @event.FromStageName;
+            task.UpdatedAt = DateTime.UtcNow;
+            await _repository.UpdateAsync(task);
+
             _logger.LogInformation(
                 "Recorded stage return. TaskId: {TaskId}, FromStageId: {FromStageId}, ToStageId: {ToStageId}, ToMemberId: {ToMemberId}, CorrelationId: {CorrelationId}",
                 @event.TaskId, @event.FromStageId, @event.ToStageId, @event.ToMemberId, correlationId);

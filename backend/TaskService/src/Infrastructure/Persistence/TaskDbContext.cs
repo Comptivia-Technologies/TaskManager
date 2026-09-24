@@ -15,6 +15,9 @@ public class TaskDbContext : DbContext
 
     public DbSet<DomainTask> Tasks { get; set; }
     public DbSet<TaskStageHistory> TaskStageHistories { get; set; }
+    public DbSet<TaskStageData> TaskStageDataEntries { get; set; }
+    public DbSet<TaskAttachment> TaskAttachments { get; set; }
+    public DbSet<TaskStageNomination> TaskStageNominations { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -30,6 +33,11 @@ public class TaskDbContext : DbContext
             entity.Property(e => e.Priority).IsRequired().HasMaxLength(50);
             entity.Property(e => e.TaskType).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Status).IsRequired().HasConversion<int>();
+            entity.Property(e => e.DataJson).HasColumnType("jsonb").IsRequired(false);
+            entity.Property(e => e.CreatedByMemberId).IsRequired(false);
+            entity.Property(e => e.ReturnedAt).IsRequired(false).HasColumnType("timestamp with time zone");
+            entity.Property(e => e.ReturnReason).IsRequired(false);
+            entity.Property(e => e.ReturnedFromStageName).IsRequired(false).HasMaxLength(200);
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();
             
@@ -78,6 +86,47 @@ public class TaskDbContext : DbContext
             entity.HasIndex(e => e.TaskId);
             entity.HasIndex(e => new { e.TaskId, e.Sequence }).IsUnique();
             entity.HasIndex(e => new { e.CorrelationId, e.Action }).IsUnique();
+        });
+
+        modelBuilder.Entity<TaskStageData>(entity =>
+        {
+            entity.ToTable("TaskStageData");
+            entity.HasKey(e => e.StageDataId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.Property(e => e.TaskId).IsRequired();
+            entity.Property(e => e.StageId).IsRequired();
+            entity.Property(e => e.DataJson).IsRequired().HasColumnType("jsonb");
+            entity.Property(e => e.SubmittedAt).IsRequired().HasColumnType("timestamp with time zone");
+            entity.HasIndex(e => e.TaskId);
+            entity.HasIndex(e => new { e.TaskId, e.StageId });
+        });
+
+        modelBuilder.Entity<TaskStageNomination>(entity =>
+        {
+            entity.ToTable("TaskStageNomination");
+            entity.HasKey(e => e.NominationId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.Property(e => e.TaskId).IsRequired();
+            entity.Property(e => e.StageId).IsRequired();
+            entity.Property(e => e.MemberId).IsRequired();
+            entity.Property(e => e.NominatedAt).IsRequired().HasColumnType("timestamp with time zone");
+            entity.HasIndex(e => e.TaskId);
+            entity.HasIndex(e => new { e.TaskId, e.StageId });
+        });
+
+        modelBuilder.Entity<TaskAttachment>(entity =>
+        {
+            entity.ToTable("TaskAttachment");
+            entity.HasKey(e => e.AttachmentId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.Property(e => e.TaskId).IsRequired();
+            entity.Property(e => e.FileName).IsRequired().HasMaxLength(260);
+            entity.Property(e => e.ContentType).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.SizeBytes).IsRequired();
+            entity.Property(e => e.StorageKey).IsRequired().HasMaxLength(400);
+            entity.Property(e => e.UploadedAt).IsRequired().HasColumnType("timestamp with time zone");
+            entity.HasIndex(e => e.TaskId);
+            entity.HasIndex(e => new { e.TaskId, e.StageId });
         });
     }
 }

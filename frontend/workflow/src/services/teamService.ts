@@ -1,5 +1,5 @@
 import api from './api';
-import { Team, TeamCreate, TeamUpdate } from '../types';
+import { Member, Team, TeamCreate, TeamUpdate } from '../types';
 
 export const teamService = {
   getAll: async (): Promise<Team[]> => {
@@ -26,9 +26,9 @@ export const teamService = {
     await api.delete(`/api/teams/${id}`);
   },
 
-  getMembers: async (teamId: string) => {
-    const response = await api.get(`/api/teams/${teamId}/members`);
-    return response.data;
+  getMembers: async (teamId: string): Promise<Member[]> => {
+    const response = await api.get<Member[]>(`/api/teams/${teamId}/members`);
+    return Array.isArray(response.data) ? response.data : [];
   },
 
   getWorkflows: async (teamId: string) => {

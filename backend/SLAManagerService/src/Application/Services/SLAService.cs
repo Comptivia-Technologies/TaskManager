@@ -155,6 +155,8 @@ public class SLAService : ISLAService
                 ResponseTimeMinutes = responseTimeMinutes,
                 SLAStartTime = slaStartTime,
                 SLADeadline = slaDeadline,
+                // Final relay of the creator before WorkloadService assigns the first stage.
+                PreferredMemberId = priorityAssignedEvent.PreferredMemberId,
                 CorrelationId = priorityAssignedEvent.CorrelationId
             };
 

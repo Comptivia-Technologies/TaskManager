@@ -12,6 +12,16 @@ export const memberService = {
     return response.data;
   },
 
+  getByUserId: async (userId: string): Promise<Member | null> => {
+    try {
+      const response = await api.get<Member>(`/api/members/by-user/${userId}`);
+      return response.data;
+    } catch (error: any) {
+      if (error?.response?.status === 404) return null;
+      throw error;
+    }
+  },
+
   create: async (member: MemberCreate): Promise<Member> => {
     const response = await api.post<Member>('/api/members', member);
     return response.data;

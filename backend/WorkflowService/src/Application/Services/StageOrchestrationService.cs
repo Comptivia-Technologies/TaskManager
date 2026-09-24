@@ -253,6 +253,9 @@ public class StageOrchestrationService : IStageOrchestrationService
                     TeamId = nextStage.TeamId,
                     StartedAt = DateTime.UtcNow,
                     StageTimeoutAt = stageTimeoutAt,
+                    // Carries a deliberate human choice of assignee, if one was made
+                    // when the previous stage was completed.
+                    PreferredMemberId = stageCompletedEvent.NextStageMemberId,
                     CorrelationId = stageCompletedEvent.CorrelationId
                 };
 

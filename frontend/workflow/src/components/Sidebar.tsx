@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FiLayers, FiUsers, FiUser, FiUserCheck, FiClock, FiActivity, FiCheckSquare, FiSettings, FiLogOut, FiChevronDown, FiChevronRight } from 'react-icons/fi';
+import { FiLayers, FiUsers, FiUser, FiUserCheck, FiClock, FiActivity, FiSettings, FiLogOut, FiChevronDown, FiChevronRight, FiInbox } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
+import { PERMISSIONS, hasPermission } from '../utils/roleUtils';
 
 type MenuLink = { path: string; label: string; icon: React.ComponentType<{ className?: string }> };
 type MenuGroup = {
@@ -16,7 +17,7 @@ const isGroup = (item: MenuItem): item is MenuGroup => 'children' in item;
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut, user } = useAuth();
+  const { signOut, user, permissions } = useAuth();
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   const isActive = (path: string) => {
@@ -32,22 +33,30 @@ const Sidebar = () => {
     }
   };
 
+  const userManagementChildren = [
+    { path: '/users', label: 'Users', permission: PERMISSIONS.usersView },
+    { path: '/roles-permissions', label: 'Roles & Permissions', permission: PERMISSIONS.rolesView },
+  ].filter((child) => hasPermission(permissions, child.permission));
+
   const menuItems: MenuItem[] = [
-    { path: '/workflows', label: 'Workflows', icon: FiLayers },
-    { path: '/tasks', label: 'Tasks', icon: FiCheckSquare },
-    { path: '/teams', label: 'Teams', icon: FiUsers },
-    { path: '/members', label: 'Members', icon: FiUser },
-    { path: '/sla-configuration', label: 'SLA Configuration', icon: FiClock },
-    { path: '/workload-configuration', label: 'Workload Configuration', icon: FiActivity },
-    { path: '/priority-rules', label: 'Priority Rules', icon: FiSettings },
-    {
-      label: 'User Management',
-      icon: FiUserCheck,
-      children: [
-        { path: '/users', label: 'Users' },
-        { path: '/roles-permissions', label: 'Roles & Permissions' },
-      ],
-    },
+    { path: '/enquiry', label: 'Enquiry', icon: FiInbox },
+    ...([
+      { path: '/workflows', label: 'Workflows', icon: FiLayers, permission: PERMISSIONS.workflowsView },
+      { path: '/teams', label: 'Teams', icon: FiUsers, permission: PERMISSIONS.teamsView },
+      { path: '/members', label: 'Members', icon: FiUser, permission: PERMISSIONS.membersView },
+      { path: '/sla-configuration', label: 'SLA Configuration', icon: FiClock, permission: PERMISSIONS.slaView },
+      { path: '/workload-configuration', label: 'Workload Configuration', icon: FiActivity, permission: PERMISSIONS.workloadView },
+      { path: '/priority-rules', label: 'Priority Rules', icon: FiSettings, permission: PERMISSIONS.priorityRulesView },
+    ]
+      .filter((item) => hasPermission(permissions, item.permission))
+      .map(({ permission, ...item }) => item) as MenuItem[]),
+    ...(userManagementChildren.length > 0
+      ? [{
+          label: 'User Management',
+          icon: FiUserCheck,
+          children: userManagementChildren.map(({ permission, ...child }) => child),
+        } as MenuItem]
+      : []),
   ];
 
   return (

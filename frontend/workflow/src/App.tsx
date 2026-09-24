@@ -1,8 +1,10 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import LoadingSpinner from './components/LoadingSpinner';
+import { PERMISSIONS, hasPermission } from './utils/roleUtils';
 import { Login } from './pages/Login';
 import Sidebar from './components/Sidebar';
 import Workflows from './pages/Workflows';
@@ -12,11 +14,17 @@ import Members from './pages/Members';
 import MemberDetail from './pages/MemberDetail';
 import SLAConfiguration from './pages/SLAConfiguration';
 import WorkloadConfiguration from './pages/WorkloadConfiguration';
-import Tasks from './pages/Tasks';
 import TaskDetail from './pages/TaskDetail';
+import MyEnquiries from './pages/MyEnquiries';
 import PriorityRules from './pages/PriorityRules';
 import Users from './pages/Users';
 import RolesPermissions from './pages/RolesPermissions';
+
+const HomeRedirect = () => {
+  const { permissions, sessionLoading } = useAuth();
+  if (sessionLoading) return <LoadingSpinner />;
+  return <Navigate to={hasPermission(permissions, PERMISSIONS.workflowsView) ? '/workflows' : '/enquiry'} replace />;
+};
 
 function App() {
   return (
@@ -31,7 +39,20 @@ function App() {
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
-                    <Navigate to="/workflows" replace />
+                    <HomeRedirect />
+                  </div>
+                </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/enquiry"
+            element={
+              <ProtectedRoute>
+                <div className="flex min-h-screen bg-white font-sans">
+                  <Sidebar />
+                  <div className="flex-1 ml-64 font-sans bg-white">
+                    <MyEnquiries />
                   </div>
                 </div>
               </ProtectedRoute>
@@ -40,7 +61,7 @@ function App() {
           <Route
             path="/workflows"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires={PERMISSIONS.workflowsView}>
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
@@ -53,7 +74,7 @@ function App() {
           <Route
             path="/workflows/:id"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires={PERMISSIONS.workflowsView}>
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
@@ -66,7 +87,7 @@ function App() {
           <Route
             path="/teams"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires={PERMISSIONS.teamsView}>
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
@@ -79,7 +100,7 @@ function App() {
           <Route
             path="/members"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires={PERMISSIONS.membersView}>
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
@@ -92,24 +113,11 @@ function App() {
           <Route
             path="/members/:id"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires={PERMISSIONS.membersView}>
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
                     <MemberDetail />
-                  </div>
-                </div>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/tasks"
-            element={
-              <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <Tasks />
                   </div>
                 </div>
               </ProtectedRoute>
@@ -131,7 +139,7 @@ function App() {
           <Route
             path="/sla-configuration"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires={PERMISSIONS.slaView}>
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
@@ -144,7 +152,7 @@ function App() {
           <Route
             path="/workload-configuration"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires={PERMISSIONS.workloadView}>
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
@@ -157,7 +165,7 @@ function App() {
           <Route
             path="/priority-rules"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires={PERMISSIONS.priorityRulesView}>
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
@@ -170,7 +178,7 @@ function App() {
           <Route
             path="/users"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires={PERMISSIONS.usersView}>
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">
@@ -183,7 +191,7 @@ function App() {
           <Route
             path="/roles-permissions"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires={PERMISSIONS.rolesView}>
                 <div className="flex min-h-screen bg-white font-sans">
                   <Sidebar />
                   <div className="flex-1 ml-64 font-sans bg-white">

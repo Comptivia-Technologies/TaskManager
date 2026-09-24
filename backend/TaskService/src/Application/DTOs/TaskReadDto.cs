@@ -14,6 +14,10 @@ public class TaskReadDto
     public string Priority { get; set; } = string.Empty;
     public string TaskType { get; set; } = string.Empty;
     public DomainTaskStatus Status { get; set; }
+    public string? DataJson { get; set; }
+    public Guid? CreatedByMemberId { get; set; }
+    public DateTime? ReturnedAt { get; set; }
+    public string? ReturnReason { get; set; }
     public Guid? WorkflowId { get; set; }
     public Guid? MemberId { get; set; }
     public Guid? CurrentStageId { get; set; }

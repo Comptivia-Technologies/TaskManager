@@ -66,6 +66,7 @@ public class PriorityRuleService : IPriorityRuleService
                             RuleId = rule.RuleId,
                             RuleName = rule.RuleName,
                             OriginalTaskData = workflowEvent.TaskData,
+                            PreferredMemberId = workflowEvent.PreferredMemberId,
                             CorrelationId = workflowEvent.CorrelationId,
                             AssignedAt = DateTime.UtcNow
                         };

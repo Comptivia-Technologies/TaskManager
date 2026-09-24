@@ -331,7 +331,10 @@ public class TaskAssignedEventHandler
                     AssignedToMemberId = task.MemberId.Value,
                     CompletedByMemberIds = string.IsNullOrEmpty(completedByMemberIds) ? null : completedByMemberIds,
                     EscalatedByMemberIds = string.IsNullOrEmpty(escalatedByMemberIds) ? null : escalatedByMemberIds,
-                    IsOverdue = task.IsOverdue
+                    IsOverdue = task.IsOverdue,
+                    CreatedByMemberId = task.CreatedByMemberId,
+                    NeedsRework = task.ReturnedAt.HasValue,
+                    ReworkReason = task.ReturnReason
                 };
 
                 _logger.LogInformation(
@@ -380,7 +383,8 @@ public class TaskAssignedEventHandler
                     DueDate = dueDateUtc,
                     WorkflowId = task.WorkflowId.Value,
                     StageId = task.CurrentStageId,
-                    AssignedToMemberId = task.MemberId.Value
+                    AssignedToMemberId = task.MemberId.Value,
+                    CreatedByMemberId = task.CreatedByMemberId
                 };
                 
                 _logger.LogInformation(

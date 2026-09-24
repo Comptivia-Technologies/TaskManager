@@ -171,11 +171,11 @@ public class TasksController : ControllerBase
     /// This publishes a TaskStageCompletedEvent which triggers transition to the next stage
     /// </summary>
     [HttpPost("complete-stage/{id}")]
-    public async Task<ActionResult> CompleteStage(Guid id)
+    public async Task<ActionResult> CompleteStage(Guid id, [FromBody] CompleteStageRequest? request = null)
     {
         try
         {
-            await _taskService.CompleteCurrentStageAsync(id);
+            await _taskService.CompleteCurrentStageAsync(id, request?.StageData, request?.NextStageMemberId, request?.StageNominations);
             return Ok(new { message = "Stage completed successfully. Task will transition to the next stage." });
         }
         catch (KeyNotFoundException ex)
@@ -250,6 +250,29 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
+    /// Latest submitted form data for each stage of a task.
+    /// </summary>
+    [HttpGet("{id}/stage-data")]
+    public async Task<ActionResult<IReadOnlyList<TaskStageDataReadDto>>> GetStageData(Guid id)
+    {
+        try
+        {
+            var data = await _taskService.GetStageDataAsync(id);
+            return Ok(data);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Task not found: {TaskId}", id);
+            return NotFound(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting stage data for task {TaskId}", id);
+            return StatusCode(500, new { error = "An error occurred while retrieving stage data" });
+        }
+    }
+
+    /// <summary>
     /// Escalate the current stage of a task to the next stage
     /// Unlike CompleteStage, this does NOT increment the member's completion count
     /// Used when a member cannot handle the task and needs to pass it to the next stage
@@ -287,6 +310,26 @@ public class TasksController : ControllerBase
 public class EscalateStageRequest
 {
     public string? Reason { get; set; }
+}
+
+/// <summary>
+/// Request DTO for completing a stage, optionally carrying the stage's form submission
+/// </summary>
+public class CompleteStageRequest
+{
+    public Dictionary<string, object>? StageData { get; set; }
+
+    /// <summary>
+    /// Optional. Names who should receive the next stage; omit to let the
+    /// workload engine pick the least-loaded member of that stage's team.
+    /// </summary>
+    public Guid? NextStageMemberId { get; set; }
+
+    /// <summary>
+    /// Optional. Names who should handle stages further ahead — the team lead
+    /// appointing the engineer, for example. Keyed by stage id.
+    /// </summary>
+    public Dictionary<string, Guid>? StageNominations { get; set; }
 }
 
 /// <summary>

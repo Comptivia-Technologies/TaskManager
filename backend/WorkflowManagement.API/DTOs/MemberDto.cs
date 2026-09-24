@@ -47,6 +47,9 @@ public class MemberCreateDto
 
 public class MemberUpdateDto
 {
+    // Blank leaves the existing link untouched; an update can set a UserId but never clear one.
+    public string? UserId { get; set; }
+
     [Required]
     [StringLength(100)]
     public string FirstName { get; set; } = string.Empty;

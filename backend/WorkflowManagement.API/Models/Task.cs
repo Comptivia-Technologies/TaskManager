@@ -12,6 +12,12 @@ public class Task
     public Guid WorkflowId { get; set; }
     public Guid? StageId { get; set; }
     public Guid? AssignedToMemberId { get; set; }
+
+    public Guid? CreatedByMemberId { get; set; }
+
+    public bool NeedsRework { get; set; } = false;
+
+    public string? ReworkReason { get; set; }
     public string? CompletedByMemberIds { get; set; }  // Comma-separated member IDs who completed stages on this task
     public string? EscalatedByMemberIds { get; set; }  // Comma-separated member IDs who escalated stages on this task
     public bool IsOverdue { get; set; } = false;

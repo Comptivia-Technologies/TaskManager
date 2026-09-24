@@ -6,6 +6,7 @@ public interface IMemberService
 {
     Task<IEnumerable<MemberReadDto>> GetAllMembersAsync();
     Task<MemberReadDto?> GetMemberByIdAsync(Guid id);
+    Task<MemberReadDto?> GetMemberByUserIdAsync(string userId);
     Task<MemberReadDto> CreateMemberAsync(MemberCreateDto memberCreateDto);
     Task<MemberReadDto?> UpdateMemberAsync(Guid id, MemberUpdateDto memberUpdateDto);
     Task<bool> DeleteMemberAsync(Guid id);

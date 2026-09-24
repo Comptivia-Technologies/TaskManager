@@ -91,6 +91,8 @@ public class WorkflowSelectionService : IWorkflowSelectionService
                 TaskName = taskCreatedEvent.TaskName,
                 Description = taskCreatedEvent.Description,
                 TaskData = taskCreatedEvent.TaskData,  // Include task data for priority rule evaluation
+                // Relays the creator so the first stage can go to them rather than a workload pick.
+                PreferredMemberId = taskCreatedEvent.PreferredMemberId,
                 TeamId = selectedWorkflow.TeamId,
                 SelectedAt = DateTime.UtcNow,
                 CorrelationId = taskCreatedEvent.CorrelationId

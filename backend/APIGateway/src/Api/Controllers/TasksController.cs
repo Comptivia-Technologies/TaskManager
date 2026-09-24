@@ -143,6 +143,7 @@ public class TasksController : ControllerBase
             var description = GetStringProperty(taskServiceRoot, "description", "Description");
             var createdAt = GetStringProperty(taskServiceRoot, "createdAt", "CreatedAt");
             var dueDate = GetStringProperty(taskServiceRoot, "slaDeadline", "SLADeadline");
+            var dataJson = GetStringProperty(taskServiceRoot, "dataJson", "DataJson");
 
             // Step 2: Get workflow name
             string? workflowName = null;
@@ -226,7 +227,8 @@ public class TasksController : ControllerBase
                 assignedToMemberId = memberId,
                 assignedToMemberName = assigneeName,
                 dueDate = dueDate,
-                createdAt = createdAt
+                createdAt = createdAt,
+                dataJson = dataJson
             };
         }
         catch (Exception ex)

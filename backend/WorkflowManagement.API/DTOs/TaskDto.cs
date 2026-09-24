@@ -32,6 +32,9 @@ public class TaskReadDto
     public string? StageName { get; set; }
     public Guid? AssignedToMemberId { get; set; }
     public string? AssignedToMemberName { get; set; }
+    public Guid? CreatedByMemberId { get; set; }
+    public bool NeedsRework { get; set; }
+    public string? ReworkReason { get; set; }
     public string? CompletedByMemberIds { get; set; }  // Comma-separated member IDs who completed stages
     public string? EscalatedByMemberIds { get; set; }  // Comma-separated member IDs who escalated stages
     public bool IsOverdue { get; set; }
@@ -42,6 +45,8 @@ public class TaskReadDto
 public class TaskCreateDto
 {
     public Guid? TaskId { get; set; }  // Optional: allows TaskService to sync with same TaskId
+
+    public Guid? CreatedByMemberId { get; set; }
 
     [Required]
     [StringLength(200)]
@@ -70,6 +75,12 @@ public class TaskCreateDto
 
 public class TaskUpdateDto
 {
+    // Nullable so a sync that does not mention them leaves the stored values alone;
+    // several update paths send only the fields they care about.
+    public Guid? CreatedByMemberId { get; set; }
+    public bool? NeedsRework { get; set; }
+    public string? ReworkReason { get; set; }
+
     [Required]
     [StringLength(200)]
     public string TaskName { get; set; } = string.Empty;

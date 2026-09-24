@@ -110,14 +110,21 @@ const Members = () => {
     }));
   };
 
+  // Linking an existing member leaves their stored name and email alone; only
+  // the login association changes.
+  const handleLinkLogin = (email: string) => {
+    setSelectedProductHubUser(productHubUsers.find((u) => u.email === email) ?? null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       if (isEditMode && selectedMember) {
         await memberService.update(selectedMember.memberId, {
           ...formData,
-          teamId: selectedMember.teamId // Keep original teamId
+          teamId: selectedMember.teamId, // Keep original teamId
+          userId: selectedProductHubUser?.userId
         });
         toast.success('Member updated successfully');
         handleCloseModal();
@@ -370,6 +377,34 @@ const Members = () => {
                       readOnly
                       className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm bg-gray-50 text-sm font-sans cursor-not-allowed"
                     />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                      Linked Login <span className="text-xs text-black/60 font-normal">(required to see assigned work)</span>
+                    </label>
+                    {selectedMember?.userId ? (
+                      <input
+                        type="text"
+                        value={selectedMember.userId}
+                        readOnly
+                        className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm bg-gray-50 text-sm font-sans cursor-not-allowed"
+                      />
+                    ) : (
+                      <select
+                        value={selectedProductHubUser?.email ?? ''}
+                        onChange={(e) => handleLinkLogin(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                      >
+                        <option value="">Not linked — select a user to link...</option>
+                        {productHubUsers
+                          .filter((u) => !members.some((m) => m.userId && m.userId === u.userId))
+                          .map((u) => (
+                            <option key={u.userId} value={u.email}>
+                              {u.fullName} ({u.email})
+                            </option>
+                          ))}
+                      </select>
+                    )}
                   </div>
                 </>
               ) : (
