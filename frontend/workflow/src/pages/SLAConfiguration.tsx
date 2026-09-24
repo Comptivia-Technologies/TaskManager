@@ -1,10 +1,24 @@
-import { useState, useEffect } from 'react';
+import Button from '../components/Button';
+import Badge from '../components/Badge';
+import PageHeader from '../components/PageHeader';
+import EmptyState from '../components/EmptyState';
+import { useState, useEffect, useCallback } from 'react';
 import { useWorkflows } from '../hooks/useWorkflows';
 import { slaService } from '../services/slaService';
 import { SLAConfiguration } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiClock, FiSettings, FiAlertCircle } from 'react-icons/fi';
-import SLAConfigure from '../components/SLAConfigure';
+import { FiAlertTriangle, FiCheckCircle, FiClock, FiEdit2, FiGitMerge, FiSettings } from 'react-icons/fi';
+import SLAConfigure, { formatTime } from '../components/SLAConfigure';
+import { priorityRank, priorityTone } from '../utils/status';
+
+const TONE_DOT: Record<string, string> = {
+  danger: 'bg-danger',
+  warning: 'bg-warning-strong',
+  info: 'bg-info',
+  neutral: 'bg-ink-subtle',
+  primary: 'bg-primary',
+  success: 'bg-success-strong',
+};
 
 const SLAConfigurationPage = () => {
   const { workflows, loading: workflowsLoading } = useWorkflows();
@@ -13,86 +27,35 @@ const SLAConfigurationPage = () => {
   const [isConfigureMode, setIsConfigureMode] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | undefined>(undefined);
 
-  const priorityColorClasses = [
-    'bg-red-100 text-red-800 border-red-300',
-    'bg-orange-100 text-orange-800 border-orange-300',
-    'bg-yellow-100 text-yellow-800 border-yellow-300',
-    'bg-blue-100 text-blue-800 border-blue-300',
-    'bg-purple-100 text-purple-800 border-purple-300',
-    'bg-emerald-100 text-emerald-800 border-emerald-300',
-  ];
+  const fetchSLAConfigs = useCallback(async () => {
+    try {
+      const configs = await slaService.getAll();
+      const configsMap = new Map<string, SLAConfiguration>();
+      configs.forEach((config) => configsMap.set(config.workflowId, config));
+      setSlaConfigs(configsMap);
+    } catch (error: any) {
+      // If the API is not there yet, carry on with no configurations.
+      console.warn('Failed to fetch SLA configurations:', error);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchSLAConfigs = async () => {
-      try {
-        setLoading(true);
-        const configs = await slaService.getAll();
-        const configsMap = new Map<string, SLAConfiguration>();
-        configs.forEach((config) => {
-          configsMap.set(config.workflowId, config);
-        });
-        setSlaConfigs(configsMap);
-      } catch (error: any) {
-        // If API doesn't exist yet, just continue with empty configs
-        console.warn('Failed to fetch SLA configurations:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (!workflowsLoading && workflows.length > 0) {
-      fetchSLAConfigs();
-    } else if (!workflowsLoading) {
+    if (workflowsLoading) return;
+    if (workflows.length === 0) {
       setLoading(false);
+      return;
     }
-  }, [workflows, workflowsLoading]);
+    setLoading(true);
+    fetchSLAConfigs().finally(() => setLoading(false));
+  }, [workflows, workflowsLoading, fetchSLAConfigs]);
 
   const handleConfigureSuccess = () => {
     setIsConfigureMode(false);
-    // Refetch SLA configs
-    const fetchSLAConfigs = async () => {
-      try {
-        const configs = await slaService.getAll();
-        const configsMap = new Map<string, SLAConfiguration>();
-        configs.forEach((config) => {
-          configsMap.set(config.workflowId, config);
-        });
-        setSlaConfigs(configsMap);
-      } catch (error) {
-        console.warn('Failed to fetch SLA configurations:', error);
-      }
-    };
     fetchSLAConfigs();
   };
 
-  const formatTime = (minutes: number): string => {
-    if (minutes === 0) return 'Not set';
-    if (minutes < 60) return `${minutes}m`;
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (mins === 0) return `${hours}h`;
-    if (hours >= 24) {
-      const days = Math.floor(hours / 24);
-      const remainingHours = hours % 24;
-      if (remainingHours === 0) return `${days}d`;
-      return `${days}d ${remainingHours}h`;
-    }
-    return `${hours}h ${mins}m`;
-  };
-
-  const getSLAStatus = (workflowId: string): { configured: boolean; count: number } => {
-    const config = slaConfigs.get(workflowId);
-    if (!config) return { configured: false, count: 0 };
-    
-    const count = Object.values(config.priorityLevels || {}).filter(
-      (priority) => priority.responseTime > 0
-    ).length;
-    
-    return { configured: count > 0, count };
-  };
-
   if (workflowsLoading || loading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner label="Loading SLA targets" />;
   }
 
   if (isConfigureMode) {
@@ -108,134 +71,105 @@ const SLAConfigurationPage = () => {
     );
   }
 
+  const configure = (workflowId?: string) => {
+    setSelectedWorkflowId(workflowId);
+    setIsConfigureMode(true);
+  };
+
   return (
-    <div className="p-8 bg-white min-h-screen font-sans">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#434E78]/20">
-          <div>
-            <h1 className="text-3xl font-semibold text-black mb-1 font-sans tracking-tight">
-              SLA Configuration - Priorities
-            </h1>
-            <p className="text-black/70 text-sm font-sans">
-              Configure priority-based response times across workflows
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              setSelectedWorkflowId(undefined);
-              setIsConfigureMode(true);
-            }}
-            className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
-          >
-            <FiSettings className="mr-2 text-base" />
-            Configure SLA
-          </button>
+    <div>
+      <PageHeader
+        title="SLA Targets"
+        subtitle="How quickly each priority must be picked up. A workflow with no targets never assigns its enquiries."
+        actions={
+          workflows.length > 0 ? (
+            <Button variant="primary" icon={<FiSettings />} onClick={() => configure(undefined)}>
+              Configure SLA
+            </Button>
+          ) : null
+        }
+      />
+
+      {workflows.length === 0 ? (
+        <div className="card">
+          <EmptyState
+            icon={<FiClock />}
+            title="No workflows yet"
+            body="Response times are set per workflow. Create a workflow first, then come back to set its targets."
+          />
         </div>
+      ) : (
+        <ul className="space-y-4">
+          {workflows.map((workflow) => {
+            const config = slaConfigs.get(workflow.workflowId);
+            const levels = Object.entries(config?.priorityLevels ?? {}).sort(
+              ([a], [b]) => priorityRank(a) - priorityRank(b)
+            );
+            const set = levels.filter(([, v]) => v.responseTime > 0);
+            const unset = levels.filter(([, v]) => !(v.responseTime > 0));
+            const configured = set.length > 0;
 
-        {workflows.length === 0 ? (
-          <div className="bg-white rounded-azure-sm shadow-azure-sm p-12 text-center border border-[#434E78]/20">
-            <div className="max-w-md mx-auto">
-              <div className="bg-[#434E78]/10 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <FiAlertCircle className="text-3xl text-[#434E78]" />
-              </div>
-              <h3 className="text-lg font-semibold text-black mb-2 font-sans">No workflows found</h3>
-              <p className="text-black/70 text-sm font-sans">
-                Create workflows first to configure SLA settings.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {workflows.map((workflow) => {
-              const slaStatus = getSLAStatus(workflow.workflowId);
-              const config = slaConfigs.get(workflow.workflowId);
+            return (
+              <li key={workflow.workflowId} className="card overflow-hidden">
+                <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-line-subtle">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span aria-hidden="true" className="h-9 w-9 shrink-0 rounded-control bg-primary-subtle text-primary ring-1 ring-inset ring-primary-border flex items-center justify-center">
+                      <FiGitMerge />
+                    </span>
+                    <div className="min-w-0">
+                      <h2 className="text-title font-semibold text-ink truncate">{workflow.workflowName}</h2>
+                      <p className="text-meta text-ink-subtle truncate">{workflow.description || `${workflow.stages?.length ?? 0} stages`}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {configured ? (
+                      <Badge tone="success" icon={<FiCheckCircle />}>
+                        {set.length} of {levels.length} set
+                      </Badge>
+                    ) : (
+                      <Badge tone="warning" icon={<FiAlertTriangle />}>
+                        Not configured
+                      </Badge>
+                    )}
+                    <Button size="sm" icon={<FiEdit2 />} onClick={() => configure(workflow.workflowId)}>
+                      {configured ? 'Edit targets' : 'Set targets'}
+                    </Button>
+                  </div>
+                </header>
 
-              return (
-                <div
-                  key={workflow.workflowId}
-                  className="bg-white rounded-azure-sm shadow-azure-sm hover:shadow-azure-md transition-all duration-200 border border-[#434E78]/20 overflow-hidden group flex flex-col"
-                >
-                  <div className="p-5 flex-1">
-                    <div className="flex justify-between items-start mb-3">
-                      <h2 className="text-lg font-semibold text-black group-hover:text-black/80 transition-colors font-sans">
-                        {workflow.workflowName}
-                      </h2>
-                      <div className="flex items-center gap-1">
-                        {slaStatus.configured && (
-                          <div className="w-2 h-2 bg-emerald-500 rounded-full" title="SLA Configured"></div>
+                {levels.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 divide-x divide-y md:divide-y-0 divide-line-subtle">
+                    {levels.map(([name, value]) => (
+                      <div key={name} className="px-5 py-4">
+                        <p className="flex items-center gap-2 text-meta font-medium text-ink-muted">
+                          <span aria-hidden="true" className={`h-2 w-2 rounded-full ${TONE_DOT[priorityTone(name)]}`} />
+                          {name}
+                        </p>
+                        {value.responseTime > 0 ? (
+                          <p className="mt-1 text-title font-semibold text-ink">{formatTime(value.responseTime)}</p>
+                        ) : (
+                          <p className="mt-1 text-body text-warning font-medium">No target</p>
                         )}
                       </div>
-                    </div>
-
-                    <p className="text-black/70 mb-4 text-sm line-clamp-2 font-sans">
-                      {workflow.description || 'No description provided'}
-                    </p>
-
-                    <div className="space-y-2.5 pt-4 border-t border-[#434E78]/10">
-                      {workflow.teamName && (
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-black/60 font-sans">Team</span>
-                          <span className="font-medium text-black font-sans">{workflow.teamName}</span>
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-black/60 font-sans">SLA Status</span>
-                        <span
-                          className={`font-medium text-sm font-sans ${
-                            slaStatus.configured ? 'text-emerald-600' : 'text-gray-500'
-                          }`}
-                        >
-                          {slaStatus.configured
-                            ? `${slaStatus.count} priorit${slaStatus.count === 1 ? 'y' : 'ies'} configured`
-                            : 'Not configured'}
-                        </span>
-                      </div>
-
-                      {config && slaStatus.configured && (
-                        <div className="mt-3 pt-3 border-t border-[#434E78]/10">
-                          <p className="text-xs text-black/60 mb-2 font-sans font-semibold">Priorities:</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            {Object.entries(config.priorityLevels)
-                              .filter(([, value]) => value.responseTime > 0)
-                              .map(([name, value], index) => (
-                                <div
-                                  key={name}
-                                  className={`text-xs px-2 py-1 rounded-azure-sm border ${
-                                    priorityColorClasses[index % priorityColorClasses.length]
-                                  } font-sans`}
-                                >
-                                  <div className="font-semibold">{name}</div>
-                                  <div className="text-xs opacity-75">
-                                    {formatTime(value.responseTime)}
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    ))}
                   </div>
+                ) : (
+                  <p className="px-5 py-5 text-body text-ink-muted">
+                    No response times yet, so enquiries on this workflow are never assigned.
+                  </p>
+                )}
 
-                  <div className="bg-[#434E78]/5 px-5 py-2.5 border-t border-[#434E78]/10">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedWorkflowId(workflow.workflowId);
-                        setIsConfigureMode(true);
-                      }}
-                      className="text-sm text-[#434E78] font-medium group-hover:text-[#434E78]/80 font-sans flex items-center gap-1"
-                    >
-                      <FiClock className="text-base" />
-                      {slaStatus.configured ? 'Update SLA' : 'Configure SLA'} →
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                {configured && unset.length > 0 && (
+                  <p className="flex items-start gap-2 px-5 py-2.5 border-t border-line-subtle bg-warning-subtle/60 text-meta text-warning">
+                    <FiAlertTriangle aria-hidden="true" className="mt-0.5 shrink-0" />
+                    {unset.map(([n]) => n).join(', ')} {unset.length === 1 ? 'has' : 'have'} no target, so enquiries at that priority are due the moment they are assigned.
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 };

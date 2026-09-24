@@ -1,40 +1,71 @@
-import { useState, useEffect, useCallback } from 'react';
+import Button from '../components/Button';
+import PageHeader from '../components/PageHeader';
+import Modal from '../components/Modal';
+import Badge, { BadgeTone } from '../components/Badge';
+import Avatar from '../components/Avatar';
+import SearchInput from '../components/SearchInput';
+import EmptyState from '../components/EmptyState';
+import SkillMeter from '../components/SkillMeter';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useMembers } from '../hooks/useMembers';
 import { workloadService } from '../services/workloadService';
-import { WorkloadResponse } from '../types';
+import { Member, WorkloadResponse } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiRefreshCw, FiSearch, FiCheckCircle, FiAlertCircle, FiXCircle, FiClock, FiEye, FiX } from 'react-icons/fi';
+import { FiActivity, FiAlertCircle, FiCheckCircle, FiChevronRight, FiRefreshCw, FiXCircle } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+
+type Status = WorkloadResponse['workloadStatus'];
+
+const STATUS: Record<Status, { label: string; tone: BadgeTone; bar: string; icon: JSX.Element }> = {
+  Available: { label: 'Available', tone: 'success', bar: 'bg-success-strong', icon: <FiCheckCircle /> },
+  PartiallyLoaded: { label: 'Partially loaded', tone: 'warning', bar: 'bg-warning-strong', icon: <FiAlertCircle /> },
+  FullyLoaded: { label: 'Fully loaded', tone: 'warning', bar: 'bg-warning-strong', icon: <FiAlertCircle /> },
+  Overloaded: { label: 'Overloaded', tone: 'danger', bar: 'bg-danger', icon: <FiXCircle /> },
+};
+
+// Thresholds from the service's own status bands.
+const BANDS = [30, 60, 85];
+
+/**
+ * Workload score as a capacity bar: how full someone is on a 0–100 scale, with
+ * the three band edges marked so "nearly overloaded" is visible, not just the
+ * colour. The number and status are always printed beside it.
+ */
+const CapacityBar = ({ score, status }: { score: number; status: Status }) => (
+  <div className="flex items-center gap-3 min-w-[180px]">
+    <div className="relative flex-1 h-2 rounded-full bg-surface-sunken" role="img" aria-label={`Workload ${score.toFixed(0)} of 100`}>
+      <div className={`absolute inset-y-0 left-0 rounded-full ${STATUS[status]?.bar ?? 'bg-primary'}`} style={{ width: `${Math.min(100, Math.max(2, score))}%` }} />
+      {BANDS.map((b) => (
+        <span key={b} aria-hidden="true" className="absolute -top-0.5 -bottom-0.5 w-[2px] bg-surface" style={{ left: `${b}%` }} />
+      ))}
+    </div>
+    <span className="w-10 text-right font-mono text-meta text-ink tabular">{score.toFixed(0)}</span>
+  </div>
+);
 
 const WorkloadConfiguration = () => {
   const { members, loading: membersLoading } = useMembers();
   const [workloads, setWorkloads] = useState<Map<string, WorkloadResponse>>(new Map());
-  const [loadingWorkloads, setLoadingWorkloads] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // One request per member, all in flight at once — the list used to fill in one
+  // row at a time.
   const loadAllWorkloads = useCallback(async () => {
     setRefreshing(true);
-    const newWorkloads = new Map<string, WorkloadResponse>();
-    const loadingSet = new Set<string>();
-
-    for (const member of members) {
-      loadingSet.add(member.memberId);
-      try {
-        const workload = await workloadService.getByMemberId(member.memberId);
-        newWorkloads.set(member.memberId, workload);
-      } catch (error: any) {
-        console.error(`Failed to load workload for member ${member.memberId}:`, error);
+    const results = await Promise.allSettled(members.map((m) => workloadService.getByMemberId(m.memberId)));
+    const next = new Map<string, WorkloadResponse>();
+    results.forEach((result, i) => {
+      const member = members[i];
+      if (result.status === 'fulfilled') {
+        next.set(member.memberId, result.value);
+      } else {
+        console.error(`Failed to load workload for member ${member.memberId}:`, result.reason);
         toast.error(`Failed to load workload for ${member.firstName} ${member.lastName}`);
-      } finally {
-        loadingSet.delete(member.memberId);
       }
-    }
-
-    setWorkloads(newWorkloads);
-    setLoadingWorkloads(loadingSet);
+    });
+    setWorkloads(next);
     setRefreshing(false);
   }, [members]);
 
@@ -44,341 +75,204 @@ const WorkloadConfiguration = () => {
     }
   }, [members, loadAllWorkloads]);
 
+  const term = searchTerm.toLowerCase();
+  const filteredMembers = members.filter(
+    (member) =>
+      member.firstName.toLowerCase().includes(term) ||
+      member.lastName.toLowerCase().includes(term) ||
+      member.email.toLowerCase().includes(term) ||
+      (member.teamName && member.teamName.toLowerCase().includes(term))
+  );
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Available':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'PartiallyLoaded':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'FullyLoaded':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'Overloaded':
-        return 'bg-red-100 text-red-800 border-red-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
+  // Grouped by team, because a stage's work is shared out within its team — the
+  // comparison that matters is between teammates, lightest first.
+  const groups = useMemo(() => {
+    const byTeam = new Map<string, { name: string; members: Member[] }>();
+    filteredMembers.forEach((m) => {
+      const key = m.teamId || 'none';
+      if (!byTeam.has(key)) byTeam.set(key, { name: m.teamName || 'No team', members: [] });
+      byTeam.get(key)!.members.push(m);
+    });
+    const score = (m: Member) => workloads.get(m.memberId)?.workloadScore ?? Number.MAX_SAFE_INTEGER;
+    return [...byTeam.entries()]
+      .map(([key, g]) => ({ key, ...g, members: [...g.members].sort((a, b) => score(a) - score(b)) }))
+      .sort((a, b) => (a.key === 'none' ? 1 : b.key === 'none' ? -1 : a.name.localeCompare(b.name)));
+  }, [filteredMembers, workloads]);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'Available':
-        return <FiCheckCircle className="text-green-600" />;
-      case 'PartiallyLoaded':
-        return <FiAlertCircle className="text-yellow-600" />;
-      case 'FullyLoaded':
-        return <FiAlertCircle className="text-orange-600" />;
-      case 'Overloaded':
-        return <FiXCircle className="text-red-600" />;
-      default:
-        return <FiClock className="text-gray-600" />;
-    }
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score < 30) return 'text-green-600';
-    if (score < 60) return 'text-yellow-600';
-    if (score < 85) return 'text-orange-600';
-    return 'text-red-600';
-  };
-
-  const filteredMembers = members.filter((member) => {
-    const matchesSearch =
-      member.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (member.teamName && member.teamName.toLowerCase().includes(searchTerm.toLowerCase()));
-    return matchesSearch;
-  });
-
-  const handleOpenModal = (memberId: string) => {
-    setSelectedMemberId(memberId);
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedMemberId(null);
-  };
+  const counts = useMemo(() => {
+    const all = [...workloads.values()];
+    return {
+      overloaded: all.filter((w) => w.workloadStatus === 'Overloaded').length,
+      available: all.filter((w) => w.workloadStatus === 'Available').length,
+    };
+  }, [workloads]);
 
   const selectedWorkload = selectedMemberId ? workloads.get(selectedMemberId) : null;
-  const selectedMember = selectedMemberId ? members.find(m => m.memberId === selectedMemberId) : null;
+  const selectedMember = selectedMemberId ? members.find((m) => m.memberId === selectedMemberId) : null;
 
   if (membersLoading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner label="Loading workload" />;
   }
 
   return (
-    <div className="p-8 bg-white font-sans">
-      <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#434E78]/20">
-        <div>
-          <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">
-            Workload Configuration
-          </h1>
-          <p className="text-sm text-black/60 mt-1 font-sans">
-            Monitor and manage team member workload and availability
-          </p>
-        </div>
-        <button
-          onClick={loadAllWorkloads}
-          disabled={refreshing}
-          className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <FiRefreshCw className={`mr-2 text-base ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh All
-        </button>
+    <div>
+      <PageHeader
+        title="Workload"
+        subtitle="How loaded each member is. This is what decides who unassigned work goes to."
+        meta={
+          workloads.size > 0 ? (
+            <>
+              <span>{counts.available} available</span>
+              {counts.overloaded > 0 && <span className="text-danger font-medium">{counts.overloaded} overloaded</span>}
+            </>
+          ) : undefined
+        }
+        actions={
+          <Button variant="secondary" loading={refreshing} icon={<FiRefreshCw />} onClick={loadAllWorkloads}>
+            Refresh
+          </Button>
+        }
+      />
+
+      <div className="mb-5 flex flex-wrap items-center gap-x-6 gap-y-3">
+        <SearchInput label="Search members" placeholder="Search by name, email or team" value={searchTerm} onChange={setSearchTerm} className="w-full sm:w-72" />
+        <ul aria-label="Workload bands" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-meta text-ink-subtle">
+          <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-success-strong" />Available &lt; 30</li>
+          <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-warning-strong" />Partially / fully loaded 30–85</li>
+          <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-danger" />Overloaded ≥ 85</li>
+        </ul>
       </div>
 
-      {/* Workload Status Legend */}
-      {filteredMembers.length > 0 && (
-        <div className="mb-6 p-4 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/20">
-          <h3 className="text-sm font-semibold text-black mb-3 font-sans">Workload Status Legend</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm font-sans">
-            <div className="flex items-center">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200 mr-2">
-                <FiCheckCircle className="mr-1.5 text-green-600" />
-                Available
-              </span>
-              <span className="text-black/60">Score &lt; 30</span>
-            </div>
-            <div className="flex items-center">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200 mr-2">
-                <FiAlertCircle className="mr-1.5 text-yellow-600" />
-                Partially Loaded
-              </span>
-              <span className="text-black/60">Score 30-60</span>
-            </div>
-            <div className="flex items-center">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200 mr-2">
-                <FiAlertCircle className="mr-1.5 text-orange-600" />
-                Fully Loaded
-              </span>
-              <span className="text-black/60">Score 60-85</span>
-            </div>
-            <div className="flex items-center">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-200 mr-2">
-                <FiXCircle className="mr-1.5 text-red-600" />
-                Overloaded
-              </span>
-              <span className="text-black/60">Score ≥ 85</span>
-            </div>
+      {filteredMembers.length === 0 ? (
+        <div className="card">
+          <EmptyState icon={<FiActivity />} title="No members found" body={members.length === 0 ? 'Workload appears once there are members.' : 'Nobody matches that search.'} />
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="hidden md:grid grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_1.5rem] gap-x-6 px-5 h-10 items-center bg-surface-muted border-b border-line">
+            <span className="eyebrow">Member</span>
+            <span className="eyebrow">Workload score</span>
+            <span className="eyebrow">Status</span>
+            <span className="eyebrow">Tasks</span>
+            <span />
           </div>
+          {groups.map((group) => (
+            <section key={group.key} aria-labelledby={`wl-${group.key}`} className="border-b border-line last:border-b-0">
+              <header className="flex items-center justify-between px-5 pt-3 pb-1">
+                <h2 id={`wl-${group.key}`} className="eyebrow !text-ink-muted">{group.name}</h2>
+                {group.members.length > 1 && (
+                  <span className="text-[11px] text-ink-subtle tabular">{group.members.length} members · lightest first</span>
+                )}
+              </header>
+              <ul className="divide-y divide-line-subtle">
+                {group.members.map((member, index) => {
+                  const workload = workloads.get(member.memberId);
+                  const status = workload ? STATUS[workload.workloadStatus] : undefined;
+                  return (
+                    <li key={member.memberId}>
+                      <button
+                        type="button"
+                        disabled={!workload}
+                        onClick={() => setSelectedMemberId(member.memberId)}
+                        className="group w-full grid grid-cols-1 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_1.5rem] gap-x-6 gap-y-2 items-center px-5 py-3 text-left hover:bg-surface-muted disabled:cursor-default cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Avatar name={`${member.firstName} ${member.lastName}`} size="md" />
+                          <div className="min-w-0">
+                            <p className="text-body font-medium text-ink truncate">
+                              {member.firstName} {member.lastName}
+                              {index === 0 && workload && group.members.length > 1 && (
+                                <span className="ml-2 align-middle"><Badge tone="primary">Lightest load</Badge></span>
+                              )}
+                            </p>
+                            <p className="text-meta text-ink-subtle truncate">{member.email}</p>
+                          </div>
+                        </div>
+                        {workload ? (
+                          <>
+                            <CapacityBar score={workload.workloadScore} status={workload.workloadStatus} />
+                            <div>{status && <Badge tone={status.tone} icon={status.icon}>{status.label}</Badge>}</div>
+                            <div className="text-meta text-ink-muted tabular">
+                              <span className="font-medium text-ink">{workload.metrics.activeTaskCount}</span> active
+                              {workload.metrics.overdueTaskCount > 0 && (
+                                <span className="text-danger"> · {workload.metrics.overdueTaskCount} overdue</span>
+                              )}
+                            </div>
+                            <FiChevronRight aria-hidden="true" className="hidden md:block text-ink-subtle opacity-0 group-hover:opacity-100" />
+                          </>
+                        ) : (
+                          <span className="md:col-span-4 text-meta text-ink-subtle">
+                            {refreshing ? 'Calculating…' : 'Not calculated'}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
         </div>
       )}
 
-      <div className="mb-6">
-        <div className="relative w-full md:w-64">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <FiSearch className="text-[#434E78] text-base" />
-          </div>
-          <input
-            type="text"
-            placeholder="Search members..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-          />
-        </div>
-      </div>
-
-      <div className="bg-white rounded-azure-sm shadow-azure-sm overflow-hidden border border-[#434E78]/20">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-[#434E78]/20">
-            <thead className="bg-[#434E78]/5">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                  Member
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                  Team
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                  Workload Score
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                  Efficiency
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                  Skill Level
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                  Tasks
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-[#434E78]/20">
-            {filteredMembers.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-black/60 font-sans">
-                  No members found
-                </td>
-              </tr>
-              ) : (
-                filteredMembers.map((member) => {
-                  const workload = workloads.get(member.memberId);
-                  const isLoading = loadingWorkloads.has(member.memberId);
-
-                  return (
-                    <tr key={member.memberId} className="hover:bg-[#434E78]/5 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="font-semibold text-black font-sans">
-                            {member.firstName} {member.lastName}
-                          </div>
-                          <div className="text-sm text-black/60 font-sans">{member.email}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
-                        {member.teamName || 'Unassigned'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {isLoading ? (
-                          <div className="flex items-center text-black/60">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#434E78]"></div>
-                            <span className="ml-2 text-sm">Loading...</span>
-                          </div>
-                        ) : workload ? (
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(
-                              workload.workloadStatus
-                            )}`}
-                          >
-                            <span className="mr-1.5">{getStatusIcon(workload.workloadStatus)}</span>
-                            {workload.workloadStatus}
-                          </span>
-                        ) : (
-                          <span className="text-black/40 text-sm">Not calculated</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {workload ? (
-                          <div className="flex items-center">
-                            <span className={`text-lg font-bold ${getScoreColor(workload.workloadScore)}`}>
-                              {workload.workloadScore.toFixed(1)}
-                            </span>
-                            <span className="text-black/40 text-sm ml-1">/ 100</span>
-                          </div>
-                        ) : (
-                          <span className="text-black/40 text-sm">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
-                        {workload ? (
-                          <div>
-                            <span className="font-medium">{(workload.metrics.efficiency * 100).toFixed(1)}%</span>
-                            <div className="w-20 bg-gray-200 rounded-full h-2 mt-1">
-                              <div
-                                className="bg-[#434E78] h-2 rounded-full"
-                                style={{ width: `${workload.metrics.efficiency * 100}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-black/40 text-sm">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
-                        {workload ? (
-                          <div className="flex items-center">
-                            <span className="font-medium">{workload.metrics.skillLevel}</span>
-                            <span className="text-black/40 text-sm ml-1">/ 5</span>
-                            <div className="ml-2 flex">
-                              {[...Array(5)].map((_, i) => (
-                                <div
-                                  key={i}
-                                  className={`w-2 h-2 rounded-full mr-0.5 ${
-                                    i < workload.metrics.skillLevel ? 'bg-[#434E78]' : 'bg-gray-200'
-                                  }`}
-                                ></div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-black/40 text-sm">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
-                        {workload ? (
-                          <button
-                            onClick={() => handleOpenModal(member.memberId)}
-                            className="flex items-center justify-center w-8 h-8 rounded-azure-sm hover:bg-[#434E78]/10 text-[#434E78] hover:text-[#434E78]/80 transition-colors"
-                            title="View task counts"
-                          >
-                            <FiEye className="text-lg" />
-                          </button>
-                        ) : (
-                          <span className="text-black/40 text-sm">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Task Counts Modal */}
-      {isModalOpen && selectedWorkload && selectedMember && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-black font-sans">
-                Task Counts - {selectedMember.firstName} {selectedMember.lastName}
-              </h2>
-              <button
-                onClick={handleCloseModal}
-                className="text-black/70 hover:text-black hover:bg-[#434E78]/10 p-1 rounded-azure-sm transition-colors"
-              >
-                <FiX className="text-lg" />
-              </button>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex items-center justify-between py-2 border-b border-[#434E78]/10">
-                <span className="text-black/70 font-sans">Active</span>
-                <span className="font-semibold text-black font-sans">{selectedWorkload.metrics.activeTaskCount}</span>
+      {selectedWorkload && selectedMember && (
+        <Modal
+          isOpen
+          title={`${selectedMember.firstName} ${selectedMember.lastName}`}
+          description={selectedMember.teamName || undefined}
+          onClose={() => setSelectedMemberId(null)}
+          footer={
+            <Button variant="primary" onClick={() => setSelectedMemberId(null)}>
+              Close
+            </Button>
+          }
+        >
+          <div className="space-y-5">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="eyebrow">Workload score</span>
+                <Badge tone={STATUS[selectedWorkload.workloadStatus].tone} icon={STATUS[selectedWorkload.workloadStatus].icon}>
+                  {STATUS[selectedWorkload.workloadStatus].label}
+                </Badge>
               </div>
-              <div className="flex items-center justify-between py-2 border-b border-[#434E78]/10">
-                <span className="text-black/70 font-sans">Pending</span>
-                <span className="font-semibold text-black font-sans">{selectedWorkload.metrics.pendingTaskCount}</span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b border-[#434E78]/10">
-                <span className="text-black/70 font-sans">Completed</span>
-                <span className="font-semibold text-black font-sans">{selectedWorkload.metrics.completedTaskCount}</span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b border-[#434E78]/10">
-                <span className="text-black/70 font-sans">Escalated</span>
-                <span className="font-semibold text-orange-600 font-sans">{selectedWorkload.metrics.escalatedTaskCount}</span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b border-[#434E78]/10">
-                <span className="text-black/70 font-sans">Overdue</span>
-                <span className="font-semibold text-red-600 font-sans">{selectedWorkload.metrics.overdueTaskCount}</span>
-              </div>
-              <div className="flex items-center justify-between py-2 pt-3">
-                <span className="text-black/60 font-sans text-sm">Total</span>
-                <span className="font-semibold text-black font-sans">{selectedWorkload.metrics.totalTaskCount}</span>
-              </div>
+              <CapacityBar score={selectedWorkload.workloadScore} status={selectedWorkload.workloadStatus} />
             </div>
 
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={handleCloseModal}
-                className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-              >
-                Close
-              </button>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-body">
+              <p className="text-ink-subtle">Efficiency</p>
+              <p className="text-right font-mono tabular">{(selectedWorkload.metrics.efficiency * 100).toFixed(1)}%</p>
+              <p className="text-ink-subtle">Completion rate</p>
+              <p className="text-right font-mono tabular">{(selectedWorkload.metrics.taskCompletionRate * 100).toFixed(1)}%</p>
+              <p className="text-ink-subtle">Skill</p>
+              <p className="text-right"><SkillMeter level={selectedWorkload.metrics.skillLevel} showLabel={false} /></p>
+            </div>
+
+            <div>
+              <p className="eyebrow mb-2">Task counts</p>
+              <dl className="rounded-card border border-line divide-y divide-line-subtle">
+                {[
+                  ['Active', selectedWorkload.metrics.activeTaskCount, ''],
+                  ['Pending', selectedWorkload.metrics.pendingTaskCount, ''],
+                  ['Completed', selectedWorkload.metrics.completedTaskCount, ''],
+                  ['Escalated', selectedWorkload.metrics.escalatedTaskCount, 'text-warning'],
+                  ['Overdue', selectedWorkload.metrics.overdueTaskCount, 'text-danger'],
+                ].map(([label, value, tone]) => (
+                  <div key={label as string} className="flex items-center justify-between px-4 py-2">
+                    <dt className="text-body text-ink-muted">{label}</dt>
+                    <dd className={`font-mono text-body tabular ${Number(value) > 0 ? tone || 'text-ink' : 'text-ink-subtle'}`}>{value}</dd>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-4 py-2 bg-surface-muted">
+                  <dt className="text-body font-medium text-ink">Total</dt>
+                  <dd className="font-mono text-body font-semibold tabular">{selectedWorkload.metrics.totalTaskCount}</dd>
+                </div>
+              </dl>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
 };
 
 export default WorkloadConfiguration;
-

@@ -1,4 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { LazyMotion } from 'framer-motion';
+
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -6,7 +8,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import LoadingSpinner from './components/LoadingSpinner';
 import { PERMISSIONS, hasPermission } from './utils/roleUtils';
 import { Login } from './pages/Login';
-import Sidebar from './components/Sidebar';
+import AppLayout from './components/AppLayout';
 import Workflows from './pages/Workflows';
 import WorkflowDetail from './pages/WorkflowDetail';
 import Teams from './pages/Teams';
@@ -20,6 +22,9 @@ import PriorityRules from './pages/PriorityRules';
 import Users from './pages/Users';
 import RolesPermissions from './pages/RolesPermissions';
 
+// Loaded as its own chunk after first paint; the first frame needs no animation.
+const loadMotionFeatures = () => import('./utils/motionFeatures').then((mod) => mod.default);
+
 const HomeRedirect = () => {
   const { permissions, sessionLoading } = useAuth();
   if (sessionLoading) return <LoadingSpinner />;
@@ -29,6 +34,10 @@ const HomeRedirect = () => {
 function App() {
   return (
     <AuthProvider>
+      {/* The DOM feature set loads as its own chunk after first paint. `strict` keeps
+          us on the lightweight `m` components — a stray `motion` import would quietly
+          pull the whole library back into the main bundle. */}
+      <LazyMotion features={loadMotionFeatures} strict>
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -36,12 +45,7 @@ function App() {
             path="/"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <HomeRedirect />
-                  </div>
-                </div>
+                <AppLayout><HomeRedirect /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -49,12 +53,7 @@ function App() {
             path="/enquiry"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <MyEnquiries />
-                  </div>
-                </div>
+                <AppLayout><MyEnquiries /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -62,12 +61,7 @@ function App() {
             path="/workflows"
             element={
               <ProtectedRoute requires={PERMISSIONS.workflowsView}>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <Workflows />
-                  </div>
-                </div>
+                <AppLayout><Workflows /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -75,12 +69,7 @@ function App() {
             path="/workflows/:id"
             element={
               <ProtectedRoute requires={PERMISSIONS.workflowsView}>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <WorkflowDetail />
-                  </div>
-                </div>
+                <AppLayout><WorkflowDetail /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -88,12 +77,7 @@ function App() {
             path="/teams"
             element={
               <ProtectedRoute requires={PERMISSIONS.teamsView}>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <Teams />
-                  </div>
-                </div>
+                <AppLayout><Teams /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -101,12 +85,7 @@ function App() {
             path="/members"
             element={
               <ProtectedRoute requires={PERMISSIONS.membersView}>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <Members />
-                  </div>
-                </div>
+                <AppLayout><Members /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -114,12 +93,7 @@ function App() {
             path="/members/:id"
             element={
               <ProtectedRoute requires={PERMISSIONS.membersView}>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <MemberDetail />
-                  </div>
-                </div>
+                <AppLayout><MemberDetail /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -127,12 +101,7 @@ function App() {
             path="/tasks/:id"
             element={
               <ProtectedRoute>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <TaskDetail />
-                  </div>
-                </div>
+                <AppLayout><TaskDetail /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -140,12 +109,7 @@ function App() {
             path="/sla-configuration"
             element={
               <ProtectedRoute requires={PERMISSIONS.slaView}>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <SLAConfiguration />
-                  </div>
-                </div>
+                <AppLayout><SLAConfiguration /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -153,12 +117,7 @@ function App() {
             path="/workload-configuration"
             element={
               <ProtectedRoute requires={PERMISSIONS.workloadView}>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <WorkloadConfiguration />
-                  </div>
-                </div>
+                <AppLayout><WorkloadConfiguration /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -166,12 +125,7 @@ function App() {
             path="/priority-rules"
             element={
               <ProtectedRoute requires={PERMISSIONS.priorityRulesView}>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <PriorityRules />
-                  </div>
-                </div>
+                <AppLayout><PriorityRules /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -179,12 +133,7 @@ function App() {
             path="/users"
             element={
               <ProtectedRoute requires={PERMISSIONS.usersView}>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <Users />
-                  </div>
-                </div>
+                <AppLayout><Users /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -192,12 +141,7 @@ function App() {
             path="/roles-permissions"
             element={
               <ProtectedRoute requires={PERMISSIONS.rolesView}>
-                <div className="flex min-h-screen bg-white font-sans">
-                  <Sidebar />
-                  <div className="flex-1 ml-64 font-sans bg-white">
-                    <RolesPermissions />
-                  </div>
-                </div>
+                <AppLayout><RolesPermissions /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -216,6 +160,7 @@ function App() {
           progressClassName="bg-azure-600"
         />
       </Router>
+      </LazyMotion>
     </AuthProvider>
   );
 }

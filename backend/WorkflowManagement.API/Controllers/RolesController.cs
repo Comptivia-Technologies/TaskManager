@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using WorkflowManagement.API.DTOs;
+using WorkflowManagement.API.Middleware;
 using WorkflowManagement.API.Services;
 
 namespace WorkflowManagement.API.Controllers;
@@ -10,12 +11,18 @@ public class RolesController : ControllerBase
 {
     private readonly IRoleService _roleService;
     private readonly IConfiguration _configuration;
+    private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly ILogger<RolesController> _logger;
 
-    public RolesController(IRoleService roleService, IConfiguration configuration, ILogger<RolesController> logger)
+    public RolesController(
+        IRoleService roleService,
+        IConfiguration configuration,
+        ICurrentOrganizationAccessor orgAccessor,
+        ILogger<RolesController> logger)
     {
         _roleService = roleService;
         _configuration = configuration;
+        _orgAccessor = orgAccessor;
         _logger = logger;
     }
 
@@ -43,6 +50,19 @@ public class RolesController : ControllerBase
     [HttpGet("organization/{organizationId:guid}")]
     public async Task<ActionResult<RolesListResponse>> GetByOrganization(Guid organizationId)
     {
+        // The route value is kept for compatibility, but a caller may only read its
+        // own organization's roles — these carry the permission codes.
+        var callerOrg = _orgAccessor.GetCurrentOrganizationId();
+        if (!callerOrg.HasValue)
+            return Unauthorized(new { error = "Organization context required." });
+        if (callerOrg.Value != organizationId)
+        {
+            _logger.LogWarning(
+                "Refused a cross-organization role listing. Requested: {Requested}, Caller: {Caller}",
+                organizationId, callerOrg.Value);
+            return Forbid();
+        }
+
         try
         {
             var roles = await _roleService.GetByOrganizationAsync(organizationId);
@@ -72,6 +92,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpPost]
+    [RequiresPermission("roles.manage")]
     public async Task<ActionResult<RoleReadDto>> Create([FromBody] RoleCreateDto dto)
     {
         try
@@ -79,6 +100,14 @@ public class RolesController : ControllerBase
             if (dto == null) return BadRequest("Request body is required");
             var role = await _roleService.CreateAsync(dto);
             return CreatedAtAction(nameof(GetById), new { id = role.RoleId }, role);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { error = ex.Message });
         }
         catch (Exception ex)
         {
@@ -88,6 +117,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequiresPermission("roles.manage")]
     public async Task<ActionResult<RoleReadDto>> Update(Guid id, [FromBody] RoleUpdateDto dto)
     {
         try
@@ -97,6 +127,14 @@ public class RolesController : ControllerBase
             if (role == null) return NotFound();
             return Ok(role);
         }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { error = ex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating role {RoleId}", id);
@@ -105,6 +143,7 @@ public class RolesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequiresPermission("roles.manage")]
     public async Task<ActionResult> Delete(Guid id)
     {
         try
@@ -112,6 +151,14 @@ public class RolesController : ControllerBase
             var deleted = await _roleService.DeleteAsync(id);
             if (!deleted) return NotFound();
             return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { error = ex.Message });
         }
         catch (Exception ex)
         {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import TaskDetail from '../../pages/TaskDetail';
 import { taskService } from '../../services/taskService';
@@ -92,10 +92,12 @@ describe('TaskDetail', () => {
     expect(await screen.findByText('Review packet')).toBeInTheDocument();
     expect(screen.getByText('Onboarding')).toBeInTheDocument();
     expect(screen.getAllByText('Sreejith').length).toBeGreaterThan(0);
-    expect(screen.getByText('1. Admin')).toBeInTheDocument();
-    expect(screen.getByText('2. Team Lead')).toBeInTheDocument();
-    expect(screen.getByText('3. Director')).toBeInTheDocument();
-    expect(screen.getByText('Asha')).toBeInTheDocument();
+    const rail = screen.getByRole('list', { name: 'Stage progression' });
+    expect(within(rail).getByText('Admin')).toBeInTheDocument();
+    expect(within(rail).getByText('Team Lead')).toBeInTheDocument();
+    expect(within(rail).getByText('Director')).toBeInTheDocument();
+    // Whoever completed an earlier stage is named on it.
+    expect(within(rail).getByText('Asha')).toBeInTheDocument();
     await waitFor(() => {
       expect(document.querySelector('[data-status="upcoming"]')).toBeInTheDocument();
       expect(document.querySelector('[data-status="completed"]')).toBeInTheDocument();
@@ -127,13 +129,14 @@ describe('TaskDetail', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('1. Admin')).toBeInTheDocument();
-    expect(screen.getByText('1. Admin').closest('tr')).toHaveTextContent('Completed');
-    expect(screen.getByText('1. Admin').closest('tr')).toHaveTextContent('Shilpa S');
-    expect(screen.getByText('2. Team Lead').closest('tr')).toHaveTextContent('Current');
-    expect(screen.getByText('2. Team Lead').closest('tr')).toHaveTextContent('Ajith PR');
+    await screen.findByRole('list', { name: 'Stage progression' });
+    const stage = (id: string) => document.querySelector(`[data-stage="${id}"]`);
+    expect(stage('s1')).toHaveAttribute('data-status', 'completed');
+    expect(stage('s1')).toHaveTextContent('Shilpa S');
+    expect(stage('s2')).toHaveAttribute('data-status', 'current');
+    expect(stage('s2')).toHaveTextContent('Ajith PR');
     expect(screen.getByText('Working now').parentElement).toHaveTextContent('Ajith PR');
-    expect(screen.getByText('3. Director').closest('tr')).toHaveTextContent('Upcoming');
+    expect(stage('s3')).toHaveAttribute('data-status', 'upcoming');
   });
 
   describe('stage actions', () => {

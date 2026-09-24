@@ -22,7 +22,7 @@ describe('ProtectedRoute', () => {
         </ProtectedRoute>
       </MemoryRouter>
     );
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/Signing you in/);
     expect(screen.queryByText('Child')).not.toBeInTheDocument();
   });
 

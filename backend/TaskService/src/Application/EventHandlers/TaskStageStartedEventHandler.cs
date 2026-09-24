@@ -383,52 +383,25 @@ public class TaskStageStartedEventHandler
             var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"]
                 ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
 
-            // Retry logic in case task hasn't been synced to WorkflowManagement.API yet (race condition)
+            // The copy may not exist yet when a stage starts very soon after creation,
+            // so this still retries — but it looks the task up by its id rather than
+            // scanning every task in the workflow and matching on name.
             WorkflowTaskInfo? workflowTask = null;
-            int maxRetries = 3;
-            int retryDelayMs = 500;
+            const int maxRetries = 3;
+            const int retryDelayMs = 500;
 
-            for (int retry = 0; retry < maxRetries; retry++)
+            for (var retry = 0; retry < maxRetries; retry++)
             {
-                // First, find the task in WorkflowManagement.API by name and workflowId
-                var searchResponse = await GetWithOrgHeaderAsync(
-                    $"{workflowManagementApiUrl}/tasks/workflow/{@event.WorkflowId}",
-                    task.OrganizationId);
-
-                if (!searchResponse.IsSuccessStatusCode)
-                {
-                    _logger.LogWarning(
-                        "Failed to get tasks from WorkflowManagement.API. WorkflowId: {WorkflowId}, StatusCode: {StatusCode}, Retry: {Retry}",
-                        @event.WorkflowId, searchResponse.StatusCode, retry);
-                    
-                    if (retry < maxRetries - 1)
-                    {
-                        await System.Threading.Tasks.Task.Delay(retryDelayMs);
-                        continue;
-                    }
-                    return;
-                }
-
-                var tasksJson = await searchResponse.Content.ReadAsStringAsync();
-                var tasks = JsonSerializer.Deserialize<List<WorkflowTaskInfo>>(tasksJson, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                // Find the task by name (since TaskId in WorkflowManagement.API is different)
-                workflowTask = tasks?.FirstOrDefault(t => 
-                    t.TaskName == task.TaskName || 
-                    (t.Description != null && t.Description.Contains(task.TaskId.ToString())));
+                workflowTask = await FindWorkflowTaskAsync(
+                    workflowManagementApiUrl, task.TaskId, task.OrganizationId);
 
                 if (workflowTask != null)
-                {
-                    break; // Found the task
-                }
+                    break;
 
                 if (retry < maxRetries - 1)
                 {
                     _logger.LogInformation(
-                        "Task not found in WorkflowManagement.API yet, retrying... TaskId: {TaskId}, Retry: {Retry}",
+                        "Task not in WorkflowManagement.API yet, retrying. TaskId: {TaskId}, Retry: {Retry}",
                         task.TaskId, retry);
                     await System.Threading.Tasks.Task.Delay(retryDelayMs);
                 }
@@ -437,8 +410,8 @@ public class TaskStageStartedEventHandler
             if (workflowTask == null)
             {
                 _logger.LogWarning(
-                    "Could not find task in WorkflowManagement.API to update stage after retries. TaskId: {TaskId}, TaskName: {TaskName}",
-                    task.TaskId, task.TaskName);
+                    "Could not find task {TaskId} in WorkflowManagement.API to update its stage.",
+                    task.TaskId);
                 return;
             }
 
@@ -501,6 +474,31 @@ public class TaskStageStartedEventHandler
                 "Error syncing task stage to WorkflowManagement.API. TaskId: {TaskId}",
                 task.TaskId);
         }
+    }
+
+    /// <summary>
+    /// The WorkflowManagement copy of this task, or null if it is not there yet.
+    /// Looked up by id: both sides use the same TaskId.
+    /// </summary>
+    private async Task<WorkflowTaskInfo?> FindWorkflowTaskAsync(
+        string workflowManagementApiUrl, Guid taskId, Guid organizationId)
+    {
+        var response = await GetWithOrgHeaderAsync($"{workflowManagementApiUrl}/tasks/{taskId}", organizationId);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "Could not read task {TaskId} from WorkflowManagement.API. StatusCode: {StatusCode}",
+                taskId, response.StatusCode);
+            return null;
+        }
+
+        var json = await response.Content.ReadAsStringAsync();
+        return JsonSerializer.Deserialize<WorkflowTaskInfo>(json,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
     }
 
     private async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> GetWithOrgHeaderAsync(string url, Guid organizationId)

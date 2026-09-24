@@ -1,6 +1,7 @@
+import { inputClass } from '../utils/formStyles';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiAlertCircle, FiCornerUpLeft, FiInbox, FiPlus, FiUserCheck, FiUserX, FiUsers } from 'react-icons/fi';
+import { FiAlertCircle, FiCornerUpLeft, FiInbox, FiLayers, FiPlus, FiUserX, FiUsers } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import { taskService } from '../services/taskService';
@@ -8,42 +9,34 @@ import { workflowService } from '../services/workflowService';
 import { Stage, Task, Workflow } from '../types';
 import { StageFormValues } from '../types/stageForms';
 import LoadingSpinner from '../components/LoadingSpinner';
+import Badge from '../components/Badge';
+import Button from '../components/Button';
+import DataTable, { Column } from '../components/DataTable';
+import EmptyState from '../components/EmptyState';
+import PageHeader from '../components/PageHeader';
+import Tabs from '../components/Tabs';
+import Modal from '../components/Modal';
+import Field from '../components/Field';
+import Avatar from '../components/Avatar';
+import SearchInput from '../components/SearchInput';
+import StageProgress from '../components/flow/StageProgress';
 import StageForm, { missingRequiredFields } from '../components/StageForm';
 import StageAssigneePicker, { AUTO_ASSIGN } from '../components/StageAssigneePicker';
-import { formatDateToIST } from '../utils/dateUtils';
+import { formatDateToIST, relativeDue } from '../utils/dateUtils';
 import { PERMISSIONS, hasPermission, isOversightTeam } from '../utils/roleUtils';
 import { getStageForm } from '../utils/stageFormRegistry';
+import { apiErrorMessage } from '../utils/apiError';
+import { humanizeStatus, isCompletedStatus, priorityRank, priorityTone, statusTone } from '../utils/status';
 
 const REGISTER_TAB = 'register';
 
-const isCompleted = (status: string) => {
-  const s = status.toLowerCase();
-  return s.includes('completed') || s.includes('done');
-};
+type QuickFilter = 'all' | 'overdue' | 'rework';
 
-const statusColor = (status: string, isOverdue?: boolean) => {
-  if (isOverdue) return 'bg-red-100 text-red-800 border-red-200';
-  const s = status.toLowerCase();
-  if (isCompleted(s)) return 'bg-green-100 text-green-800 border-green-200';
-  if (s.includes('progress') || s.includes('active')) return 'bg-blue-100 text-blue-800 border-blue-200';
-  if (s.includes('assigned') || s.includes('pending')) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-  return 'bg-gray-100 text-gray-800 border-gray-200';
-};
-
-const priorityColor = (priority: string) => {
-  switch (priority.toLowerCase()) {
-    case 'critical': return 'bg-red-100 text-red-800 border-red-200';
-    case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
-    case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    case 'low': return 'bg-green-100 text-green-800 border-green-200';
-    default: return 'bg-gray-100 text-gray-800 border-gray-200';
-  }
-};
-
-const tabClass = (active: boolean) =>
-  `px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-    active ? 'border-[#434E78] text-[#434E78]' : 'border-transparent text-black/60 hover:text-black'
-  }`;
+interface StagePlace {
+  position: number;
+  total: number;
+  stageName: string;
+}
 
 const MyEnquiries = () => {
   const { user, currentMember, sessionLoading, permissions } = useAuth();
@@ -55,6 +48,8 @@ const MyEnquiries = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [search, setSearch] = useState('');
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -63,6 +58,7 @@ const MyEnquiries = () => {
   const [newValues, setNewValues] = useState<StageFormValues>({});
   const [newAssignee, setNewAssignee] = useState(AUTO_ASSIGN);
   const [newAssigneeBlocked, setNewAssigneeBlocked] = useState(false);
+  const [createErrors, setCreateErrors] = useState<{ workflow?: string; name?: string; missing?: string[] }>({});
 
   // Only the oversight teams follow every enquiry. Everyone else sees the work
   // assigned to them, whatever their role happens to permit elsewhere.
@@ -86,6 +82,21 @@ const MyEnquiries = () => {
       if (ordered[0]) ids.add(ordered[0].stageId);
     });
     return ids;
+  }, [workflows]);
+
+  // Where every stage sits in its workflow, so a row can show "4 of 11" without
+  // another request.
+  const placeOf = useMemo(() => {
+    const byWorkflow = new Map<string, Stage[]>();
+    workflows.forEach((w) => byWorkflow.set(w.workflowId, [...(w.stages ?? [])].sort((a, b) => a.stageOrder - b.stageOrder)));
+    return (task: Task): StagePlace | null => {
+      const ordered = byWorkflow.get(task.workflowId);
+      if (!ordered || ordered.length === 0) return null;
+      const index = ordered.findIndex(
+        (s) => s.stageId === task.stageId || (!task.stageId && task.stageName && s.stageName === task.stageName)
+      );
+      return { position: index + 1, total: ordered.length, stageName: ordered[index]?.stageName ?? task.stageName ?? '' };
+    };
   }, [workflows]);
 
   const isIntakeTab = Boolean(activeTab && firstStageIds.has(activeTab));
@@ -142,6 +153,12 @@ const MyEnquiries = () => {
     loadTab();
   }, [loadTab, currentMember, sessionLoading]);
 
+  // A new tab starts unfiltered; carrying "Overdue" across would hide its rows.
+  useEffect(() => {
+    setQuickFilter('all');
+    setSearch('');
+  }, [activeTab]);
+
   // Counts for the queue tabs, so work waiting elsewhere is visible without
   // clicking through every tab.
   useEffect(() => {
@@ -173,6 +190,13 @@ const MyEnquiries = () => {
     setNewName('');
     setNewValues({});
     setNewAssignee(AUTO_ASSIGN);
+    setCreateErrors({});
+  };
+
+  const openCreate = () => {
+    // A single workflow is the usual case; making someone pick it is a wasted step.
+    if (workflows.length === 1) setNewWorkflowId(workflows[0].workflowId);
+    setCreateOpen(true);
   };
 
   const waitForFirstStage = async (taskId: string) => {
@@ -189,17 +213,15 @@ const MyEnquiries = () => {
   };
 
   const handleCreate = async (assignAfter = false) => {
-    if (!selectedWorkflow) {
-      toast.error('Choose which workflow this enquiry follows.');
-      return;
-    }
-    if (!newName.trim()) {
-      toast.error('Give the enquiry a name.');
-      return;
-    }
-    const missing = missingRequiredFields(intakeSchema, newValues);
-    if (missing.length > 0) {
-      toast.error(`Fill in: ${missing.join(', ')}`);
+    const missing = selectedWorkflow ? missingRequiredFields(intakeSchema, newValues) : [];
+    const errors = {
+      workflow: selectedWorkflow ? undefined : 'Choose which workflow this enquiry follows.',
+      name: newName.trim() ? undefined : 'Give the enquiry a name.',
+      missing: missing.length > 0 ? missing : undefined,
+    };
+    setCreateErrors(errors);
+    if (errors.workflow || errors.name || errors.missing) {
+      if (errors.missing) toast.error(`Fill in: ${missing.join(', ')}`);
       return;
     }
 
@@ -207,7 +229,7 @@ const MyEnquiries = () => {
     try {
       const created = await taskService.create({
         taskName: newName.trim(),
-        taskType: selectedWorkflow.workflowName,
+        taskType: selectedWorkflow!.workflowName,
         taskData: newValues,
         // Sending the creator is what puts the first stage with them rather than
         // with whichever teammate happens to be least loaded.
@@ -230,271 +252,425 @@ const MyEnquiries = () => {
       await new Promise((resolve) => setTimeout(resolve, 1200));
       await loadTab();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Could not register the enquiry.');
+      toast.error(apiErrorMessage(err, 'Could not register the enquiry.'));
     } finally {
       setCreating(false);
     }
   };
 
-  if (sessionLoading) return <LoadingSpinner />;
+  if (sessionLoading) return <LoadingSpinner label="Loading your queue" />;
 
-  if (!currentMember) {
+  if (!currentMember || (!currentMember.teamId && !canSeeRegister)) {
+    const unlinked = !currentMember;
     return (
-      <div className="p-8 lg:p-10 bg-white min-h-screen font-sans">
-        <div className="max-w-3xl mx-auto">
-          <h1 className="text-4xl font-semibold text-black mb-2 tracking-tight">Enquiry</h1>
-          <div className="mt-8 bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 p-8 text-center">
-            <FiUserX className="text-4xl text-[#434E78] mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-black mb-2">Your login isn't linked to a member</h2>
-            <p className="text-black/70 text-sm">
-              Work is assigned to members, so nothing can be shown until an administrator links
-              your login to a member record on the Members page.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!currentMember.teamId && !canSeeRegister) {
-    return (
-      <div className="p-8 lg:p-10 bg-white min-h-screen font-sans">
-        <div className="max-w-3xl mx-auto">
-          <h1 className="text-4xl font-semibold text-black mb-2 tracking-tight">Enquiry</h1>
-          <div className="mt-8 bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 p-8 text-center">
-            <FiUsers className="text-4xl text-[#434E78] mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-black mb-2">You're not on a team yet</h2>
-            <p className="text-black/70 text-sm">
-              Work reaches you through your team. Ask an administrator to add you to one on the
-              Teams page, and your stages will appear here.
-            </p>
-          </div>
+      <div>
+        <PageHeader title="Enquiries" />
+        <div className="card">
+          <EmptyState
+            icon={unlinked ? <FiUserX /> : <FiUsers />}
+            title={unlinked ? "Your login isn't linked to a member" : "You're not on a team yet"}
+            body={
+              unlinked
+                ? 'Work is assigned to members, so nothing can be shown until an administrator links your login to a member record on the Members page.'
+                : 'Work reaches you through your team. Ask an administrator to add you to one on the Teams page, and your stages will appear here.'
+            }
+          />
         </div>
       </div>
     );
   }
 
   const activeStage = myStages.find((s) => s.stageId === activeTab);
-  const showStage = activeTab === REGISTER_TAB || !isIntakeTab;
+  const isRegister = activeTab === REGISTER_TAB;
+  const showProgress = isRegister || isIntakeTab;
 
-  return (
-    <div className="p-8 lg:p-10 bg-white min-h-screen font-sans">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-4xl font-semibold text-black mb-2 tracking-tight">Enquiry</h1>
-            <p className="text-black/70 text-base">
-              {currentMember.firstName} {currentMember.lastName}
-              {currentMember.teamName ? ` · ${currentMember.teamName}` : ''}
-            </p>
-          </div>
-          {canRegister && isIntakeTab && (
-            <button
-              type="button"
-              onClick={() => setCreateOpen(true)}
-              className="inline-flex items-center px-4 py-2 rounded-azure-sm bg-[#434E78] text-white text-sm font-medium hover:bg-[#434E78]/90"
-            >
-              <FiPlus className="mr-2" />
-              New Enquiry
-            </button>
-          )}
-        </div>
+  const term = search.trim().toLowerCase();
+  const overdueCount = rows.filter((t) => t.isOverdue).length;
+  const reworkCount = rows.filter((t) => t.needsRework).length;
+  const visibleRows = rows.filter((t) => {
+    if (quickFilter === 'overdue' && !t.isOverdue) return false;
+    if (quickFilter === 'rework' && !t.needsRework) return false;
+    if (!term) return true;
+    return [t.taskName, t.stageName, t.assignedToMemberName, t.priority].some((v) => v?.toLowerCase().includes(term));
+  });
 
-        <div className="flex flex-wrap gap-1 border-b border-[#434E78]/20 mb-6">
-          {myStages.map((stage) => (
-            <button
-              key={stage.stageId}
-              type="button"
-              onClick={() => setActiveTab(stage.stageId)}
-              className={tabClass(activeTab === stage.stageId)}
-            >
-              {stage.stageName}
-              {counts[stage.stageId] > 0 && (
-                <span className="ml-2 px-1.5 py-0.5 rounded-full bg-[#434E78] text-white text-xs">
-                  {counts[stage.stageId]}
-                </span>
-              )}
-            </button>
-          ))}
-          {canSeeRegister && (
-            <button
-              type="button"
-              onClick={() => setActiveTab(REGISTER_TAB)}
-              className={tabClass(activeTab === REGISTER_TAB)}
-            >
-              All enquiries
-            </button>
-          )}
-        </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-azure-sm text-red-800">{error}</div>
+  const dueCell = (t: Task) => {
+    if (!t.dueDate) return <span className="text-ink-subtle">—</span>;
+    const due = relativeDue(t.dueDate);
+    const done = isCompletedStatus(t.status);
+    return (
+      <div className="text-right leading-tight">
+        {!done && due && (
+          <p className={`font-sans text-meta font-medium ${due.tone === 'danger' ? 'text-danger' : due.tone === 'warning' ? 'text-warning' : 'text-ink-muted'}`}>
+            {due.label}
+          </p>
         )}
+        <p className="text-[11px] text-ink-subtle">{formatDateToIST(t.dueDate)}</p>
+      </div>
+    );
+  };
 
-        {loading ? (
-          <LoadingSpinner />
-        ) : rows.length === 0 ? (
-          <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 p-12 text-center">
-            <FiInbox className="text-4xl text-[#434E78] mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-black mb-2">
-              {isIntakeTab ? 'You have not registered any enquiries yet' : 'Nothing waiting for you here'}
-            </h2>
-            <p className="text-black/70 text-sm">
-              {isIntakeTab
-                ? 'Register one and it will appear here as it moves through the workflow.'
-                : `Enquiries appear once one reaches ${activeStage?.stageName ?? 'this stage'} and is assigned to you.`}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {rows.map((enquiry) => (
-              <button
-                key={enquiry.taskId}
-                type="button"
-                onClick={() => navigate(`/tasks/${enquiry.taskId}`)}
-                className={`w-full text-left bg-white rounded-azure-sm shadow-azure-sm border p-5 hover:shadow-azure-lg transition-all duration-150 ${
-                  enquiry.needsRework ? 'border-orange-300' : 'border-[#434E78]/20 hover:border-[#434E78]/40'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-black truncate">{enquiry.taskName}</h3>
-                    {enquiry.needsRework && (
-                      <p className="mt-1 inline-flex items-start gap-1.5 text-xs text-orange-800 bg-orange-50 border border-orange-200 rounded-azure-sm px-2 py-1">
-                        <FiCornerUpLeft className="mt-0.5 shrink-0" />
-                        <span>
-                          <strong>Sent back — needs rework.</strong>
-                          {enquiry.reworkReason ? ` ${enquiry.reworkReason}` : ''}
-                        </span>
-                      </p>
-                    )}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-black/60">
-                      {showStage && enquiry.stageName && (
-                        <span className="font-medium text-[#434E78]">{enquiry.stageName}</span>
-                      )}
-                      {enquiry.assignedToMemberName && !isIntakeTab && (
-                        <span className="inline-flex items-center gap-1">
-                          <FiUserCheck className="text-[#434E78]" />
-                          {enquiry.assignedToMemberName}
-                        </span>
-                      )}
-                      {enquiry.dueDate && <span>{formatDateToIST(enquiry.dueDate)}</span>}
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2 shrink-0">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${statusColor(enquiry.status, enquiry.isOverdue)}`}>
-                      {enquiry.isOverdue ? 'Overdue' : enquiry.status}
-                    </span>
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${priorityColor(enquiry.priority)}`}>
-                      {enquiry.priority}
-                    </span>
-                    {enquiry.isOverdue && <FiAlertCircle className="text-red-500" />}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
+  const columns: Column<Task>[] = [
+    {
+      key: 'taskName',
+      header: 'Enquiry',
+      sortValue: (t) => t.taskName.toLowerCase(),
+      render: (t) => (
+        <div className="min-w-0 max-w-[320px]">
+          <span className="font-semibold text-ink block truncate" title={t.taskName}>{t.taskName}</span>
+          {t.needsRework ? (
+            <span className="mt-0.5 flex items-start gap-1.5 text-meta text-warning">
+              <FiCornerUpLeft className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span className="line-clamp-2">
+                <strong className="font-semibold">Sent back.</strong>
+                {t.reworkReason ? ` ${t.reworkReason}` : ' Needs rework.'}
+              </span>
+            </span>
+          ) : (
+            <span className="block text-meta text-ink-subtle truncate">
+              {workflows.find((w) => w.workflowId === t.workflowId)?.workflowName ?? ''}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'progress',
+      header: showProgress ? 'Progress' : 'Stage',
+      hideOnMobile: true,
+      sortValue: (t) => placeOf(t)?.position ?? 0,
+      render: (t) => {
+        const place = placeOf(t);
+        if (!place) return <span className="text-ink-muted">{t.stageName ?? '—'}</span>;
+        return (
+          <StageProgress
+            total={place.total}
+            current={place.position}
+            done={isCompletedStatus(t.status)}
+            rework={t.needsRework}
+            stageName={place.stageName || t.stageName}
+          />
+        );
+      },
+    },
+    ...(!isIntakeTab
+      ? [{
+          key: 'assignee',
+          header: 'With',
+          hideOnMobile: true,
+          sortValue: (t: Task) => t.assignedToMemberName ?? '',
+          render: (t: Task) =>
+            t.assignedToMemberName ? (
+              <span className="inline-flex items-center gap-2 text-ink">
+                <Avatar name={t.assignedToMemberName} size="sm" />
+                <span className="truncate max-w-[160px]">{t.assignedToMemberName}</span>
+              </span>
+            ) : (
+              <span className="text-ink-subtle">Unassigned</span>
+            ),
+        } as Column<Task>]
+      : []),
+    {
+      key: 'priority',
+      header: 'Priority',
+      sortValue: (t) => priorityRank(t.priority),
+      render: (t) => <Badge tone={priorityTone(t.priority)}>{t.priority}</Badge>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortValue: (t) => (t.isOverdue ? 'zz-overdue' : t.status),
+      render: (t) => (
+        <Badge dot tone={statusTone(t.status, t.isOverdue)} icon={t.isOverdue ? <FiAlertCircle /> : undefined}>
+          {t.isOverdue ? 'Overdue' : humanizeStatus(t.status)}
+        </Badge>
+      ),
+    },
+    {
+      key: 'dueDate',
+      header: 'Due',
+      align: 'right',
+      hideOnMobile: true,
+      sortValue: (t) => t.dueDate ?? '',
+      render: dueCell,
+    },
+  ];
+
+  const mobileCard = (t: Task) => {
+    const place = placeOf(t);
+    const due = relativeDue(t.dueDate);
+    return (
+      <div className="space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <span className="font-semibold text-ink leading-5">{t.taskName}</span>
+          <Badge dot tone={statusTone(t.status, t.isOverdue)}>{t.isOverdue ? 'Overdue' : humanizeStatus(t.status)}</Badge>
+        </div>
+        {place && (
+          <StageProgress total={place.total} current={place.position} done={isCompletedStatus(t.status)} rework={t.needsRework} stageName={place.stageName} />
+        )}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-ink-subtle">
+          <Badge tone={priorityTone(t.priority)}>{t.priority}</Badge>
+          {t.assignedToMemberName && !isIntakeTab && <span>With {t.assignedToMemberName}</span>}
+          {due && !isCompletedStatus(t.status) && <span className={due.tone === 'danger' ? 'text-danger font-medium' : ''}>{due.label}</span>}
+        </div>
+        {t.needsRework && (
+          <p className="text-meta text-warning flex items-start gap-1.5">
+            <FiCornerUpLeft aria-hidden="true" className="mt-0.5 shrink-0" />
+            {t.reworkReason || 'Sent back — needs rework.'}
+          </p>
         )}
       </div>
+    );
+  };
 
-      {createOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-azure-sm shadow-azure-lg w-full max-w-3xl my-8">
-            <div className="px-6 py-4 border-b border-[#434E78]/10">
-              <h2 className="text-lg font-semibold text-black">Register a new enquiry</h2>
-            </div>
+  const filterChip = (id: QuickFilter, label: string, count: number, tone?: 'danger' | 'warning') => {
+    const active = quickFilter === id;
+    return (
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={() => setQuickFilter(active && id !== 'all' ? 'all' : id)}
+        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-meta font-medium cursor-pointer ring-1 ring-inset ${
+          active
+            ? 'bg-ink text-white ring-ink'
+            : 'bg-surface text-ink-muted ring-line-strong hover:text-ink hover:ring-[#A9B0C4]'
+        }`}
+      >
+        {tone && !active && (
+          <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${tone === 'danger' ? 'bg-danger' : 'bg-warning-strong'}`} />
+        )}
+        {label}
+        <span className={`tabular ${active ? 'text-white/70' : 'text-ink-subtle'}`}>{count}</span>
+      </button>
+    );
+  };
 
-            <div className="px-6 py-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="new-workflow" className="block text-black text-sm font-semibold mb-2">
-                  Workflow <span className="text-red-600">*</span>
-                </label>
-                <select
-                  id="new-workflow"
-                  value={newWorkflowId}
-                  onChange={(e) => {
-                    setNewWorkflowId(e.target.value);
-                    setNewValues({});
-                  }}
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] bg-white text-sm"
-                >
-                  <option value="">Select a workflow...</option>
-                  {workflows.map((w) => (
-                    <option key={w.workflowId} value={w.workflowId}>{w.workflowName}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="new-name" className="block text-black text-sm font-semibold mb-2">
-                  Enquiry name <span className="text-red-600">*</span>
-                </label>
-                <input
-                  id="new-name"
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="ENQ-0142 · Al Noor Tower"
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] bg-white text-sm"
-                />
-              </div>
-            </div>
+  const tabs = [
+    ...myStages.map((stage) => ({
+      id: stage.stageId,
+      label: stage.stageName,
+      count: firstStageIds.has(stage.stageId) ? undefined : counts[stage.stageId] ?? undefined,
+    })),
+    ...(canSeeRegister ? [{ id: REGISTER_TAB, label: 'All enquiries', icon: <FiLayers /> }] : []),
+  ];
 
-            {selectedWorkflow && (
-              <div className="px-6">
-                <StageForm
-                  schema={intakeSchema}
-                  values={newValues}
-                  onChange={setNewValues}
-                  readOnly={creating}
-                  stages={orderedNewStages}
-                />
-              </div>
-            )}
+  const subtitle = isRegister
+    ? 'Every enquiry in the organisation, wherever it is in its workflow.'
+    : isIntakeTab
+      ? 'Enquiries you registered, and how far each has got.'
+      : activeStage
+        ? `Work waiting on you at ${activeStage.stageName}.`
+        : undefined;
 
-            {selectedWorkflow && secondStage && (
-              <div className="px-6 pb-2 max-w-md">
-                <StageAssigneePicker
-                  teamId={secondStage.teamId}
-                  teamName={secondStage.teamName}
-                  stageName={secondStage.stageName}
-                  value={newAssignee}
-                  onChange={setNewAssignee}
-                  onBlockedChange={setNewAssigneeBlocked}
-                  disabled={creating}
-                />
-                <p className="text-xs text-black/60 mt-1">Only used by "Save &amp; assign".</p>
-              </div>
-            )}
+  return (
+    <div>
+      <PageHeader
+        title="Enquiries"
+        subtitle={subtitle}
+        meta={
+          <span className="inline-flex items-center gap-2">
+            <Avatar name={`${currentMember.firstName} ${currentMember.lastName}`} size="xs" />
+            {currentMember.firstName} {currentMember.lastName}
+            {currentMember.teamName ? ` · ${currentMember.teamName}` : ''}
+          </span>
+        }
+        actions={
+          canRegister && isIntakeTab ? (
+            <Button variant="primary" icon={<FiPlus />} onClick={openCreate}>
+              New Enquiry
+            </Button>
+          ) : null
+        }
+      />
 
-            <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#434E78]/10">
-              <button
-                type="button"
-                disabled={creating}
-                onClick={closeCreate}
-                className="px-4 py-2 rounded-azure-sm border border-[#434E78]/30 text-[#434E78] text-sm font-medium hover:bg-[#434E78]/5 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={creating}
-                onClick={() => handleCreate(false)}
-                className="px-4 py-2 rounded-azure-sm border border-[#434E78]/30 text-[#434E78] text-sm font-medium hover:bg-[#434E78]/5 disabled:opacity-50"
-              >
-                {creating ? 'Working...' : 'Save enquiry'}
-              </button>
-              <button
-                type="button"
-                disabled={creating || newAssigneeBlocked || !secondStage}
-                onClick={() => handleCreate(true)}
-                className="px-4 py-2 rounded-azure-sm bg-[#434E78] text-white text-sm font-medium hover:bg-[#434E78]/90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {creating ? 'Working...' : 'Save & assign'}
-              </button>
-            </div>
-          </div>
+      {tabs.length > 0 && (
+        <div className="mb-5">
+          <Tabs label="Enquiry queues" tabs={tabs} activeId={activeTab} onChange={setActiveTab} />
         </div>
       )}
+
+      {error && (
+        <div role="alert" className="mb-5 flex items-center gap-2.5 px-4 py-3 bg-danger-subtle border border-danger-border rounded-card text-danger text-body">
+          <FiAlertCircle aria-hidden="true" className="shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <DataTable<Task>
+        caption={activeStage ? `Enquiries at ${activeStage.stageName}` : 'Enquiries'}
+        columns={columns}
+        rows={visibleRows}
+        rowKey={(t) => t.taskId}
+        loading={loading}
+        onRowClick={(t) => navigate(`/tasks/${t.taskId}`)}
+        rowTone={(t) => (t.isOverdue ? 'danger' : t.needsRework ? 'warning' : undefined)}
+        mobileCard={mobileCard}
+        toolbar={
+          rows.length > 0 || term ? (
+            <>
+              <SearchInput
+                label="Search enquiries"
+                placeholder="Search by name, stage or person"
+                value={search}
+                onChange={setSearch}
+                className="w-full sm:w-72"
+              />
+              <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+                {filterChip('all', 'All', rows.length)}
+                {filterChip('overdue', 'Overdue', overdueCount, 'danger')}
+                {filterChip('rework', 'Sent back', reworkCount, 'warning')}
+              </div>
+            </>
+          ) : undefined
+        }
+        empty={
+          rows.length > 0 ? (
+            <EmptyState
+              compact
+              icon={<FiInbox />}
+              title="Nothing matches"
+              body="No enquiry in this queue matches the search or filter."
+              action={
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setSearch('');
+                    setQuickFilter('all');
+                  }}
+                >
+                  Clear filters
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={<FiInbox />}
+              title={isIntakeTab ? 'No enquiries registered yet' : isRegister ? 'No enquiries yet' : 'Nothing waiting for you here'}
+              body={
+                isIntakeTab
+                  ? 'Register one and it will appear here as it moves through the workflow.'
+                  : isRegister
+                    ? 'Enquiries appear here as soon as the administrator registers them.'
+                    : `Enquiries appear once one reaches ${activeStage?.stageName ?? 'this stage'} and is assigned to you.`
+              }
+              action={
+                canRegister && isIntakeTab ? (
+                  <Button variant="primary" icon={<FiPlus />} onClick={openCreate}>
+                    New Enquiry
+                  </Button>
+                ) : null
+              }
+            />
+          )
+        }
+      />
+
+      <Modal
+        isOpen={createOpen}
+        title="Register a new enquiry"
+        description="It starts at the first stage of the workflow and moves on from there."
+        icon={<FiPlus />}
+        size="xl"
+        onClose={creating ? () => {} : closeCreate}
+        footer={
+          <>
+            <Button variant="secondary" disabled={creating} onClick={closeCreate}>
+              Cancel
+            </Button>
+            <Button variant="secondary" disabled={creating} onClick={() => handleCreate(false)}>
+              {creating ? 'Working…' : 'Save enquiry'}
+            </Button>
+            <Button
+              variant="primary"
+              loading={creating}
+              disabled={newAssigneeBlocked || !secondStage}
+              onClick={() => handleCreate(true)}
+            >
+              {creating ? 'Working…' : 'Save & assign'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <Field htmlFor="new-workflow" label="Workflow" required error={createErrors.workflow}>
+              <select
+                id="new-workflow"
+                value={newWorkflowId}
+                onChange={(e) => {
+                  setNewWorkflowId(e.target.value);
+                  setNewValues({});
+                }}
+                aria-invalid={Boolean(createErrors.workflow)}
+                className={`${inputClass} ${createErrors.workflow ? 'border-danger' : ''}`}
+              >
+                <option value="">Select a workflow…</option>
+                {workflows.map((w) => (
+                  <option key={w.workflowId} value={w.workflowId}>{w.workflowName}</option>
+                ))}
+              </select>
+            </Field>
+            <Field htmlFor="new-name" label="Enquiry name" required error={createErrors.name} help="Usually the enquiry number and the project.">
+              <input
+                id="new-name"
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="ENQ-0142 · Al Noor Tower"
+                aria-invalid={Boolean(createErrors.name)}
+                className={`${inputClass} ${createErrors.name ? 'border-danger' : ''}`}
+              />
+            </Field>
+          </div>
+
+          {selectedWorkflow && orderedNewStages.length > 0 && (
+            <div className="rounded-card bg-surface-muted border border-line px-4 py-3">
+              <p className="eyebrow mb-2">Route</p>
+              <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-meta">
+                {orderedNewStages.map((stage, index) => (
+                  <li key={stage.stageId} className="inline-flex items-center gap-1.5">
+                    <span className={index === 0 ? 'font-semibold text-primary' : 'text-ink-muted'}>{stage.stageName}</span>
+                    {index < orderedNewStages.length - 1 && <span aria-hidden="true" className="text-ink-subtle">→</span>}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {selectedWorkflow && (
+            <div>
+              <p className="eyebrow mb-3">{intakeSchema.title}</p>
+              <StageForm
+                bare
+                schema={intakeSchema}
+                values={newValues}
+                onChange={(values) => {
+                  setNewValues(values);
+                  if (createErrors.missing) setCreateErrors((e) => ({ ...e, missing: missingRequiredFields(intakeSchema, values) }));
+                }}
+                readOnly={creating}
+                stages={orderedNewStages}
+                missing={createErrors.missing}
+              />
+            </div>
+          )}
+
+          {selectedWorkflow && secondStage && (
+            <div className="pt-5 border-t border-line-subtle max-w-md">
+              <StageAssigneePicker
+                teamId={secondStage.teamId}
+                teamName={secondStage.teamName}
+                stageName={secondStage.stageName}
+                value={newAssignee}
+                onChange={setNewAssignee}
+                onBlockedChange={setNewAssigneeBlocked}
+                disabled={creating}
+              />
+              <p className="mt-1.5 text-meta text-ink-subtle">Used by “Save &amp; assign”, which registers it and hands it straight on.</p>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };

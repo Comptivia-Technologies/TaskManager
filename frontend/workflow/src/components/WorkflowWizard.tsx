@@ -1,3 +1,13 @@
+import { selectStyles, selectTheme } from '../utils/theme';
+import WorkflowStagesStep from './workflowWizard/WorkflowStagesStep';
+import { createStages } from '../utils/stageSync';
+import { inputClass } from '../utils/formStyles';
+import Button, { IconButton } from './Button';
+import Badge from './Badge';
+import Field from './Field';
+import Avatar from './Avatar';
+import PageHeader from './PageHeader';
+import WizardStepper from './WizardStepper';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTeams } from '../hooks/useTeams';
@@ -6,14 +16,14 @@ import { teamService } from '../services/teamService';
 import { memberService } from '../services/memberService';
 import { userService } from '../services/userService';
 import { workflowService } from '../services/workflowService';
-import { stageService } from '../services/stageService';
 import { toast } from 'react-toastify';
-import { FiChevronLeft, FiChevronRight, FiX, FiPlus, FiEdit2, FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings, FiShield } from 'react-icons/fi';
+import { FiAlertTriangle, FiCheckCircle, FiChevronLeft, FiChevronRight, FiClock, FiEdit2, FiGitMerge, FiPlus, FiSliders, FiUserPlus, FiUsers, FiX } from 'react-icons/fi';
 import Select from 'react-select';
 import SLAConfigure from './SLAConfigure';
 import ConditionBuilder from './ConditionBuilder';
 import { PriorityRuleCreate, User } from '../types';
 import { priorityRulesService } from '../services/priorityRulesService';
+import { apiErrorMessage } from '../utils/apiError';
 
 function splitFullName(fullName: string): { firstName: string; lastName: string } {
   const parts = fullName.trim().split(/\s+/);
@@ -57,7 +67,14 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const totalSteps = 6;
 
-  const stepIcons = [FiPlay, FiUserPlus, FiUsers, FiFileText, FiSettings, FiShield];
+  const steps = [
+    { label: 'Get started' },
+    { label: 'Members', hint: 'Optional' },
+    { label: 'Team', hint: 'Optional' },
+    { label: 'Stages' },
+    { label: 'SLA' },
+    { label: 'Priority rules', hint: 'Optional' },
+  ];
 
   // Step 1: Get Started (intro)
   // Step 2: Add Members (new members to be created)
@@ -169,10 +186,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
           toast.success(`Team created and ${selectedMemberIds.length} member(s) assigned successfully!`);
         } catch (assignError: any) {
           console.error('Error assigning members:', assignError);
-          const errorMessage = assignError.response?.data?.error || 
-                              assignError.response?.data?.message || 
-                              assignError.message || 
-                              'Failed to assign members';
+          const errorMessage = apiErrorMessage(assignError, 'Failed to assign members');
           toast.error(`Team created but failed to assign members: ${errorMessage}`);
         }
       } else {
@@ -186,7 +200,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
         setCompletedSteps([...completedSteps, 3]);
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to create team');
+      toast.error(apiErrorMessage(error, 'Failed to create team'));
     } finally {
       setLoading(false);
     }
@@ -282,10 +296,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
       }
     } catch (error: any) {
       console.error('Error creating members:', error);
-      const errorMessage = error.response?.data?.error || 
-                          error.response?.data?.message || 
-                          error.message || 
-                          'Failed to create members';
+      const errorMessage = apiErrorMessage(error, 'Failed to create members');
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -328,18 +339,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
         description,
       });
 
-      for (let i = 0; i < stages.length; i++) {
-        const stage = stages[i];
-        await stageService.create({
-          stageName: stage.stageName,
-          stageOrder: stage.stageOrder,
-          workflowId: workflow.workflowId,
-          teamId: stage.teamId,
-          stageType: stage.stageType || 'Process',
-          transitionPolicy: stage.transitionPolicy || 'OnComplete',
-          timeoutMinutes: stage.timeoutMinutes,
-        });
-      }
+      await createStages(workflow.workflowId, stages);
 
       try {
         await workflowService.updateJson(workflow.workflowId);
@@ -353,7 +353,7 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
         setCompletedSteps([...completedSteps, 4]);
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to create workflow');
+      toast.error(apiErrorMessage(error, 'Failed to create workflow'));
     } finally {
       setLoading(false);
     }
@@ -439,78 +439,64 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
       }
     } catch (error: any) {
       console.error('Error creating rules:', error);
-      const errorMessage = error.response?.data?.error || 
-                          error.response?.data?.message || 
-                          error.message || 
-                          'Failed to create rules';
+      const errorMessage = apiErrorMessage(error, 'Failed to create rules');
       toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  const skillLabels = ['Beginner', 'Junior', 'Intermediate', 'Advanced', 'Expert'];
+
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
         return (
-          <div className="text-center py-8">
-            <h2 className="text-2xl font-semibold mb-4 text-black font-sans">Welcome to Workflow Creation</h2>
-            <p className="text-black/70 mb-6 text-sm font-sans max-w-md mx-auto">
-              Let's guide you through creating a complete workflow setup. We'll help you add members, create a team, set up your workflow, configure SLA settings, and create priority rules.
+          <div className="max-w-2xl">
+            <h2 className="text-title font-semibold text-ink">Set up a workflow end to end</h2>
+            <p className="mt-1 text-body text-ink-muted">
+              Five short steps take you from the people who do the work to the rules that prioritise it. The optional
+              ones can be skipped if that part already exists.
             </p>
-            <div className="space-y-3 text-left max-w-md mx-auto">
-              <div className="flex items-start">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#434E78] text-white flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">1</div>
-                <div>
-                  <p className="font-semibold text-black font-sans">Add Members</p>
-                  <p className="text-sm text-black/60 font-sans">Add team members with their roles and skill levels (optional)</p>
-                </div>
-              </div>
-              <div className="flex items-start">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#434E78] text-white flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">2</div>
-                <div>
-                  <p className="font-semibold text-black font-sans">Create Team</p>
-                  <p className="text-sm text-black/60 font-sans">Set up a new team (optional if you already have teams)</p>
-                </div>
-              </div>
-              <div className="flex items-start">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#434E78] text-white flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">3</div>
-                <div>
-                  <p className="font-semibold text-black font-sans">Create Workflow</p>
-                  <p className="text-sm text-black/60 font-sans">Define your workflow stages and assign teams</p>
-                </div>
-              </div>
-              <div className="flex items-start">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#434E78] text-white flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">4</div>
-                <div>
-                  <p className="font-semibold text-black font-sans">Configure SLA</p>
-                  <p className="text-sm text-black/60 font-sans">Set up priority levels and response times</p>
-                </div>
-              </div>
-              <div className="flex items-start">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#434E78] text-white flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">5</div>
-                <div>
-                  <p className="font-semibold text-black font-sans">Create Rules</p>
-                  <p className="text-sm text-black/60 font-sans">Define priority rules for task assignment (optional)</p>
-                </div>
-              </div>
-            </div>
+            <ol className="mt-6 relative">
+              {[
+                { icon: <FiUserPlus />, title: 'Add Members', body: 'People who will work on stages, with their skill levels.', optional: true },
+                { icon: <FiUsers />, title: 'Create Team', body: 'Group members into the team that owns a stage.', optional: true },
+                { icon: <FiGitMerge />, title: 'Create Workflow', body: 'Name it and lay out its stages, each owned by a team.' },
+                { icon: <FiClock />, title: 'Configure SLA', body: 'Response time for each priority level.' },
+                { icon: <FiSliders />, title: 'Create Rules', body: 'Conditions that set an enquiry’s priority automatically.', optional: true },
+              ].map((item, index, all) => (
+                <li key={item.title} className="relative flex gap-4 pb-5 last:pb-0">
+                  {index < all.length - 1 && <span aria-hidden="true" className="absolute left-[17px] top-10 bottom-0 w-px bg-line" />}
+                  <span aria-hidden="true" className="relative z-[1] h-9 w-9 shrink-0 rounded-full bg-primary-subtle text-primary ring-1 ring-inset ring-primary-border flex items-center justify-center">
+                    {item.icon}
+                  </span>
+                  <div className="pt-1.5">
+                    <p className="text-body font-semibold text-ink flex items-center gap-2">
+                      {item.title}
+                      {item.optional && <Badge>Optional</Badge>}
+                    </p>
+                    <p className="text-meta text-ink-subtle mt-0.5">{item.body}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
           </div>
         );
 
       case 2:
         return (
           <div>
-            <h2 className="text-xl font-semibold mb-4 text-black font-sans">Add Members</h2>
-            <p className="text-sm text-black/60 mb-4 font-sans">
-              Add members who will work on tasks. They will be assigned to a team in the next step.
+            <h2 className="text-title font-semibold text-ink">Add Members</h2>
+            <p className="mt-1 text-body text-ink-muted">
+              Add the people who will work on stages. They join a team in the next step.
             </p>
             {!skipMemberCreation && (
-              <>
-                <div className="mb-6 p-4 border border-[#434E78]/30 rounded-azure-sm bg-[#434E78]/5">
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Email (from Product Hub) *</label>
+              <div className="mt-6 grid grid-cols-1 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-6 items-start">
+                <div className="rounded-card border border-line p-5 space-y-4">
+                  <Field htmlFor="wiz-member-login" label="Login" hint="(from Product Hub)" required>
                     <select
+                      id="wiz-member-login"
                       value={memberForm.email}
                       onChange={(e) => {
                         const user = productHubUsers.find((u) => u.email === e.target.value);
@@ -526,9 +512,9 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                           });
                         }
                       }}
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
+                      className={inputClass}
                     >
-                      <option value="">Select a user...</option>
+                      <option value="">Select a user…</option>
                       {productHubUsers
                         .filter(
                           (u) =>
@@ -541,225 +527,134 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
                           </option>
                         ))}
                     </select>
+                  </Field>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Field htmlFor="wiz-first" label="First name" required>
+                      <input id="wiz-first" type="text" value={memberForm.firstName} onChange={(e) => setMemberForm({ ...memberForm, firstName: e.target.value })} className={inputClass} />
+                    </Field>
+                    <Field htmlFor="wiz-last" label="Last name" required>
+                      <input id="wiz-last" type="text" value={memberForm.lastName} onChange={(e) => setMemberForm({ ...memberForm, lastName: e.target.value })} className={inputClass} />
+                    </Field>
                   </div>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="block text-black text-sm font-semibold mb-2 font-sans">First Name *</label>
-                      <input
-                        type="text"
-                        value={memberForm.firstName}
-                        onChange={(e) => setMemberForm({ ...memberForm, firstName: e.target.value })}
-                        className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-black text-sm font-semibold mb-2 font-sans">Last Name *</label>
-                      <input
-                        type="text"
-                        value={memberForm.lastName}
-                        onChange={(e) => setMemberForm({ ...memberForm, lastName: e.target.value })}
-                        className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                      />
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Field htmlFor="wiz-role" label="Role" required>
+                      <input id="wiz-role" type="text" value={memberForm.role} onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })} className={inputClass} placeholder="e.g. Estimator" />
+                    </Field>
+                    <Field htmlFor="wiz-skill" label="Skill level" required>
+                      <select id="wiz-skill" value={memberForm.skillLevel} onChange={(e) => setMemberForm({ ...memberForm, skillLevel: parseInt(e.target.value) })} className={inputClass}>
+                        {skillLabels.map((label, i) => (
+                          <option key={label} value={i + 1}>{i + 1} — {label}</option>
+                        ))}
+                      </select>
+                    </Field>
                   </div>
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Role *</label>
-                    <input
-                      type="text"
-                      value={memberForm.role}
-                      onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                      placeholder="e.g., Developer, Manager"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Skill Level *</label>
-                    <select
-                      value={memberForm.skillLevel}
-                      onChange={(e) => setMemberForm({ ...memberForm, skillLevel: parseInt(e.target.value) })}
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                    >
-                      <option value={1}>1 - Beginner</option>
-                      <option value={2}>2 - Junior</option>
-                      <option value={3}>3 - Intermediate</option>
-                      <option value={4}>4 - Advanced</option>
-                      <option value={5}>5 - Expert</option>
-                    </select>
-                  </div>
-                  <button
-                    onClick={handleAddMember}
-                    className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                  >
-                    <FiPlus className="inline mr-2" />
+                  <Button variant="secondary" icon={<FiPlus />} onClick={handleAddMember}>
                     Add Member to List
-                  </button>
+                  </Button>
                 </div>
 
-                {newMembers.length > 0 && (
-                  <div className="mb-4">
-                    <h3 className="text-lg font-semibold mb-3 text-black font-sans">New Members to Create ({newMembers.length})</h3>
-                    <p className="text-sm text-black/60 mb-3 font-sans">
-                      These members will be created without a team. You can assign them to a team in the next step.
-                    </p>
-                    <div className="space-y-2">
-                      {newMembers.map((member, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-3 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/20"
-                        >
-                          <span className="font-medium text-black font-sans">
-                            {member.firstName} {member.lastName} ({member.email}) - {member.role}
-                          </span>
-                          <button
-                            onClick={() => handleRemoveMember(index)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
-                          >
-                            <FiX className="text-sm" />
-                          </button>
-                        </div>
-                      ))}
+                <div>
+                  <p className="eyebrow mb-3">To create · {newMembers.length}</p>
+                  {newMembers.length === 0 ? (
+                    <div className="rounded-card border border-dashed border-line-strong bg-surface-muted px-4 py-8 text-center text-meta text-ink-subtle">
+                      Members you add appear here before they are created.
                     </div>
-                    <button
-                      onClick={handleSaveMembers}
-                      disabled={loading}
-                      className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-azure-sm hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                    >
-                      {loading ? 'Creating...' : 'Create Members'}
-                    </button>
-                  </div>
-                )}
-              </>
+                  ) : (
+                    <>
+                      <ul className="rounded-card border border-line divide-y divide-line-subtle">
+                        {newMembers.map((member, index) => (
+                          <li key={index} className="flex items-center gap-3 pl-3 pr-1.5 py-2">
+                            <Avatar name={`${member.firstName} ${member.lastName}`} size="sm" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-body font-medium text-ink truncate">{member.firstName} {member.lastName}</p>
+                              <p className="text-meta text-ink-subtle truncate">{member.role} · {member.email}</p>
+                            </div>
+                            <IconButton size="sm" tone="danger" label={`Remove ${member.firstName}`} icon={<FiX />} onClick={() => handleRemoveMember(index)} />
+                          </li>
+                        ))}
+                      </ul>
+                      <Button className="mt-3 w-full" variant="primary" loading={loading} onClick={handleSaveMembers}>
+                        {loading ? 'Creating…' : `Create ${newMembers.length} member${newMembers.length === 1 ? '' : 's'}`}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         );
 
       case 3:
         return (
-          <div>
-            <h2 className="text-xl font-semibold mb-4 text-black font-sans">Create Team</h2>
+          <div className="max-w-2xl">
+            <h2 className="text-title font-semibold text-ink">Create Team</h2>
+            <p className="mt-1 text-body text-ink-muted">
+              {teams.length > 0
+                ? 'You already have teams, so this step can be skipped to use an existing one.'
+                : 'A team owns stages; work reaches its members through it.'}
+            </p>
             {teams.length === 0 && (
-              <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-azure-sm">
-                <p className="text-sm font-semibold text-amber-800 mb-1 font-sans">
-                  ⚠️ No teams exist yet. You need to create a team to proceed.
-                </p>
+              <div role="alert" className="mt-4 flex items-start gap-2.5 px-4 py-3 rounded-card bg-warning-subtle border border-warning-border text-body text-warning">
+                <FiAlertTriangle aria-hidden="true" className="mt-0.5 shrink-0" />
+                No teams exist yet. Create one to continue.
               </div>
             )}
-            {teams.length > 0 && (
-              <p className="text-sm text-black/60 mb-4 font-sans">You have existing teams. You can skip team creation if you want to use an existing team.</p>
-            )}
-            {!skipTeamCreation && (
-              <>
-                <div className="mb-4">
-                  <label className="block text-black text-sm font-semibold mb-2 font-sans">Team Name *</label>
+            {!skipTeamCreation && !createdTeamId && (
+              <div className="mt-6 space-y-4">
+                <Field htmlFor="wiz-team-name" label="Team name" required>
                   <input
+                    id="wiz-team-name"
                     type="text"
                     value={teamForm.teamName}
                     onChange={(e) => setTeamForm({ ...teamForm, teamName: e.target.value })}
-                    className="w-full px-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                    placeholder="Enter team name"
+                    className={inputClass}
+                    placeholder="e.g. Engineering"
                     required
                   />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-black text-sm font-semibold mb-2 font-sans">Description</label>
+                </Field>
+                <Field htmlFor="wiz-team-desc" label="Description" hint="Optional">
                   <textarea
+                    id="wiz-team-desc"
                     value={teamForm.description}
                     onChange={(e) => setTeamForm({ ...teamForm, description: e.target.value })}
-                    className="w-full px-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                    rows={4}
-                    placeholder="Enter team description (optional)"
+                    className={inputClass}
+                    rows={3}
+                    placeholder="What this team is responsible for"
                   />
-                </div>
-                
-                {/* Existing Members Selection */}
+                </Field>
+
                 {existingMembers.length > 0 && (
-                  <div className="mb-4 p-4 border border-[#434E78]/30 rounded-azure-sm bg-[#434E78]/5">
-                    <h3 className="text-lg font-semibold mb-3 text-black font-sans">Select Members to Assign</h3>
-                    <p className="text-sm text-black/60 mb-3 font-sans">
-                      Choose which existing members should be assigned to this team. This is optional - you can create the team without assigning members.
-                    </p>
+                  <Field
+                    label="Members to assign"
+                    hint="Optional"
+                    help={selectedMemberIds.length > 0 ? `${selectedMemberIds.length} selected — they move onto this team.` : 'A member belongs to one team, so choosing someone moves them here.'}
+                  >
                     <Select
                       isMulti
                       options={memberOptions}
                       value={selectedMemberOptions}
                       onChange={handleMemberSelectionChange}
-                      placeholder="Search and select members..."
+                      placeholder="Search and select members…"
                       isSearchable
-                      className="text-sm font-sans"
-                      styles={{
-                        control: (base) => ({
-                          ...base,
-                          borderColor: 'rgba(67, 78, 120, 0.3)',
-                          boxShadow: 'none',
-                          '&:hover': {
-                            borderColor: 'rgba(67, 78, 120, 0.5)',
-                          },
-                        }),
-                        multiValue: (base) => ({
-                          ...base,
-                          backgroundColor: '#d1fae5',
-                          color: '#065f46',
-                        }),
-                        multiValueLabel: (base) => ({
-                          ...base,
-                          color: '#065f46',
-                          fontWeight: 500,
-                        }),
-                        multiValueRemove: (base) => ({
-                          ...base,
-                          color: '#065f46',
-                          '&:hover': {
-                            backgroundColor: '#a7f3d0',
-                            color: '#064e3b',
-                          },
-                        }),
-                        option: (base, state) => ({
-                          ...base,
-                          backgroundColor: state.isSelected
-                            ? '#434E78'
-                            : state.isFocused
-                            ? 'rgba(67, 78, 120, 0.1)'
-                            : 'white',
-                          color: state.isSelected ? 'white' : 'black',
-                          '&:active': {
-                            backgroundColor: state.isSelected ? '#434E78' : 'rgba(67, 78, 120, 0.2)',
-                          },
-                        }),
-                      }}
-                      theme={(theme) => ({
-                        ...theme,
-                        colors: {
-                          ...theme.colors,
-                          primary: '#434E78',
-                          primary25: 'rgba(67, 78, 120, 0.1)',
-                          primary50: 'rgba(67, 78, 120, 0.2)',
-                          primary75: '#434E78',
-                        },
-                      })}
+                      className="text-body"
+                      styles={selectStyles}
+                      theme={selectTheme}
                     />
-                    {selectedMemberIds.length > 0 && (
-                      <p className="text-sm text-emerald-700 mt-3 font-sans">
-                        {selectedMemberIds.length} member(s) selected
-                      </p>
-                    )}
-                  </div>
+                  </Field>
                 )}
-                
-                <button
-                  onClick={handleCreateTeam}
-                  disabled={loading || !teamForm.teamName.trim()}
-                  className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                >
-                  {loading ? 'Creating...' : 'Create Team'}
-                </button>
-              </>
+
+                <Button variant="primary" loading={loading} disabled={!teamForm.teamName.trim()} onClick={handleCreateTeam} icon={<FiUsers />}>
+                  {loading ? 'Creating…' : 'Create Team'}
+                </Button>
+              </div>
             )}
             {createdTeamId && (
-              <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-azure-sm">
-                <p className="text-sm text-emerald-800 font-sans">✓ Team created successfully!</p>
-                {selectedMemberIds.length === 0 && (
-                  <p className="text-sm text-emerald-700 mt-1 font-sans">No members were assigned. You can assign members later or go back to Step 2 to add new members.</p>
-                )}
+              <div role="status" className="mt-6 flex items-start gap-2.5 px-4 py-3 rounded-card bg-success-subtle border border-success-border text-body text-success">
+                <FiCheckCircle aria-hidden="true" className="mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">Team created.</p>
+                  <p className="text-meta mt-0.5">Members can be added or moved from the Teams page at any time.</p>
+                </div>
               </div>
             )}
           </div>
@@ -767,132 +662,42 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
 
       case 4:
         return (
-          <div>
-            <h2 className="text-xl font-semibold mb-4 text-black font-sans">Create Workflow</h2>
-            <div className="mb-4">
-              <label className="block text-black text-sm font-semibold mb-2 font-sans">Workflow Name *</label>
-              <input
-                type="text"
-                value={workflowName}
-                onChange={(e) => setWorkflowName(e.target.value)}
-                className="w-full px-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                placeholder="Enter workflow name"
-                required
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-black text-sm font-semibold mb-2 font-sans">Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                rows={4}
-                placeholder="Enter workflow description (optional)"
-              />
-            </div>
-            <div className="mb-6 p-4 border border-[#434E78]/30 rounded-azure-sm bg-[#434E78]/5">
-              <h3 className="text-lg font-semibold mb-4 text-black font-sans">Add Stages</h3>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-black text-sm font-semibold mb-2 font-sans">Stage Name *</label>
-                  <input
-                    type="text"
-                    value={stageForm.stageName}
-                    onChange={(e) => setStageForm({ ...stageForm, stageName: e.target.value })}
-                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                    placeholder="e.g., To Do, In Progress, Done"
-                  />
-                </div>
-                <div>
-                  <label className="block text-black text-sm font-semibold mb-2 font-sans">Assign Team *</label>
-                  <select
-                    value={stageForm.teamId || ''}
-                    onChange={(e) => setStageForm({ ...stageForm, teamId: e.target.value || '' })}
-                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                  >
-                    <option value="">Select Team</option>
-                    {teams.map((team) => (
-                      <option key={team.teamId} value={team.teamId}>
-                        {team.teamName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <button
-                onClick={handleAddStage}
-                className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-              >
-                {editingStageIndex !== null ? 'Update Stage' : 'Add Stage'}
-              </button>
-            </div>
-
-            {stages.length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-lg font-semibold mb-4 text-black font-sans">Added Stages</h3>
-                <div className="space-y-2">
-                  {stages.map((stage, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/20"
-                    >
-                      <span className="font-medium text-black font-sans">
-                        {stage.stageOrder}. {stage.stageName}
-                        {stage.teamId && (
-                          <span className="text-xs text-black/60 ml-2 font-sans">
-                            (Team: {teams.find(t => t.teamId === stage.teamId)?.teamName})
-                          </span>
-                        )}
-                      </span>
-                      <div>
-                        <button
-                          onClick={() => {
-                            setEditingStageIndex(index);
-                            setStageForm(stages[index]);
-                          }}
-                          className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-1.5 rounded-azure-sm mr-2 transition-colors"
-                        >
-                          <FiEdit2 className="text-sm" />
-                        </button>
-                        <button
-                          onClick={() => setStages(stages.filter((_, i) => i !== index).map((s, i) => ({ ...s, stageOrder: i + 1 })))}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
-                        >
-                          <FiX className="text-sm" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={handleCreateWorkflow}
-                  disabled={loading || !workflowName.trim() || stages.length === 0}
-                  className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-azure-sm hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                >
-                  {loading ? 'Creating...' : 'Create Workflow'}
-                </button>
-              </div>
-            )}
-            {createdWorkflowId && (
-              <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-azure-sm">
-                <p className="text-sm text-emerald-800 font-sans">✓ Workflow created successfully!</p>
-              </div>
-            )}
-          </div>
+          <WorkflowStagesStep
+            workflowName={workflowName}
+            onWorkflowNameChange={setWorkflowName}
+            description={description}
+            onDescriptionChange={setDescription}
+            teams={teams}
+            stageForm={stageForm}
+            onStageFormChange={setStageForm}
+            onAddStage={handleAddStage}
+            stages={stages}
+            onStagesChange={setStages}
+            editingStageIndex={editingStageIndex}
+            onEditStage={(index) => {
+              setEditingStageIndex(index);
+              setStageForm(stages[index]);
+            }}
+            onCreateWorkflow={handleCreateWorkflow}
+            loading={loading}
+            createdWorkflowId={createdWorkflowId}
+          />
         );
 
       case 5:
         if (!createdWorkflowId) {
           return (
-            <div className="text-center py-8">
-              <p className="text-black/70 font-sans">Please complete the workflow creation step first.</p>
+            <div className="py-10 text-center text-body text-ink-muted">
+              Create the workflow in the previous step first.
             </div>
           );
         }
         return (
           <div>
-            <h2 className="text-xl font-semibold mb-4 text-black font-sans">Configure SLA</h2>
+            <h2 className="text-title font-semibold text-ink">Configure SLA</h2>
+            <p className="mt-1 text-body text-ink-muted mb-6">How quickly each priority must be responded to. Without these, enquiries are never assigned.</p>
             <SLAConfigure
+              embedded
               onSuccess={handleSLAConfigSuccess}
               onCancel={() => {}}
               initialWorkflowId={createdWorkflowId}
@@ -903,123 +708,106 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
       case 6:
         if (!createdWorkflowId) {
           return (
-            <div className="text-center py-8">
-              <p className="text-black/70 font-sans">Please complete the workflow creation step first.</p>
+            <div className="py-10 text-center text-body text-ink-muted">
+              Create the workflow in the stages step first.
             </div>
           );
         }
         return (
           <div>
-            <h2 className="text-xl font-semibold mb-4 text-black font-sans">Create Priority Rules</h2>
-            <p className="text-sm text-black/60 mb-4 font-sans">
-              Create priority rules for this workflow. Rules determine how tasks are prioritized based on conditions.
+            <h2 className="text-title font-semibold text-ink">Create Priority Rules</h2>
+            <p className="mt-1 text-body text-ink-muted">
+              Rules set an enquiry’s priority from what it contains, so urgent work is picked up first.
             </p>
 
             {!skipRuleCreation && (
-              <>
-                <div className="mb-6 p-4 border border-[#434E78]/30 rounded-azure-sm bg-[#434E78]/5">
-                  <h3 className="text-lg font-semibold mb-4 text-black font-sans">Add Rule</h3>
-                  
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Rule Name *</label>
-                    <input
-                      type="text"
-                      value={ruleForm.ruleName}
-                      onChange={(e) => setRuleForm({ ...ruleForm, ruleName: e.target.value })}
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                      placeholder="e.g., High Priority for Critical Tasks"
-                    />
+              <div className="mt-6 grid grid-cols-1 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-6 items-start">
+                <div className="rounded-card border border-line p-5 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_12rem] gap-4">
+                    <Field htmlFor="wiz-rule-name" label="Rule name" required>
+                      <input
+                        id="wiz-rule-name"
+                        type="text"
+                        value={ruleForm.ruleName}
+                        onChange={(e) => setRuleForm({ ...ruleForm, ruleName: e.target.value })}
+                        className={inputClass}
+                        placeholder="e.g. Government projects are high"
+                      />
+                    </Field>
+                    <Field htmlFor="wiz-rule-priority" label="Sets priority to" required>
+                      <select
+                        id="wiz-rule-priority"
+                        value={ruleForm.priority}
+                        onChange={(e) => setRuleForm({ ...ruleForm, priority: e.target.value })}
+                        className={inputClass}
+                      >
+                        {['Critical', 'High', 'Medium', 'Low'].map((p) => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </Field>
                   </div>
 
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Priority *</label>
-                    <select
-                      value={ruleForm.priority}
-                      onChange={(e) => setRuleForm({ ...ruleForm, priority: e.target.value })}
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                    >
-                      <option value="Critical">Critical</option>
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
-                    </select>
-                  </div>
-
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">Conditions *</label>
+                  <div>
+                    <p className="block text-body font-medium text-ink mb-1.5">Conditions</p>
                     <ConditionBuilder
                       value={ruleForm.conditionsJson}
                       onChange={(json) => setRuleForm({ ...ruleForm, conditionsJson: json })}
                     />
                   </div>
 
-                  <div className="flex items-center gap-2 mb-4">
+                  <label className="flex items-center gap-2 text-body text-ink cursor-pointer">
                     <input
                       type="checkbox"
                       checked={ruleForm.isActive}
                       onChange={(e) => setRuleForm({ ...ruleForm, isActive: e.target.checked })}
-                      className="rounded"
+                      className="h-4 w-4 rounded"
                     />
-                    <label className="text-sm font-medium text-black font-sans">Active</label>
-                  </div>
+                    Active as soon as it is created
+                  </label>
 
-                  <button
-                    onClick={handleAddRule}
-                    className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                  >
+                  <Button variant="secondary" icon={editingRuleIndex !== null ? <FiEdit2 /> : <FiPlus />} onClick={handleAddRule}>
                     {editingRuleIndex !== null ? 'Update Rule' : 'Add Rule to List'}
-                  </button>
+                  </Button>
                 </div>
 
-                {rules.length > 0 && (
-                  <div className="mb-4">
-                    <h3 className="text-lg font-semibold mb-3 text-black font-sans">Rules to Create ({rules.length})</h3>
-                    <div className="space-y-2">
-                      {rules.map((rule, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-3 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/20"
-                        >
-                          <div className="flex-1">
-                            <span className="font-medium text-black font-sans">
-                              {rule.ruleName} - {rule.priority}
-                            </span>
-                            <p className="text-xs text-black/60 mt-1 font-sans">
-                              {rule.isActive ? 'Active' : 'Inactive'}
-                            </p>
-                          </div>
-                          <div>
-                            <button
+                <div>
+                  <p className="eyebrow mb-3">To create · {rules.length}</p>
+                  {rules.length === 0 ? (
+                    <div className="rounded-card border border-dashed border-line-strong bg-surface-muted px-4 py-8 text-center text-meta text-ink-subtle">
+                      Rules you add appear here before they are created.
+                    </div>
+                  ) : (
+                    <>
+                      <ul className="rounded-card border border-line divide-y divide-line-subtle">
+                        {rules.map((rule, index) => (
+                          <li key={index} className="flex items-center gap-3 pl-3 pr-1.5 py-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-body font-medium text-ink truncate">{rule.ruleName}</p>
+                              <p className="text-meta text-ink-subtle">
+                                Sets {rule.priority} · {rule.isActive ? 'Active' : 'Inactive'}
+                              </p>
+                            </div>
+                            <IconButton
+                              size="sm"
+                              label={`Edit ${rule.ruleName}`}
+                              icon={<FiEdit2 />}
                               onClick={() => {
                                 setEditingRuleIndex(index);
                                 setRuleForm(rules[index]);
                               }}
-                              className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-1.5 rounded-azure-sm mr-2 transition-colors"
-                              title="Edit"
-                            >
-                              <FiEdit2 className="text-sm" />
-                            </button>
-                            <button
-                              onClick={() => handleRemoveRule(index)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
-                              title="Remove"
-                            >
-                              <FiX className="text-sm" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      onClick={handleSaveRules}
-                      disabled={loading}
-                      className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-azure-sm hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                    >
-                      {loading ? 'Creating...' : 'Create Rules'}
-                    </button>
-                  </div>
-                )}
-              </>
+                            />
+                            <IconButton size="sm" tone="danger" label={`Remove ${rule.ruleName}`} icon={<FiX />} onClick={() => handleRemoveRule(index)} />
+                          </li>
+                        ))}
+                      </ul>
+                      <Button className="mt-3 w-full" variant="primary" loading={loading} onClick={handleSaveRules}>
+                        {loading ? 'Creating…' : `Create ${rules.length} rule${rules.length === 1 ? '' : 's'} and finish`}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         );
@@ -1037,178 +825,113 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
     }
   };
 
+  const skip = (step: number, next: () => void) => (
+    <Button
+      variant="ghost"
+      onClick={() => {
+        if (!completedSteps.includes(step)) {
+          setCompletedSteps([...completedSteps, step]);
+        }
+        next();
+      }}
+    >
+      Skip
+    </Button>
+  );
+
   return (
-    <div className="p-8 bg-white font-sans">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#434E78]/20">
-          <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">Workflow Setup Wizard</h1>
-          <button
-            onClick={onCancel}
-            className="text-black/70 hover:text-black hover:bg-[#434E78]/10 p-2 rounded-azure-sm transition-colors"
-          >
-            <FiX className="text-xl" />
-          </button>
+    <div>
+      <PageHeader
+        breadcrumbs={[{ label: 'Workflows', onClick: onCancel }]}
+        title="Workflow Setup Wizard"
+        subtitle="From the people who do the work to the rules that prioritise it."
+        actions={
+          <Button variant="ghost" icon={<FiX />} onClick={onCancel}>
+            Cancel
+          </Button>
+        }
+      />
+
+      <div className="card">
+        <div className="px-4 sm:px-8 pt-6 pb-5 border-b border-line-subtle">
+          <WizardStepper steps={steps} current={currentStep} completed={completedSteps} onStepClick={handleStepClick} />
         </div>
 
-        <div className="flex gap-8">
-          {/* Vertical Step Indicator */}
-          <div className="w-16 flex-shrink-0">
-            <div className="bg-white rounded-azure-sm shadow-azure-md p-4 border border-[#434E78]/20">
-              <div className="relative">
-                <div className="space-y-8">
-                  {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => {
-                    const isCompleted = isStepCompleted(step);
-                    const isActive = step === currentStep;
-                    const StepIcon = stepIcons[step - 1];
+        <div className="px-5 sm:px-8 py-7 min-h-[360px]">{renderStepContent()}</div>
 
-                    return (
-                      <div key={step} className="relative flex items-center">
-                        {step < totalSteps && (
-                          <div className="absolute left-3 top-3 w-0.5 z-0" style={{ height: '56px' }}>
-                            <div
-                              className={`w-full h-full ${
-                                isCompleted ? 'bg-emerald-600' : 'bg-[#434E78]/30'
-                              }`}
-                            />
-                          </div>
-                        )}
-
-                        <div
-                          className={`relative z-10 flex-shrink-0 ${
-                            (isCompleted || isActive) ? 'cursor-pointer' : 'cursor-not-allowed'
-                          }`}
-                          onClick={() => handleStepClick(step)}
-                        >
-                          {isCompleted && (
-                            <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center border-2 border-emerald-600 hover:bg-emerald-50 transition-colors shadow-azure-sm">
-                              <StepIcon className="text-emerald-600 text-xs font-semibold" />
-                            </div>
-                          )}
-                          {isActive && !isCompleted && (
-                            <div className="relative">
-                              <div className="absolute inset-0 rounded-full bg-[#434E78] animate-ping opacity-75" style={{ animationDuration: '2s' }}></div>
-                              <div className="relative w-6 h-6 rounded-full bg-[#434E78] flex items-center justify-center border-2 border-white hover:bg-[#434E78]/90 transition-colors shadow-azure-md">
-                                <StepIcon className="text-white text-xs font-semibold z-10 relative" />
-                              </div>
-                            </div>
-                          )}
-                          {!isActive && !isCompleted && (
-                            <div className="w-6 h-6 rounded-full bg-[#434E78]/20 flex items-center justify-center border-2 border-white">
-                              <StepIcon className="text-black text-xs font-semibold" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Main Content Area */}
-          <div className="flex-1">
-            <div className="bg-white rounded-azure-sm shadow-azure-md p-8 mb-6 border border-[#434E78]/20">
-              {renderStepContent()}
-            </div>
-
-            <div className="flex justify-between">
-              <button
+        <div className="flex items-center justify-between gap-3 px-5 sm:px-8 py-4 border-t border-line-subtle bg-surface-muted rounded-b-card">
+          <Button
+            variant="secondary"
+            icon={<FiChevronLeft />}
+            onClick={() => {
+              const previousStep = Math.max(1, currentStep - 1);
+              setCompletedSteps(completedSteps.filter((step) => step < previousStep));
+              setCurrentStep(previousStep);
+            }}
+            disabled={currentStep === 1}
+          >
+            Back
+          </Button>
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline text-meta text-ink-subtle mr-2 tabular">
+              Step {currentStep} of {totalSteps}
+            </span>
+            {currentStep === 2 &&
+              skip(2, () => {
+                setSkipMemberCreation(true);
+                setCurrentStep(Math.min(totalSteps, currentStep + 1));
+              })}
+            {currentStep === 3 &&
+              skip(3, () => {
+                setSkipTeamCreation(true);
+                setCurrentStep(Math.min(totalSteps, currentStep + 1));
+              })}
+            {currentStep === 6 &&
+              skip(6, () => {
+                setSkipRuleCreation(true);
+                if (createdWorkflowId) {
+                  onSuccess(createdWorkflowId);
+                }
+              })}
+            {currentStep < totalSteps && (
+              <Button
+                variant="primary"
+                trailingIcon={<FiChevronRight />}
                 onClick={() => {
-                  const previousStep = Math.max(1, currentStep - 1);
-                  setCompletedSteps(completedSteps.filter(step => step < previousStep));
-                  setCurrentStep(previousStep);
+                  // Validation logic for each step
+                  // Creating the members empties the list, so a saved step must not be
+                  // mistaken for an empty one.
+                  if (currentStep === 2 && !skipMemberCreation) {
+                    if (newMembers.length > 0) {
+                      toast.error('Create the members in the list first, or remove them');
+                      return;
+                    }
+                    if (!completedSteps.includes(2)) {
+                      toast.error('Please add at least one member or skip this step');
+                      return;
+                    }
+                  }
+                  if (currentStep === 3 && !skipTeamCreation && !createdTeamId) {
+                    toast.error('Please create a team or skip this step');
+                    return;
+                  }
+                  if (currentStep === 4 && (!workflowName.trim() || stages.length === 0)) {
+                    toast.error('Please complete workflow creation');
+                    return;
+                  }
+                  if (currentStep === 5 && !createdWorkflowId) {
+                    toast.error('Please complete workflow creation first');
+                    return;
+                  }
+                  if (!completedSteps.includes(currentStep)) {
+                    setCompletedSteps([...completedSteps, currentStep]);
+                  }
+                  setCurrentStep(Math.min(totalSteps, currentStep + 1));
                 }}
-                disabled={currentStep === 1}
-                className="flex items-center px-5 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 disabled:opacity-50 disabled:cursor-not-allowed text-black font-medium text-sm transition-colors font-sans"
               >
-                <FiChevronLeft className="mr-2" />
-                Back
-              </button>
-              <div className="flex gap-3">
-                {currentStep === 2 && (
-                  <button
-                    onClick={() => {
-                      setSkipMemberCreation(true);
-                      if (!completedSteps.includes(2)) {
-                        setCompletedSteps([...completedSteps, 2]);
-                      }
-                      setCurrentStep(Math.min(totalSteps, currentStep + 1));
-                    }}
-                    className="flex items-center px-5 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
-                  >
-                    Skip
-                  </button>
-                )}
-                {currentStep === 3 && (
-                  <button
-                    onClick={() => {
-                      setSkipTeamCreation(true);
-                      if (!completedSteps.includes(3)) {
-                        setCompletedSteps([...completedSteps, 3]);
-                      }
-                      setCurrentStep(Math.min(totalSteps, currentStep + 1));
-                    }}
-                    className="flex items-center px-5 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
-                  >
-                    Skip
-                  </button>
-                )}
-                {currentStep === 6 && (
-                  <button
-                    onClick={() => {
-                      setSkipRuleCreation(true);
-                      if (!completedSteps.includes(6)) {
-                        setCompletedSteps([...completedSteps, 6]);
-                      }
-                      if (createdWorkflowId) {
-                        onSuccess(createdWorkflowId);
-                      }
-                    }}
-                    className="flex items-center px-5 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
-                  >
-                    Skip
-                  </button>
-                )}
-                {currentStep < totalSteps ? (
-                  <button
-                    onClick={() => {
-                      // Validation logic for each step
-                      if (currentStep === 2 && !skipMemberCreation && newMembers.length === 0) {
-                        toast.error('Please add at least one member or skip this step');
-                        return;
-                      }
-                      if (currentStep === 3 && !skipTeamCreation && !createdTeamId) {
-                        toast.error('Please create a team or skip this step');
-                        return;
-                      }
-                      if (currentStep === 4 && (!workflowName.trim() || stages.length === 0)) {
-                        toast.error('Please complete workflow creation');
-                        return;
-                      }
-                      if (currentStep === 5 && !createdWorkflowId) {
-                        toast.error('Please complete workflow creation first');
-                        return;
-                      }
-                      if (currentStep === 6 && !createdWorkflowId) {
-                        toast.error('Please complete workflow creation first');
-                        return;
-                      }
-                      if (!completedSteps.includes(currentStep)) {
-                        setCompletedSteps([...completedSteps, currentStep]);
-                      }
-                      setCurrentStep(Math.min(totalSteps, currentStep + 1));
-                    }}
-                    className="flex items-center px-5 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                  >
-                    Next
-                    <FiChevronRight className="ml-2" />
-                  </button>
-                ) : (
-                  <div></div>
-                )}
-              </div>
-            </div>
+                Next
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -1217,4 +940,3 @@ const WorkflowWizard = ({ onSuccess, onCancel }: WorkflowWizardProps) => {
 };
 
 export default WorkflowWizard;
-

@@ -1,24 +1,49 @@
+import Modal from '../components/Modal';
+import Button, { IconButton } from '../components/Button';
+import Badge from '../components/Badge';
+import PageHeader from '../components/PageHeader';
+import Section from '../components/Section';
+import Field from '../components/Field';
+import { inputClass } from '../utils/formStyles';
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { FiArrowLeft, FiCheck, FiCornerUpLeft, FiDownload, FiPaperclip, FiUpload, FiUser } from 'react-icons/fi';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  FiAlertCircle,
+  FiArrowRight,
+  FiCheck,
+  FiCheckCircle,
+  FiChevronDown,
+  FiClock,
+  FiCornerUpLeft,
+  FiDownload,
+  FiFileText,
+  FiGitBranch,
+  FiPaperclip,
+  FiUpload,
+  FiUser,
+} from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import LoadingSpinner from '../components/LoadingSpinner';
+import EmptyState from '../components/EmptyState';
 import StageForm, { extractNominations, missingRequiredFields, prefillTables } from '../components/StageForm';
 import StageAssigneePicker, { AUTO_ASSIGN } from '../components/StageAssigneePicker';
 import StageValues from '../components/StageValues';
 import TaskHistoryGraph, { resolveCurrentStageId } from '../components/TaskHistoryGraph';
+import StageRail, { RailStage } from '../components/flow/StageRail';
+import ActivityTimeline from '../components/flow/ActivityTimeline';
+import Avatar from '../components/Avatar';
 import { useAuth } from '../contexts/AuthContext';
 import { taskService } from '../services/taskService';
 import { workflowService } from '../services/workflowService';
 import { Stage, Task, TaskAttachment, TaskStageData, TaskStageHistory, Workflow } from '../types';
 import { StageFormValues } from '../types/stageForms';
-import { formatDateToIST } from '../utils/dateUtils';
+import { formatDateToIST, relativeDue, timeAgo } from '../utils/dateUtils';
 import { PERMISSIONS, hasPermission } from '../utils/roleUtils';
 import { getStageForm, stageFieldLabels } from '../utils/stageFormRegistry';
 import { autoRoutingReason } from '../utils/stageRouting';
-
-const apiErrorMessage = (error: any, fallback: string) =>
-  error?.response?.data?.error || error?.response?.data?.message || fallback;
+import { apiErrorMessage } from '../utils/apiError';
+import { parseJsonObject } from '../utils/json';
+import { humanizeStatus, priorityTone, statusTone } from '../utils/status';
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
@@ -26,21 +51,7 @@ const formatBytes = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const parseJson = (raw?: string): Record<string, any> => {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-};
-
-const statusBadge = (status: string) => {
-  if (status === 'Completed') return 'bg-green-100 text-green-800 border-green-200';
-  if (status === 'Current') return 'bg-[#434E78]/10 text-[#434E78] border-[#434E78]/30';
-  return 'bg-gray-100 text-gray-600 border-gray-200';
-};
+const fileExt = (name: string) => (name.includes('.') ? name.split('.').pop()!.slice(0, 4).toUpperCase() : 'FILE');
 
 const TaskDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -54,12 +65,15 @@ const TaskDetail = () => {
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnStageId, setReturnStageId] = useState('');
   const [returnReason, setReturnReason] = useState('');
+  const [returnError, setReturnError] = useState<{ stage?: string; reason?: string }>({});
   const [stageData, setStageData] = useState<TaskStageData[]>([]);
   const [formValues, setFormValues] = useState<StageFormValues>({});
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [nextAssignee, setNextAssignee] = useState(AUTO_ASSIGN);
   const [nextStageBlocked, setNextStageBlocked] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [routeOpen, setRouteOpen] = useState(false);
 
   const load = useCallback(async (): Promise<TaskStageHistory[]> => {
     if (!id) return [];
@@ -89,10 +103,10 @@ const TaskDetail = () => {
     const firstStageId = [...(workflowData?.stages ?? [])]
       .sort((a, b) => a.stageOrder - b.stageOrder)[0]?.stageId;
     const intakeValues =
-      taskData.stageId && taskData.stageId === firstStageId ? parseJson(taskData.dataJson) : {};
+      taskData.stageId && taskData.stageId === firstStageId ? parseJsonObject(taskData.dataJson) : {};
 
     const startingValues = (
-      alreadySubmitted ? parseJson(alreadySubmitted.dataJson) : intakeValues
+      alreadySubmitted ? parseJsonObject(alreadySubmitted.dataJson) : intakeValues
     ) as StageFormValues;
 
     // Tables that continue an earlier stage's list start from that list, so
@@ -103,7 +117,7 @@ const TaskDetail = () => {
     const submittedByStageName = (workflowData?.stages ?? []).reduce<Record<string, Record<string, unknown>>>(
       (byName, stage) => {
         const row = stageDataRows.find((data) => data.stageId === stage.stageId);
-        return row ? { ...byName, [stage.stageName.trim().toLowerCase()]: parseJson(row.dataJson) } : byName;
+        return row ? { ...byName, [stage.stageName.trim().toLowerCase()]: parseJsonObject(row.dataJson) } : byName;
       },
       {}
     );
@@ -158,8 +172,10 @@ const TaskDetail = () => {
 
   const handleComplete = (schema: ReturnType<typeof getStageForm>) => {
     const missing = missingRequiredFields(schema, formValues);
+    setMissingFields(missing);
     if (missing.length > 0) {
       toast.error(`Fill in: ${missing.join(', ')}`);
+      document.getElementById('stage-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
     // Appointments for later stages are submitted separately from the form answers.
@@ -197,15 +213,18 @@ const TaskDetail = () => {
     }
   };
 
+  const closeReturn = () => {
+    setReturnOpen(false);
+    setReturnError({});
+  };
+
   const handleReturn = async () => {
-    if (!returnStageId) {
-      toast.error('Select the stage to send this back to.');
-      return;
-    }
-    if (!returnReason.trim()) {
-      toast.error('A reason is required when sending work back.');
-      return;
-    }
+    const errors = {
+      stage: returnStageId ? undefined : 'Choose the stage to send this back to.',
+      reason: returnReason.trim() ? undefined : 'Say what needs to change — whoever picks it up sees this.',
+    };
+    setReturnError(errors);
+    if (errors.stage || errors.reason) return;
     await runAction(
       () => taskService.returnStage(id!, returnStageId, returnReason.trim()),
       'Sent back to the earlier stage.',
@@ -216,12 +235,17 @@ const TaskDetail = () => {
     setReturnReason('');
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (loading) return <LoadingSpinner label="Loading enquiry" />;
 
   if (!task) {
     return (
-      <div className="p-8">
-        <p className="text-center text-black/60 font-sans">Task not found</p>
+      <div className="card">
+        <EmptyState
+          icon={<FiFileText />}
+          title="Enquiry not found"
+          body="It may have been removed, or the link is out of date."
+          action={<Button onClick={() => navigate('/enquiry')}>Back to enquiries</Button>}
+        />
       </div>
     );
   }
@@ -263,331 +287,416 @@ const TaskDetail = () => {
 
   const currentSchema = getStageForm(currentStage?.stageName);
   const isFirstStage = Boolean(currentStage && stages[0] && currentStage.stageId === stages[0].stageId);
-  const enquiryRecord = parseJson(task.dataJson);
-  const submittedForStage = (stageId: string) => parseJson(stageData.find((row) => row.stageId === stageId)?.dataJson);
+  const enquiryRecord = parseJsonObject(task.dataJson);
+  const submittedForStage = (stageId: string) => parseJsonObject(stageData.find((row) => row.stageId === stageId)?.dataJson);
 
-  const stageStatus = (stage: Stage) => {
+  const stageStatus = (stage: Stage): RailStage['status'] => {
     const isCurrent = stage.stageId === currentStageId;
-    if (isCurrent && !taskDone) return 'Current';
-    if ((currentStage && stage.stageOrder < currentStage.stageOrder) || (taskDone && isCurrent)) return 'Completed';
-    return 'Upcoming';
+    if (isCurrent && !taskDone) return 'current';
+    if ((currentStage && stage.stageOrder < currentStage.stageOrder) || (taskDone && isCurrent)) return 'completed';
+    return 'upcoming';
   };
 
+  const returnsTo = (stageId: string) =>
+    history.filter((entry) => entry.action === 'Returned' && entry.toStageId === stageId).length;
+  const hasReturns = history.some((entry) => entry.action === 'Returned');
+
+  const railStages: RailStage[] = stages.map((stage) => {
+    const status = stageStatus(stage);
+    return {
+      id: stage.stageId,
+      order: stage.stageOrder,
+      name: stage.stageName,
+      team: stage.teamName,
+      status,
+      returns: returnsTo(stage.stageId),
+      person:
+        status === 'current'
+          ? task.assignedToMemberName || assigneeFor(stage.stageId)
+          : completerFor(stage.stageId),
+    };
+  });
+
+  const position = currentStage ? stages.findIndex((s) => s.stageId === currentStage.stageId) + 1 : 0;
+  const due = relativeDue(task.dueDate);
+  const submittedStages = stages.filter((stage) => stageData.some((row) => row.stageId === stage.stageId));
+  const showEnquiryRecord = Object.keys(enquiryRecord).length > 0 && !isFirstStage;
+  // The latest submission opens by default — unless it is the first stage, which
+  // would only repeat the enquiry record shown just above it.
+  const latest = submittedStages[submittedStages.length - 1];
+  const lastSubmittedId = latest && !(showEnquiryRecord && latest.stageId === stages[0]?.stageId) ? latest.stageId : undefined;
+
   return (
-    <div className="p-8 lg:p-10 bg-white min-h-screen font-sans">
-      <div className="max-w-6xl mx-auto">
-        <button
-          type="button"
-          onClick={() => navigate('/enquiry')}
-          className="mb-4 flex items-center text-[#434E78] hover:text-[#434E78]/80 font-medium text-sm"
-        >
-          <FiArrowLeft className="mr-2" />
-          Back to Enquiry
-        </button>
-
-        <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 p-6 mb-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-3xl font-semibold text-black tracking-tight">{task.taskName}</h1>
-              {task.description && <p className="mt-2 text-sm text-black/70">{task.description}</p>}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center px-2.5 py-1 rounded-azure-sm text-xs font-medium border bg-blue-100 text-blue-800 border-blue-200">
-                {task.status}
+    <div className="space-y-6">
+      <PageHeader
+        breadcrumbs={[{ label: 'Enquiries', to: '/enquiry' }]}
+        title={task.taskName}
+        badges={
+          <>
+            <Badge dot tone={statusTone(task.status, task.isOverdue)} icon={task.isOverdue ? <FiAlertCircle /> : undefined}>
+              {task.isOverdue ? 'Overdue' : humanizeStatus(task.status)}
+            </Badge>
+            <Badge tone={priorityTone(task.priority)}>{task.priority} priority</Badge>
+          </>
+        }
+        subtitle={task.description}
+        meta={
+          <>
+            {stages.length > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <FiGitBranch aria-hidden="true" />
+                {taskDone ? `All ${stages.length} stages complete` : `Stage ${position || '–'} of ${stages.length}`}
               </span>
-              <span className="inline-flex items-center px-2.5 py-1 rounded-azure-sm text-xs font-medium border bg-yellow-100 text-yellow-800 border-yellow-200">
-                {task.priority}
+            )}
+            {due && !taskDone && (
+              <span className={`inline-flex items-center gap-1.5 ${due.tone === 'danger' ? 'text-danger font-medium' : due.tone === 'warning' ? 'text-warning font-medium' : ''}`}>
+                <FiClock aria-hidden="true" />
+                {due.label}
               </span>
-            </div>
-          </div>
+            )}
+            {timeAgo(task.updatedAt || task.createdAt) && (
+              <span className="inline-flex items-center gap-1.5">Updated {timeAgo(task.updatedAt || task.createdAt)}</span>
+            )}
+          </>
+        }
+      />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5 text-sm">
+      {/* Where it is: the one thing every visitor to this page needs first. */}
+      {canSeeProgression && stages.length > 0 && (
+        <section aria-labelledby="progress-title" className="card px-5 pt-4 pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
-              <p className="text-xs text-black/60">Workflow</p>
-              {workflow ? (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/workflows/${workflow.workflowId}`)}
-                  className="font-semibold text-[#434E78] hover:underline"
-                >
-                  {workflow.workflowName}
-                </button>
-              ) : (
-                <p className="font-semibold text-black">—</p>
-              )}
-            </div>
-            <div>
-              <p className="text-xs text-black/60">Current stage</p>
-              <p className="font-semibold text-black">{currentStage?.stageName || task.stageName || '—'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-black/60">Working now</p>
-              <p className="font-semibold text-black inline-flex items-center">
-                <FiUser className="mr-1.5 text-[#434E78]/60" />
-                {workingNow}
+              <h2 id="progress-title" className="text-title font-semibold text-ink">
+                {taskDone ? 'Workflow complete' : currentStage ? currentStage.stageName : 'Progress'}
+              </h2>
+              <p className="text-meta text-ink-subtle">
+                {workflow?.workflowName} · {railStages.filter((s) => s.status === 'completed').length} of {stages.length} stages done
               </p>
             </div>
-            <div>
-              <p className="text-xs text-black/60">Due</p>
-              <p className="font-semibold text-black">{task.dueDate ? formatDateToIST(task.dueDate) : 'No due date'}</p>
-            </div>
-          </div>
-        </div>
-
-        {!canAct && !taskDone && currentStage && (
-          <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 p-5 mb-4">
-            <p className="text-sm font-semibold text-black">
-              This is with {task.assignedToMemberName || assigneeFor(currentStageId) || 'nobody yet'}
-            </p>
-            <p className="text-xs text-black/60 mt-0.5">
-              It is at <span className="font-medium">{currentStage.stageName}</span>
-              {currentStage.teamName ? <> ({currentStage.teamName})</> : null}. You can read it here, but only
-              the person it is assigned to can move it on.
-            </p>
-          </div>
-        )}
-
-        {canAct && (
-          <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 p-5 mb-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-black">This is with you</p>
-                <p className="text-xs text-black/60 mt-0.5">
-                  Complete <span className="font-medium">{currentStage?.stageName}</span> to move it on, or send it
-                  back to an earlier stage.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {earlierStages.length > 0 && (
-                  <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={() => setReturnOpen(true)}
-                    className="inline-flex items-center px-4 py-2 rounded-azure-sm border border-[#434E78]/30 text-[#434E78] text-sm font-medium hover:bg-[#434E78]/5 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <FiCornerUpLeft className="mr-2" />
-                    Send Back
-                  </button>
-                )}
+            <div className="flex items-center gap-4 text-meta text-ink-subtle">
+              <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-success-strong" />Done</span>
+              <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-primary" />Now</span>
+              <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full border-2 border-line-strong" />Next</span>
+              {hasReturns && (
                 <button
                   type="button"
-                  disabled={submitting || nextStageBlocked}
-                  onClick={() => handleComplete(currentSchema)}
-                  className="inline-flex items-center px-4 py-2 rounded-azure-sm bg-[#434E78] text-white text-sm font-medium hover:bg-[#434E78]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setRouteOpen((v) => !v)}
+                  aria-expanded={routeOpen}
+                  className="inline-flex items-center gap-1 font-medium text-warning hover:underline underline-offset-2 cursor-pointer"
                 >
-                  <FiCheck className="mr-2" />
-                  {submitting ? 'Working...' : 'Complete Stage'}
+                  <FiCornerUpLeft aria-hidden="true" />
+                  {routeOpen ? 'Hide route taken' : 'Show route taken'}
                 </button>
+              )}
+            </div>
+          </div>
+          <StageRail stages={railStages} finished={taskDone} />
+          {routeOpen && (
+            <div className="mt-4 pt-4 border-t border-line-subtle">
+              <TaskHistoryGraph history={history} currentStageId={currentStageId} stages={stages} />
+            </div>
+          )}
+        </section>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+        <div className="space-y-6 min-w-0">
+          {/* Whose move it is. */}
+          {taskDone ? (
+            <div className="card flex items-start gap-3 px-5 py-4 border-l-4 border-l-success-strong">
+              <FiCheckCircle aria-hidden="true" className="mt-0.5 text-success text-[20px] shrink-0" />
+              <div>
+                <p className="text-body font-semibold text-ink">This enquiry has been through every stage</p>
+                <p className="text-meta text-ink-muted mt-0.5">Nothing is waiting on anyone. The record below is final.</p>
               </div>
             </div>
-
-            {nextStage && autoRouting && (
-              <div className="mt-4 pt-4 border-t border-[#434E78]/10">
-                <p className="text-xs text-black/60">
-                  <span className="font-medium text-black">{nextStage.stageName}</span> {autoRouting}, so there is
-                  nobody to choose here.
+          ) : canAct ? (
+            <div className="card flex items-start gap-3 px-5 py-4 border-l-4 border-l-primary bg-gradient-to-r from-primary-subtle/70 to-surface">
+              <span aria-hidden="true" className="mt-0.5 h-8 w-8 rounded-full bg-primary text-white flex items-center justify-center shrink-0">
+                <FiUser />
+              </span>
+              <div>
+                <p className="text-body font-semibold text-ink">This is with you</p>
+                <p className="text-meta text-ink-muted mt-0.5">
+                  Fill in <span className="font-medium text-ink">{currentStage?.stageName}</span> below, then complete it
+                  {nextStage ? <> to hand over to <span className="font-medium text-ink">{nextStage.stageName}</span></> : ' to close the enquiry'}.
+                  {earlierStages.length > 0 && ' If something upstream is wrong, send it back instead.'}
                 </p>
               </div>
-            )}
-
-            {nextStage && !autoRouting && (
-              <div className="mt-4 pt-4 border-t border-[#434E78]/10 max-w-md">
-                <StageAssigneePicker
-                  teamId={nextStage.teamId}
-                  teamName={nextStage.teamName}
-                  stageName={nextStage.stageName}
-                  value={nextAssignee}
-                  onChange={setNextAssignee}
-                  onBlockedChange={setNextStageBlocked}
-                  disabled={submitting}
-                />
+            </div>
+          ) : currentStage ? (
+            <div className="card flex items-start gap-3 px-5 py-4 border-l-4 border-l-line-strong">
+              <Avatar name={workingNow} size="md" />
+              <div>
+                <p className="text-body font-semibold text-ink">
+                  This is with {task.assignedToMemberName || assigneeFor(currentStageId) || 'nobody yet'}
+                </p>
+                <p className="text-meta text-ink-muted mt-0.5">
+                  It is at <span className="font-medium text-ink">{currentStage.stageName}</span>
+                  {currentStage.teamName ? <> ({currentStage.teamName})</> : null}. You can read it here, but only the
+                  person it is assigned to can move it on.
+                </p>
               </div>
-            )}
-          </div>
-        )}
-
-        {Object.keys(enquiryRecord).length > 0 && !isFirstStage && (
-          <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 p-6 mb-4">
-            <h2 className="text-lg font-semibold text-black mb-4">Enquiry record</h2>
-            <StageValues values={enquiryRecord} labels={stageFieldLabels(stages[0]?.stageName)} />
-          </div>
-        )}
-
-        {canAct && (
-          <StageForm
-            schema={currentSchema}
-            values={formValues}
-            onChange={setFormValues}
-            readOnly={submitting}
-            stages={stages}
-          />
-        )}
-
-        <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 overflow-hidden mb-4">
-          <div className="px-6 py-4 border-b border-[#434E78]/10 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-black inline-flex items-center">
-              <FiPaperclip className="mr-2 text-[#434E78]" />
-              Documents
-            </h2>
-            {canAct && (
-              <label className={`inline-flex items-center px-4 py-2 rounded-azure-sm border border-[#434E78]/30 text-[#434E78] text-sm font-medium ${uploading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#434E78]/5 cursor-pointer'}`}>
-                <FiUpload className="mr-2" />
-                {uploading ? 'Uploading...' : 'Add file'}
-                <input type="file" className="hidden" disabled={uploading} onChange={handleUpload} />
-              </label>
-            )}
-          </div>
-          {attachments.length === 0 ? (
-            <p className="px-6 py-6 text-sm text-black/60">
-              No documents yet{canAct ? ' — attach the records for this stage.' : '.'}
-            </p>
-          ) : (
-            <ul className="divide-y divide-[#434E78]/10">
-              {attachments.map((attachment) => {
-                const stage = stages.find((s) => s.stageId === attachment.stageId);
-                return (
-                  <li key={attachment.attachmentId} className="px-6 py-3 flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-black truncate">{attachment.fileName}</p>
-                      <p className="text-xs text-black/60">
-                        {formatBytes(attachment.sizeBytes)}
-                        {stage ? ` · ${stage.stageName}` : ''} · {formatDateToIST(attachment.uploadedAt)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDownload(attachment)}
-                      className="inline-flex items-center px-3 py-1.5 rounded-azure-sm border border-[#434E78]/30 text-[#434E78] text-xs font-medium hover:bg-[#434E78]/5 shrink-0"
-                    >
-                      <FiDownload className="mr-1.5" />
-                      Download
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        {stageData.length > 0 && (
-          <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 overflow-hidden mb-4">
-            <div className="px-6 py-4 border-b border-[#434E78]/10">
-              <h2 className="text-lg font-semibold text-black">Submitted at earlier stages</h2>
             </div>
-            <div className="px-6 py-5 space-y-5">
-              {stages
-                .filter((stage) => stageData.some((row) => row.stageId === stage.stageId))
-                .map((stage) => {
-                  const submitted = submittedForStage(stage.stageId);
-                  return (
-                    <div key={stage.stageId}>
-                      <p className="text-sm font-semibold text-[#434E78] mb-2">
-                        {stage.stageOrder}. {stage.stageName}
-                      </p>
-                      <StageValues values={submitted} labels={stageFieldLabels(stage.stageName)} />
-                    </div>
-                  );
-                })}
+          ) : null}
+
+          {canAct && (
+            <div id="stage-form" className="scroll-mt-6">
+              {missingFields.length > 0 && (
+                <div role="alert" className="mb-3 flex items-start gap-2.5 rounded-card border border-danger-border bg-danger-subtle px-4 py-3 text-body text-danger">
+                  <FiAlertCircle aria-hidden="true" className="mt-0.5 shrink-0" />
+                  <span>
+                    <span className="font-semibold">Still needed before this can move on:</span> {missingFields.join(', ')}.
+                  </span>
+                </div>
+              )}
+              <StageForm
+                schema={currentSchema}
+                values={formValues}
+                onChange={(values) => {
+                  setFormValues(values);
+                  if (missingFields.length > 0) setMissingFields(missingRequiredFields(currentSchema, values));
+                }}
+                readOnly={submitting}
+                stages={stages}
+                missing={missingFields}
+              />
             </div>
-          </div>
-        )}
-
-        {canSeeProgression && <TaskHistoryGraph history={history} currentStageId={currentStageId} stages={stages} />}
-
-        {canSeeProgression && (
-        <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 overflow-hidden mb-4">
-          <div className="px-6 py-4 border-b border-[#434E78]/10">
-            <h2 className="text-lg font-semibold text-black">Stages</h2>
-          </div>
-          {stages.length === 0 ? (
-            <p className="px-6 py-6 text-sm text-black/60">No stages on this workflow.</p>
-          ) : (
-            <table className="min-w-full">
-              <thead className="bg-[#434E78]/5">
-                <tr>
-                  {['Stage', 'Status', 'Team', 'Person'].map((heading) => (
-                    <th key={heading} className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider">
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#434E78]/10">
-                {stages.map((stage) => {
-                  const status = stageStatus(stage);
-                  const completer = completerFor(stage.stageId);
-                  const person = status === 'Current'
-                    ? task.assignedToMemberName || assigneeFor(stage.stageId) || 'Unassigned'
-                    : completer || '—';
-                  return (
-                    <tr key={stage.stageId}>
-                      <td className="px-6 py-3 text-sm font-semibold text-black">
-                        {stage.stageOrder}. {stage.stageName}
-                      </td>
-                      <td className="px-6 py-3">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-azure-sm text-xs font-medium border ${statusBadge(status)}`}>
-                          {status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3 text-sm text-black">{stage.teamName || '—'}</td>
-                      <td className="px-6 py-3 text-sm text-black">
-                        {person}
-                        {status === 'Upcoming' && completer ? <span className="block text-xs text-black/50">Last completed</span> : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           )}
-        </div>
-        )}
 
-        <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 overflow-hidden">
-          <div className="px-6 py-4 border-b border-[#434E78]/10">
-            <h2 className="text-lg font-semibold text-black">Activity</h2>
-          </div>
-          {history.length === 0 ? (
-            <p className="px-6 py-6 text-sm text-black/60">No history yet.</p>
-          ) : (
-            <ol className="px-6 py-4 space-y-3">
-              {[...history].sort((a, b) => a.sequence - b.sequence).map((entry) => (
-                <li key={entry.historyId} className="border border-[#434E78]/15 rounded-azure-sm px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs font-medium text-[#434E78]">{entry.action}</span>
-                    <span className="text-xs text-black/60">{formatDateToIST(entry.occurredAt)}</span>
+          {/* The hand-over. Pinned while the form scrolls, so the way out is always in reach. */}
+          {canAct && (
+            <div className="sticky bottom-0 z-10 -mx-1 px-1 pb-1">
+              <div className="card shadow-azure-lg px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    {nextStage ? (
+                      <p className="text-meta text-ink-subtle flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium text-ink">{currentStage?.stageName}</span>
+                        <FiArrowRight aria-hidden="true" />
+                        <span className="font-medium text-ink">{nextStage.stageName}</span>
+                        {nextStage.teamName && <span>· {nextStage.teamName}</span>}
+                      </p>
+                    ) : (
+                      <p className="text-meta text-ink-subtle">Last stage — completing it closes the enquiry.</p>
+                    )}
+                    {nextStage && autoRouting && (
+                      <p className="mt-1 text-meta text-ink-muted">
+                        {nextStage.stageName} {autoRouting}, so there is nobody to choose here.
+                      </p>
+                    )}
                   </div>
-                  <p className="mt-2 text-sm text-black">
-                    {entry.memberName} · {entry.stageName}
-                  </p>
-                  {(entry.fromStageName || entry.toStageName) && (
-                    <p className="mt-1 text-xs text-black/70">
-                      {entry.fromStageName || '—'} → {entry.toStageName || '—'}
-                    </p>
-                  )}
-                  {entry.reason && <p className="mt-1 text-xs text-black/70">{entry.reason}</p>}
-                </li>
-              ))}
-            </ol>
+                  <div className="flex items-center gap-2">
+                    {earlierStages.length > 0 && (
+                      <Button
+                        variant="secondary"
+                        disabled={submitting}
+                        onClick={() => setReturnOpen(true)}
+                        icon={<FiCornerUpLeft />}
+                      >
+                        Send Back
+                      </Button>
+                    )}
+                    <Button
+                      variant="primary"
+                      loading={submitting}
+                      disabled={nextStageBlocked}
+                      onClick={() => handleComplete(currentSchema)}
+                      icon={<FiCheck />}
+                    >
+                      {submitting ? 'Working…' : 'Complete Stage'}
+                    </Button>
+                  </div>
+                </div>
+                {nextStage && !autoRouting && (
+                  <div className="mt-3 pt-3 border-t border-line-subtle max-w-md">
+                    <StageAssigneePicker
+                      teamId={nextStage.teamId}
+                      teamName={nextStage.teamName}
+                      stageName={nextStage.stageName}
+                      value={nextAssignee}
+                      onChange={setNextAssignee}
+                      onBlockedChange={setNextStageBlocked}
+                      disabled={submitting}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {showEnquiryRecord && (
+            <Section title="Enquiry record" description="As registered by the administrator." icon={<FiFileText />}>
+              <StageValues values={enquiryRecord} labels={stageFieldLabels(stages[0]?.stageName)} />
+            </Section>
+          )}
+
+          {submittedStages.length > 0 && (
+            <Section
+              title="Submitted at earlier stages"
+              description="What each stage recorded when it was completed."
+              flush
+            >
+              <ul className="divide-y divide-line-subtle">
+                {submittedStages.map((stage) => {
+                  const row = stageData.find((data) => data.stageId === stage.stageId);
+                  const by = completerFor(stage.stageId);
+                  return (
+                    <li key={stage.stageId}>
+                      <details className="group" open={stage.stageId === lastSubmittedId}>
+                        <summary className="flex items-center gap-3 px-5 py-3 cursor-pointer list-none hover:bg-surface-muted [&::-webkit-details-marker]:hidden">
+                          <span className="h-6 w-6 shrink-0 rounded-full bg-success-subtle text-success ring-1 ring-inset ring-success-border flex items-center justify-center text-[11px] font-semibold">
+                            {stage.stageOrder}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-body font-medium text-ink truncate">{stage.stageName}</span>
+                            <span className="block text-meta text-ink-subtle truncate">
+                              {by ? `${by} · ` : ''}
+                              {row ? formatDateToIST(row.submittedAt) : ''}
+                            </span>
+                          </span>
+                          <FiChevronDown aria-hidden="true" className="shrink-0 text-ink-subtle transition-transform group-open:rotate-180" />
+                        </summary>
+                        <div className="px-5 pb-5 pt-1 pl-14">
+                          <StageValues values={submittedForStage(stage.stageId)} labels={stageFieldLabels(stage.stageName)} />
+                        </div>
+                      </details>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Section>
           )}
         </div>
+
+        <aside className="space-y-6 min-w-0 xl:sticky xl:top-6">
+          <Section title="Details" flush>
+            <dl className="divide-y divide-line-subtle text-body">
+              {[
+                {
+                  label: 'Workflow',
+                  value: workflow ? (
+                    <Link to={`/workflows/${workflow.workflowId}`} className="font-medium text-primary hover:underline underline-offset-2">
+                      {workflow.workflowName}
+                    </Link>
+                  ) : (
+                    '—'
+                  ),
+                },
+                { label: 'Current stage', value: currentStage?.stageName || task.stageName || '—' },
+                {
+                  label: 'Working now',
+                  value: taskDone ? (
+                    <span className="text-ink-subtle">Nobody — complete</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Avatar name={workingNow} size="xs" />
+                      {workingNow}
+                    </span>
+                  ),
+                },
+                { label: 'Team', value: currentStage?.teamName || '—' },
+                {
+                  label: 'Due',
+                  value: task.dueDate ? (
+                    <span className={task.isOverdue ? 'text-danger font-medium' : ''}>{formatDateToIST(task.dueDate)}</span>
+                  ) : (
+                    'No due date'
+                  ),
+                },
+                { label: 'Registered', value: formatDateToIST(task.createdAt) },
+              ].map((item) => (
+                <div key={item.label} className="flex items-start justify-between gap-4 px-5 py-2.5">
+                  <dt className="text-ink-subtle shrink-0">{item.label}</dt>
+                  <dd className="text-ink text-right min-w-0 break-words">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </Section>
+
+          <Section
+            title="Documents"
+            icon={<FiPaperclip />}
+            actions={
+              canAct ? (
+                <label
+                  className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-control border border-line-strong bg-surface text-meta font-medium text-ink shadow-azure-sm ${
+                    uploading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface-muted cursor-pointer'
+                  } focus-within:shadow-focus`}
+                >
+                  <FiUpload aria-hidden="true" />
+                  {uploading ? 'Uploading…' : 'Add file'}
+                  <input type="file" className="sr-only" disabled={uploading} onChange={handleUpload} />
+                </label>
+              ) : undefined
+            }
+            flush
+          >
+            {attachments.length === 0 ? (
+              <p className="px-5 py-4 text-body text-ink-subtle">
+                No documents yet{canAct ? ' — attach the records for this stage.' : '.'}
+              </p>
+            ) : (
+              <ul className="divide-y divide-line-subtle">
+                {attachments.map((attachment) => {
+                  const stage = stages.find((s) => s.stageId === attachment.stageId);
+                  return (
+                    <li key={attachment.attachmentId} className="px-5 py-3 flex items-center gap-3">
+                      <span
+                        aria-hidden="true"
+                        className="h-9 w-9 shrink-0 rounded-control bg-surface-sunken text-ink-muted font-mono text-[10px] font-medium flex items-center justify-center"
+                      >
+                        {fileExt(attachment.fileName)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-body font-medium text-ink truncate" title={attachment.fileName}>{attachment.fileName}</p>
+                        <p className="text-meta text-ink-subtle truncate">
+                          {formatBytes(attachment.sizeBytes)}
+                          {stage ? ` · ${stage.stageName}` : ''} · {timeAgo(attachment.uploadedAt)}
+                        </p>
+                      </div>
+                      <IconButton label={`Download ${attachment.fileName}`} icon={<FiDownload />} onClick={() => handleDownload(attachment)} />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Section>
+
+          <Section title="Activity" description={`${history.length} event${history.length === 1 ? '' : 's'}`}>
+            <ActivityTimeline history={history} />
+          </Section>
+        </aside>
       </div>
 
-      {returnOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-azure-sm shadow-azure-lg w-full max-w-lg p-6">
-            <h2 className="text-lg font-semibold text-black mb-1">Send back</h2>
-            <p className="text-sm text-black/60 mb-4">
-              The enquiry returns to whoever handled that stage last, and the reason is recorded in its history.
-            </p>
-
-            <label className="block text-black text-sm font-semibold mb-2">Send back to</label>
+      <Modal
+        isOpen={returnOpen}
+        title="Send back"
+        icon={<FiCornerUpLeft />}
+        description="The enquiry returns to whoever handled that stage last, and the reason is recorded in its history."
+        onClose={closeReturn}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" disabled={submitting} onClick={closeReturn}>
+              Cancel
+            </Button>
+            <Button variant="primary" loading={submitting} onClick={handleReturn} icon={<FiCornerUpLeft />}>
+              {submitting ? 'Sending…' : 'Send Back'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field htmlFor="return-stage" label="Send back to" required error={returnError.stage}>
             <select
+              id="return-stage"
               value={returnStageId}
               onChange={(e) => setReturnStageId(e.target.value)}
-              className="w-full px-3 py-2 mb-4 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] bg-white text-sm"
+              className={`${inputClass} ${returnError.stage ? 'border-danger' : ''}`}
+              aria-invalid={Boolean(returnError.stage)}
             >
-              <option value="">Select a stage...</option>
+              <option value="">Select a stage…</option>
               {earlierStages.map((stage) => (
                 <option key={stage.stageId} value={stage.stageId}>
                   {stage.stageOrder}. {stage.stageName}
@@ -595,39 +704,28 @@ const TaskDetail = () => {
                 </option>
               ))}
             </select>
+          </Field>
 
-            <label className="block text-black text-sm font-semibold mb-2">
-              Reason <span className="text-xs text-black/60 font-normal">(required)</span>
-            </label>
+          <Field
+            htmlFor="return-reason"
+            label="Reason"
+            required
+            error={returnError.reason}
+            help="Whoever picks this up sees the reason on their queue, so be specific."
+          >
             <textarea
+              id="return-reason"
               value={returnReason}
               onChange={(e) => setReturnReason(e.target.value)}
               rows={4}
               placeholder="What needs to change before this can move forward?"
-              className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] bg-white text-sm"
+              className={`${inputClass} ${returnError.reason ? 'border-danger' : ''}`}
+              aria-invalid={Boolean(returnError.reason)}
+              aria-describedby={returnError.reason ? 'return-reason-error' : 'return-reason-help'}
             />
-
-            <div className="flex justify-end gap-2 mt-5">
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={() => setReturnOpen(false)}
-                className="px-4 py-2 rounded-azure-sm border border-[#434E78]/30 text-[#434E78] text-sm font-medium hover:bg-[#434E78]/5 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={handleReturn}
-                className="px-4 py-2 rounded-azure-sm bg-[#434E78] text-white text-sm font-medium hover:bg-[#434E78]/90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Sending...' : 'Send Back'}
-              </button>
-            </div>
-          </div>
+          </Field>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

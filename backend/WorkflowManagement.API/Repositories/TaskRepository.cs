@@ -10,6 +10,15 @@ public class TaskRepository : Repository<Models.Task>, ITaskRepository
     {
     }
 
+    public async System.Threading.Tasks.Task<Models.Task?> GetTaskWithDetailsAsync(Guid taskId, Guid organizationId)
+    {
+        return await _context.Tasks
+            .Include(t => t.Workflow)
+            .Include(t => t.Stage)
+            .Include(t => t.AssignedToMember)
+            .FirstOrDefaultAsync(t => t.TaskId == taskId && t.OrganizationId == organizationId);
+    }
+
     public async System.Threading.Tasks.Task<IEnumerable<Models.Task>> GetTasksByWorkflowAsync(Guid workflowId)
     {
         return await _context.Tasks

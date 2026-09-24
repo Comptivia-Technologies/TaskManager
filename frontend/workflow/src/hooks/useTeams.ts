@@ -1,31 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
 import { teamService } from '../services/teamService';
 import { Team } from '../types';
+import { useCollection } from './useCollection';
 
 export const useTeams = () => {
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchTeams = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await teamService.getAll();
-      setTeams(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch teams');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTeams();
-  }, [fetchTeams]);
-
-  return { teams, loading, error, refetch: fetchTeams };
+  const { items, loading, error, refetch } = useCollection<Team>(teamService.getAll, 'teams');
+  return { teams: items, loading, error, refetch };
 };
-
-
-

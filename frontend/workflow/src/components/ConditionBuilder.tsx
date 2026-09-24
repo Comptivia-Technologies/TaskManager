@@ -1,11 +1,60 @@
-import { useState, useEffect, useRef } from 'react';
+import { inputClass } from '../utils/formStyles';
+import { useState, useEffect, useId, useRef } from 'react';
 import { RuleCondition, RuleConditions } from '../types';
-import { FiPlus, FiX, FiEye, FiEyeOff } from 'react-icons/fi';
+import { FiCode, FiPlus, FiX } from 'react-icons/fi';
 
 interface ConditionBuilderProps {
   value: string;
   onChange: (json: string) => void;
 }
+
+/** Fields a condition can test, with the label people read. */
+export const CONDITION_FIELDS = [
+  { value: '$.taskType', label: 'Task Type' },
+  { value: '$.taskName', label: 'Task Name' },
+  { value: '$.description', label: 'Description' },
+  { value: '$.workflowName', label: 'Workflow Name' },
+  { value: '$.taskData.value', label: 'Value (taskData)' },
+  { value: '$.taskData.category', label: 'Category (taskData)' },
+  { value: '$.taskData.severity', label: 'Severity (taskData)' },
+  { value: '$.taskData.priority', label: 'Priority (taskData)' },
+];
+
+export const CONDITION_OPERATORS = [
+  { value: 'equals', label: 'Equals', phrase: 'equals' },
+  { value: 'notequals', label: 'Not Equals', phrase: 'is not' },
+  { value: 'contains', label: 'Contains', phrase: 'contains' },
+  { value: 'notcontains', label: 'Does Not Contain', phrase: 'does not contain' },
+  { value: 'startswith', label: 'Starts With', phrase: 'starts with' },
+  { value: 'endswith', label: 'Ends With', phrase: 'ends with' },
+  { value: '>', label: 'Greater Than (>)', phrase: '>' },
+  { value: '>=', label: 'Greater Than or Equal (>=)', phrase: '≥' },
+  { value: '<', label: 'Less Than (<)', phrase: '<' },
+  { value: '<=', label: 'Less Than or Equal (<=)', phrase: '≤' },
+];
+
+/**
+ * A rule's conditions as a sentence — "Task Type equals Government and Value > 1000"
+ * — so a list of rules can be read without opening each one.
+ */
+export const describeConditions = (conditionsJson: string): string => {
+  try {
+    const parsed: RuleConditions = JSON.parse(conditionsJson);
+    const joiner = parsed.any && parsed.any.length > 0 ? ' or ' : ' and ';
+    const list = (parsed.all && parsed.all.length > 0 ? parsed.all : parsed.any) ?? [];
+    if (list.length === 0) return 'Always — no conditions';
+    return list
+      .map((c) => {
+        const field = CONDITION_FIELDS.find((f) => f.value === c.path)?.label.replace(/ \(taskData\)$/, '') ?? c.path;
+        const op = CONDITION_OPERATORS.find((o) => o.value === c.op)?.phrase ?? c.op;
+        const value = c.value === '' || c.value === undefined ? '…' : `“${c.value}”`;
+        return `${field} ${op} ${value}`;
+      })
+      .join(joiner);
+  } catch {
+    return 'Conditions could not be read';
+  }
+};
 
 const ConditionBuilder = ({ value, onChange }: ConditionBuilderProps) => {
   const [conditionType, setConditionType] = useState<'all' | 'any'>('all');
@@ -13,34 +62,9 @@ const ConditionBuilder = ({ value, onChange }: ConditionBuilderProps) => {
   const [showPreview, setShowPreview] = useState(false);
   const [jsonError, setJsonError] = useState<string | null>(null);
   const isInternalUpdate = useRef(false);
+  const uid = useId().replace(/:/g, '');
 
-  // Available fields and labels for the condition builder (this is a list of all the fields that can be used in the condition builder)
-  const availableFields = [
-    { value: '$.taskType', label: 'Task Type' },
-    { value: '$.taskName', label: 'Task Name' },
-    { value: '$.description', label: 'Description' },
-    { value: '$.workflowName', label: 'Workflow Name' },
-    { value: '$.taskData.value', label: 'Value (taskData)' },
-    { value: '$.taskData.category', label: 'Category (taskData)' },
-    { value: '$.taskData.severity', label: 'Severity (taskData)' },
-    { value: '$.taskData.priority', label: 'Priority (taskData)' },
-  ];
-
-  // Available operators
-  const availableOperators = [
-    { value: 'equals', label: 'Equals' },
-    { value: 'notequals', label: 'Not Equals' },
-    { value: 'contains', label: 'Contains' },
-    { value: 'notcontains', label: 'Does Not Contain' },
-    { value: 'startswith', label: 'Starts With' },
-    { value: 'endswith', label: 'Ends With' },
-    { value: '>', label: 'Greater Than (>)' },
-    { value: '>=', label: 'Greater Than or Equal (>=)' },
-    { value: '<', label: 'Less Than (<)' },
-    { value: '<=', label: 'Less Than or Equal (<=)' },
-  ];
-
-  // Parse JSON value on mount or when value changes externally (not from internal updates)
+  // Parse the JSON when it changes from outside, but not when this component wrote it.
   useEffect(() => {
     if (isInternalUpdate.current) {
       isInternalUpdate.current = false;
@@ -52,12 +76,11 @@ const ConditionBuilder = ({ value, onChange }: ConditionBuilderProps) => {
         const parsed: RuleConditions = JSON.parse(value);
         const newType = parsed.all && parsed.all.length > 0 ? 'all' : (parsed.any && parsed.any.length > 0 ? 'any' : 'all');
         const newConditions = parsed.all && parsed.all.length > 0 ? parsed.all : (parsed.any && parsed.any.length > 0 ? parsed.any : []);
-        
+
         setConditionType(newType);
         setConditions(newConditions);
         setJsonError(null);
       } catch (error) {
-        // If JSON is invalid, try to keep existing conditions
         setJsonError('Invalid JSON format');
       }
     } else {
@@ -66,7 +89,7 @@ const ConditionBuilder = ({ value, onChange }: ConditionBuilderProps) => {
     }
   }, [value]);
 
-  // Generate JSON whenever conditions or type changes
+  // Regenerate the JSON whenever the conditions or the logic change.
   useEffect(() => {
     const ruleConditions: RuleConditions = {
       [conditionType]: conditions.length === 0 ? [] : conditions,
@@ -87,14 +110,7 @@ const ConditionBuilder = ({ value, onChange }: ConditionBuilderProps) => {
   }, [conditions, conditionType]);
 
   const addCondition = () => {
-    setConditions([
-      ...conditions,
-      {
-        path: '$.taskType',
-        op: 'equals',
-        value: '',
-      },
-    ]);
+    setConditions([...conditions, { path: '$.taskType', op: 'equals', value: '' }]);
   };
 
   const removeCondition = (index: number) => {
@@ -103,10 +119,7 @@ const ConditionBuilder = ({ value, onChange }: ConditionBuilderProps) => {
 
   const updateCondition = (index: number, field: keyof RuleCondition, newValue: any) => {
     const updated = [...conditions];
-    updated[index] = {
-      ...updated[index],
-      [field]: newValue,
-    };
+    updated[index] = { ...updated[index], [field]: newValue };
     setConditions(updated);
   };
 
@@ -114,166 +127,143 @@ const ConditionBuilder = ({ value, onChange }: ConditionBuilderProps) => {
     if (conditions.length === 0) {
       return '{"all":[]}';
     }
-    const ruleConditions: RuleConditions = {
-      [conditionType]: conditions,
-    };
-    return JSON.stringify(ruleConditions, null, 2);
+    return JSON.stringify({ [conditionType]: conditions }, null, 2);
   };
 
   return (
-    <div className="space-y-4">
-      {/* Condition Type Selector */}
-      <div>
-        <label className="block text-sm font-medium text-black mb-2 font-sans">
-          Condition Logic
-        </label>
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="conditionType"
-              value="all"
-              checked={conditionType === 'all'}
-              onChange={(e) => setConditionType(e.target.value as 'all' | 'any')}
-              className="text-[#434E78]"
-            />
-            <span className="text-sm text-black font-sans">All conditions must match (AND)</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="conditionType"
-              value="any"
-              checked={conditionType === 'any'}
-              onChange={(e) => setConditionType(e.target.value as 'all' | 'any')}
-              className="text-[#434E78]"
-            />
-            <span className="text-sm text-black font-sans">Any condition matches (OR)</span>
-          </label>
+    <div className="rounded-card border border-line overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-surface-muted border-b border-line">
+        <div role="radiogroup" aria-labelledby={`${uid}-logic`} className="flex items-center gap-3">
+          <span id={`${uid}-logic`} className="text-meta font-medium text-ink-muted">Condition Logic</span>
+          <div className="inline-flex p-0.5 rounded-control bg-surface-sunken">
+            {([
+              ['all', 'Match all (AND)'],
+              ['any', 'Match any (OR)'],
+            ] as const).map(([type, label]) => (
+              <label
+                key={type}
+                className={`relative h-7 px-3 inline-flex items-center rounded-[5px] text-meta font-medium cursor-pointer
+                  has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${
+                  conditionType === type ? 'bg-surface text-ink shadow-azure-sm' : 'text-ink-subtle hover:text-ink'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="conditionType"
+                  value={type}
+                  checked={conditionType === type}
+                  onChange={(e) => setConditionType(e.target.value as 'all' | 'any')}
+                  className="sr-only"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
         </div>
+        <span className="text-meta text-ink-subtle tabular">
+          {conditions.length} condition{conditions.length === 1 ? '' : 's'}
+        </span>
       </div>
 
-      {/* Conditions List */}
-      <div>
-        <div className="flex justify-between items-center mb-2">
-          <label className="block text-sm font-medium text-black font-sans">
-            Conditions
-          </label>
+      <div className="p-4">
+        {conditions.length === 0 ? (
+          <p className="text-body text-ink-subtle text-center py-3">
+            No conditions — the rule applies to every enquiry. Add one to narrow it.
+          </p>
+        ) : (
+          <ol className="space-y-2">
+            {conditions.map((condition, index) => (
+              <li key={index}>
+                {index > 0 && (
+                  <p aria-hidden="true" className="text-label font-semibold uppercase text-primary pl-1 mb-2">
+                    {conditionType === 'all' ? 'and' : 'or'}
+                  </p>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.1fr)_2.25rem] gap-2 items-center">
+                  <select
+                    aria-label={`Condition ${index + 1} field`}
+                    value={condition.path}
+                    onChange={(e) => updateCondition(index, 'path', e.target.value)}
+                    className={inputClass}
+                  >
+                    {CONDITION_FIELDS.map((field) => (
+                      <option key={field.value} value={field.value}>
+                        {field.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label={`Condition ${index + 1} operator`}
+                    value={condition.op}
+                    onChange={(e) => updateCondition(index, 'op', e.target.value)}
+                    className={inputClass}
+                  >
+                    {CONDITION_OPERATORS.map((op) => (
+                      <option key={op.value} value={op.value}>
+                        {op.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    aria-label={`Condition ${index + 1} value`}
+                    value={condition.value || ''}
+                    onChange={(e) => updateCondition(index, 'value', e.target.value)}
+                    placeholder="Value"
+                    className={inputClass}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeCondition(index)}
+                    aria-label={`Remove condition ${index + 1}`}
+                    title="Remove condition"
+                    className="h-9 w-9 inline-flex items-center justify-center rounded-control text-ink-subtle hover:text-danger hover:bg-danger-subtle cursor-pointer"
+                  >
+                    <FiX aria-hidden="true" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
             onClick={addCondition}
-            className="text-sm text-[#434E78] hover:text-[#434E78]/80 font-medium flex items-center gap-1 font-sans"
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-control text-meta font-medium text-primary hover:bg-primary-subtle cursor-pointer"
           >
-            <FiPlus className="text-base" />
+            <FiPlus aria-hidden="true" />
             Add Condition
           </button>
+          <div className="flex items-center gap-3">
+            {jsonError && <span className="text-meta text-danger">{jsonError}</span>}
+            <button
+              type="button"
+              onClick={() => setShowPreview(!showPreview)}
+              aria-expanded={showPreview}
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-control text-meta font-medium text-ink-subtle hover:text-ink hover:bg-surface-sunken cursor-pointer"
+            >
+              <FiCode aria-hidden="true" />
+              {showPreview ? 'Hide' : 'Show'} JSON
+            </button>
+          </div>
         </div>
 
-        {conditions.length === 0 ? (
-          <div className="p-4 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/20 text-center">
-            <p className="text-sm text-black/60 font-sans">No conditions added. Click "Add Condition" to get started.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {conditions.map((condition, index) => (
-              <div
-                key={index}
-                className="p-4 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/20"
-              >
-                <div className="grid grid-cols-12 gap-3 items-end">
-                  <div className="col-span-4">
-                    <label className="block text-xs font-medium text-black mb-1 font-sans">
-                      Field
-                    </label>
-                    <select
-                      value={condition.path}
-                      onChange={(e) => updateCondition(index, 'path', e.target.value)}
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] font-sans text-sm"
-                    >
-                      {availableFields.map((field) => (
-                        <option key={field.value} value={field.value}>
-                          {field.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="col-span-3">
-                    <label className="block text-xs font-medium text-black mb-1 font-sans">
-                      Operator
-                    </label>
-                    <select
-                      value={condition.op}
-                      onChange={(e) => updateCondition(index, 'op', e.target.value)}
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] font-sans text-sm"
-                    >
-                      {availableOperators.map((op) => (
-                        <option key={op.value} value={op.value}>
-                          {op.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="col-span-4">
-                    <label className="block text-xs font-medium text-black mb-1 font-sans">
-                      Value
-                    </label>
-                    <input
-                      type="text"
-                      value={condition.value || ''}
-                      onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                      placeholder="Enter value..."
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] font-sans text-sm"
-                    />
-                  </div>
-
-                  <div className="col-span-1">
-                    <button
-                      type="button"
-                      onClick={() => removeCondition(index)}
-                      className="w-full p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-azure-sm transition-colors"
-                      title="Remove condition"
-                    >
-                      <FiX className="text-lg mx-auto" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+        {conditions.length > 0 && (
+          <p className="mt-3 text-meta text-ink-muted">
+            <span className="font-medium text-ink">Reads as:</span> {describeConditions(getGeneratedJson())}
+          </p>
         )}
-      </div>
 
-      {/* JSON Preview Toggle */}
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setShowPreview(!showPreview)}
-          className="text-sm text-[#434E78] hover:text-[#434E78]/80 font-medium flex items-center gap-1 font-sans"
-        >
-          {showPreview ? <FiEyeOff className="text-base" /> : <FiEye className="text-base" />}
-          {showPreview ? 'Hide' : 'Show'} JSON Preview
-        </button>
-        {jsonError && (
-          <span className="text-xs text-red-600 font-sans">{jsonError}</span>
-        )}
-      </div>
-
-      {/* JSON Preview */}
-      {showPreview && (
-        <div className="p-3 bg-gray-50 rounded-azure-sm border border-[#434E78]/20">
-          <label className="block text-xs font-medium text-black mb-1 font-sans">
-            Generated JSON (read-only)
-          </label>
-          <pre className="text-xs font-mono text-black/70 overflow-x-auto font-sans">
+        {showPreview && (
+          <pre className="mt-3 text-meta leading-5 font-mono text-[#D6DBEE] bg-shell rounded-control p-3 overflow-x-auto scrollbar-thin">
             {getGeneratedJson()}
           </pre>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
 
 export default ConditionBuilder;
-

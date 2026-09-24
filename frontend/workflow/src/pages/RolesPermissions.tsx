@@ -1,6 +1,16 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import Button, { IconButton } from '../components/Button';
+import Tabs from '../components/Tabs';
+import PageHeader from '../components/PageHeader';
+import Modal from '../components/Modal';
+import Field from '../components/Field';
+import ConfirmDialog from '../components/ConfirmDialog';
+import DataTable from '../components/DataTable';
+import EmptyState from '../components/EmptyState';
+import Badge from '../components/Badge';
+import { inputClass } from '../utils/formStyles';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Role, RoleCreate } from '../types';
-import { FiPlus, FiEdit, FiTrash2, FiX, FiChevronDown } from 'react-icons/fi';
+import { FiEdit2, FiKey, FiLock, FiPlus, FiShield, FiTrash2 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { permissionService, PermissionRead } from '../services/permissionService';
 import { roleService } from '../services/roleService';
@@ -19,10 +29,9 @@ const RolesPermissions = () => {
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [roleForm, setRoleForm] = useState<RoleCreate>({ name: '', description: '', permissions: [] });
-  const [permissionsDropdownOpen, setPermissionsDropdownOpen] = useState(false);
-  const permissionsDropdownRef = useRef<HTMLDivElement>(null);
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const loadPermissions = useCallback(async () => {
     setPermissionsLoading(true);
@@ -59,16 +68,17 @@ const RolesPermissions = () => {
     loadRoles();
   }, [loadRoles]);
 
-  useEffect(() => {
-    if (!permissionsDropdownOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (permissionsDropdownRef.current && !permissionsDropdownRef.current.contains(e.target as Node)) {
-        setPermissionsDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [permissionsDropdownOpen]);
+  const byCategory = useMemo(() => {
+    const grouped = permissionsList.reduce<Record<string, PermissionRead[]>>((acc, p) => {
+      const cat = p.category || 'Other';
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(p);
+      return acc;
+    }, {});
+    Object.values(grouped).forEach((list) => list.sort((a, b) => a.name.localeCompare(b.name)));
+    return grouped;
+  }, [permissionsList]);
+  const categories = Object.keys(byCategory).sort();
 
   const openAddRoleModal = () => {
     setEditingRole(null);
@@ -90,15 +100,22 @@ const RolesPermissions = () => {
     setIsRoleModalOpen(false);
     setEditingRole(null);
     setRoleForm({ name: '', description: '', permissions: [] });
-    setPermissionsDropdownOpen(false);
   };
 
   const togglePermission = (permission: string) => {
     const current = roleForm.permissions ?? [];
-    const next = current.includes(permission)
-      ? current.filter((p) => p !== permission)
-      : [...current, permission];
+    const next = current.includes(permission) ? current.filter((p) => p !== permission) : [...current, permission];
     setRoleForm({ ...roleForm, permissions: next });
+  };
+
+  const toggleCategory = (category: string) => {
+    const codes = byCategory[category].map((p) => p.code);
+    const current = roleForm.permissions ?? [];
+    const allOn = codes.every((c) => current.includes(c));
+    setRoleForm({
+      ...roleForm,
+      permissions: allOn ? current.filter((c) => !codes.includes(c)) : Array.from(new Set([...current, ...codes])),
+    });
   };
 
   const handleRoleSubmit = async (e: React.FormEvent) => {
@@ -107,6 +124,7 @@ const RolesPermissions = () => {
       toast.error('Organization context required');
       return;
     }
+    setSaving(true);
     try {
       if (editingRole) {
         await roleService.update(editingRole.roleId, {
@@ -127,6 +145,8 @@ const RolesPermissions = () => {
       loadRoles();
     } catch {
       toast.error(editingRole ? 'Failed to update role' : 'Failed to add role');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -144,299 +164,275 @@ const RolesPermissions = () => {
     }
   };
 
-  return (
-    <div className="p-8 bg-white font-sans">
-      <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">Roles & Permissions</h1>
-      <p className="mt-1 text-sm text-black/60 font-sans mb-6">Manage roles and permissions</p>
+  const areasFor = (role: Role) => {
+    const codes = role.permissions ?? [];
+    return categories.filter((c) => byCategory[c].some((p) => codes.includes(p.code)));
+  };
 
-      <div className="flex gap-6 border-b border-[#434E78]/20 mb-6">
-        {(['roles', 'permissions'] as Tab[]).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            className={`pb-3 font-medium text-sm font-sans transition-colors capitalize ${
-              activeTab === tab
-                ? 'text-[#434E78] border-b-2 border-[#434E78]'
-                : 'text-black/60 hover:text-black/80'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
+  const selected = roleForm.permissions ?? [];
+
+  return (
+    <div>
+      <PageHeader
+        title="Roles & Permissions"
+        subtitle="Roles are defined here and assigned to users in Product Hub. Both sides apply."
+        actions={
+          activeTab === 'roles' ? (
+            <Button variant="primary" icon={<FiPlus />} disabled={!organizationId} onClick={openAddRoleModal}>
+              Add Role
+            </Button>
+          ) : null
+        }
+      />
+
+      <div className="mb-5">
+        <Tabs
+          label="Roles and permissions"
+          activeId={activeTab}
+          onChange={(id) => setActiveTab(id as Tab)}
+          tabs={[
+            { id: 'roles', label: 'Roles', icon: <FiShield />, count: roles.length },
+            { id: 'permissions', label: 'Permissions', icon: <FiKey />, count: permissionsList.length },
+          ]}
+        />
       </div>
 
       {activeTab === 'roles' && (
-        <>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-black font-sans">Roles</h2>
-            <button
-              onClick={openAddRoleModal}
-              disabled={!organizationId}
-              className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FiPlus className="mr-2" />
-              Add Role
-            </button>
-          </div>
-
-          {rolesLoading ? (
-            <LoadingSpinner />
-          ) : (
-          <div className="bg-white rounded-azure-sm shadow-azure-sm overflow-hidden border border-[#434E78]/20">
-            <table className="min-w-full divide-y divide-[#434E78]/20">
-              <thead className="bg-[#434E78]/5">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                    Role Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-[#434E78]/20">
-                {roles.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-6 py-8 text-center text-black/60 font-sans">
-                      No roles yet. Add a role to get started.
-                    </td>
-                  </tr>
-                ) : (
-                  roles.map((role) => (
-                    <tr key={role.roleId} className="hover:bg-[#434E78]/5 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap font-semibold text-black font-sans">
-                        {role.name}
-                      </td>
-                      <td className="px-6 py-4 text-black/70 font-sans">
-                        {role.description || '—'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => openEditRoleModal(role)}
-                          className="text-green-600 hover:text-green-700 hover:bg-green-50 p-2 rounded-azure-sm mr-1 transition-colors inline-flex"
-                          title="Edit"
-                        >
-                          <FiEdit className="text-base" />
-                        </button>
-                        <button
-                          onClick={() => setRoleToDelete(role)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-azure-sm transition-colors inline-flex"
-                          title="Delete"
-                        >
-                          <FiTrash2 className="text-base" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          )}
-        </>
-      )}
-
-      {activeTab === 'permissions' && (
-        <>
-          {permissionsLoading ? (
-            <LoadingSpinner />
-          ) : (() => {
-            const byCategory = permissionsList.reduce<Record<string, PermissionRead[]>>((acc, p) => {
-              const cat = p.category || 'Other';
-              if (!acc[cat]) acc[cat] = [];
-              acc[cat].push(p);
-              return acc;
-            }, {});
-            const categories = Object.keys(byCategory).sort();
-            if (categories.length === 0) {
-              return (
-                <div className="py-12 text-center text-black/60 font-sans">
-                  No permissions found.
-                </div>
-              );
-            }
-            return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {categories.map((category) => (
-                  <div
-                    key={category}
-                    className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 overflow-hidden"
-                  >
-                    <div className="px-4 py-3 bg-[#434E78]/5 border-b border-[#434E78]/20">
-                      <h3 className="font-semibold text-black font-sans">{category}</h3>
-                    </div>
-                    <ul className="px-4 py-3 divide-y divide-[#434E78]/10">
-                      {byCategory[category].map((p) => (
-                        <li key={p.permissionId ?? p.code} className="py-2 text-sm font-sans">
-                          <span className="font-medium text-black">{p.name}</span>
-                          <span className="block text-black/50 text-xs font-mono">{p.code}</span>
-                        </li>
-                      ))}
-                    </ul>
+        <DataTable<Role>
+          caption="Roles"
+          rows={roles}
+          rowKey={(r) => r.roleId}
+          loading={rolesLoading}
+          onRowClick={openEditRoleModal}
+          empty={
+            <EmptyState
+              icon={<FiShield />}
+              title="No roles yet"
+              body="Add a role to get started, then assign it to users in Product Hub."
+              action={
+                <Button variant="primary" icon={<FiPlus />} disabled={!organizationId} onClick={openAddRoleModal}>
+                  Add Role
+                </Button>
+              }
+            />
+          }
+          columns={[
+            {
+              key: 'name',
+              header: 'Role',
+              sortValue: (r) => r.name.toLowerCase(),
+              render: (r) => (
+                <div className="flex items-center gap-3 min-w-0">
+                  <span aria-hidden="true" className="h-9 w-9 shrink-0 rounded-control bg-primary-subtle text-primary ring-1 ring-inset ring-primary-border flex items-center justify-center">
+                    <FiShield />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink truncate">{r.name}</p>
+                    <p className="text-meta text-ink-subtle truncate max-w-sm">{r.description || 'No description'}</p>
                   </div>
-                ))}
-              </div>
-            );
-          })()}
-        </>
+                </div>
+              ),
+            },
+            {
+              key: 'access',
+              header: 'Access',
+              hideOnMobile: true,
+              render: (r) => {
+                const areas = areasFor(r);
+                return areas.length === 0 ? (
+                  <span className="text-meta text-ink-subtle">No permissions</span>
+                ) : (
+                  <div className="flex flex-wrap gap-1 max-w-md">
+                    {areas.slice(0, 4).map((a) => (
+                      <Badge key={a}>{a}</Badge>
+                    ))}
+                    {areas.length > 4 && <Badge>+{areas.length - 4}</Badge>}
+                  </div>
+                );
+              },
+            },
+            {
+              key: 'count',
+              header: 'Permissions',
+              align: 'right',
+              sortValue: (r) => r.permissions?.length ?? 0,
+              render: (r) => (
+                <span className="font-mono text-meta text-ink-muted tabular">
+                  {r.permissions?.length ?? 0}
+                  {permissionsList.length > 0 ? ` / ${permissionsList.length}` : ''}
+                </span>
+              ),
+            },
+            {
+              key: 'actions',
+              header: 'Actions',
+              align: 'right',
+              width: '100px',
+              render: (r) => (
+                <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                  <IconButton size="sm" label={`Edit ${r.name}`} icon={<FiEdit2 />} onClick={() => openEditRoleModal(r)} />
+                  <IconButton size="sm" tone="danger" label={`Delete ${r.name}`} icon={<FiTrash2 />} onClick={() => setRoleToDelete(r)} />
+                </div>
+              ),
+            },
+          ]}
+        />
       )}
 
-      {isRoleModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20 relative">
-            <button
-              type="button"
-              onClick={closeRoleModal}
-              className="absolute top-4 right-4 text-black/50 hover:text-black p-1 rounded-azure-sm"
-            >
-              <FiX className="text-xl" />
-            </button>
-            <h2 className="text-xl font-semibold mb-4 text-black font-sans">
-              {editingRole ? 'Edit Role' : 'Add Role'}
-            </h2>
-            <form onSubmit={handleRoleSubmit}>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Role Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter role name"
-                  value={roleForm.name}
-                  onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Description
-                </label>
-                <textarea
-                  placeholder="Enter description (optional)"
-                  value={roleForm.description}
-                  onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans resize-none"
-                />
-              </div>
-              <div className="mb-6 relative" ref={permissionsDropdownRef}>
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Permissions
-                </label>
+      {activeTab === 'permissions' &&
+        (permissionsLoading ? (
+          <LoadingSpinner label="Loading permissions" />
+        ) : categories.length === 0 ? (
+          <div className="card">
+            <EmptyState icon={<FiKey />} title="No permissions found" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {categories.map((category) => (
+              <section key={category} className="card overflow-hidden" aria-labelledby={`perm-${category}`}>
+                <header className="flex items-center justify-between px-4 py-3 border-b border-line-subtle bg-surface-muted">
+                  <h2 id={`perm-${category}`} className="text-body font-semibold text-ink">{category}</h2>
+                  <span className="text-meta text-ink-subtle tabular">{byCategory[category].length}</span>
+                </header>
+                <ul className="divide-y divide-line-subtle">
+                  {byCategory[category].map((p) => (
+                    <li key={p.permissionId ?? p.code} className="flex items-center gap-3 px-4 py-2.5">
+                      <FiLock aria-hidden="true" className="shrink-0 text-ink-subtle" />
+                      <div className="min-w-0">
+                        <p className="text-body font-medium text-ink">{p.name}</p>
+                        <p className="text-[11px] text-ink-subtle font-mono">{p.code}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        ))}
+
+      <Modal
+        isOpen={isRoleModalOpen}
+        title={editingRole ? 'Edit Role' : 'Add Role'}
+        icon={<FiShield />}
+        size="lg"
+        onClose={closeRoleModal}
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeRoleModal} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" form="role-form" loading={saving}>
+              {editingRole ? 'Update Role' : 'Add Role'}
+            </Button>
+          </>
+        }
+      >
+        <form id="role-form" onSubmit={handleRoleSubmit} className="space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field htmlFor="role-name" label="Role Name" required>
+              <input
+                id="role-name"
+                type="text"
+                placeholder="e.g. Estimator"
+                value={roleForm.name}
+                onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
+                className={inputClass}
+                required
+              />
+            </Field>
+            <Field htmlFor="role-description" label="Description" hint="Optional">
+              <input
+                id="role-description"
+                placeholder="What this role is for"
+                value={roleForm.description}
+                onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
+                className={inputClass}
+              />
+            </Field>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-body font-medium text-ink">Permissions</p>
+              <div className="flex items-center gap-3 text-meta">
+                <span className="text-ink-subtle tabular">{selected.length} of {permissionsList.length} selected</span>
                 <button
                   type="button"
-                  onClick={() => setPermissionsDropdownOpen((o) => !o)}
-                  className="w-full flex items-center justify-between px-3 py-2 border border-[#434E78]/30 rounded-azure-sm bg-white text-left text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78]"
+                  className="font-medium text-primary hover:underline underline-offset-2 cursor-pointer"
+                  onClick={() => {
+                    const allCodes = permissionsList.map((p) => p.code);
+                    const allSelected = selected.length === allCodes.length;
+                    setRoleForm({ ...roleForm, permissions: allSelected ? [] : allCodes });
+                  }}
                 >
-                  <span className={roleForm.permissions?.length ? 'text-black' : 'text-black/50'}>
-                    {(roleForm.permissions?.length ?? 0) > 0
-                      ? `${roleForm.permissions!.length} permission(s) selected`
-                      : 'Select permissions'}
-                  </span>
-                  <FiChevronDown
-                    className={`text-[#434E78] transition-transform ${permissionsDropdownOpen ? 'rotate-180' : ''}`}
-                  />
+                  {permissionsList.length > 0 && selected.length === permissionsList.length ? 'Clear all' : 'Select all'}
                 </button>
-                {permissionsDropdownOpen && (
-                  <div className="absolute z-10 mt-1 w-full max-h-48 overflow-auto border border-[#434E78]/30 rounded-azure-sm bg-white shadow-azure-sm py-1">
-                    {permissionsLoading ? (
-                      <div className="px-3 py-4 text-sm text-black/60 font-sans">Loading permissions...</div>
-                    ) : permissionsList.length === 0 ? (
-                      <div className="px-3 py-4 text-sm text-black/60 font-sans">No permissions available.</div>
-                    ) : (
-                      <>
-                        <label
-                          className="flex items-center gap-2 px-3 py-2 hover:bg-[#434E78]/5 cursor-pointer text-sm font-sans border-b border-[#434E78]/10"
-                          onClick={() => {
-                            const allCodes = permissionsList.map((p) => p.code);
-                            const allSelected = (roleForm.permissions ?? []).length === allCodes.length;
-                            setRoleForm({ ...roleForm, permissions: allSelected ? [] : allCodes });
+              </div>
+            </div>
+            {permissionsLoading ? (
+              <p className="text-body text-ink-subtle">Loading permissions…</p>
+            ) : categories.length === 0 ? (
+              <p className="text-body text-ink-subtle">No permissions available.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {categories.map((category) => {
+                  const codes = byCategory[category].map((p) => p.code);
+                  const on = codes.filter((c) => selected.includes(c)).length;
+                  return (
+                    <fieldset key={category} className="rounded-card border border-line overflow-hidden">
+                      <legend className="sr-only">{category}</legend>
+                      <label className="flex items-center gap-2.5 px-3 py-2 bg-surface-muted border-b border-line-subtle cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={on === codes.length}
+                          ref={(el) => {
+                            if (el) el.indeterminate = on > 0 && on < codes.length;
                           }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={permissionsList.length > 0 && (roleForm.permissions ?? []).length === permissionsList.length}
-                            onChange={() => {}}
-                            className="rounded border-[#434E78]/30 text-[#434E78] focus:ring-[#434E78]"
-                            readOnly
-                          />
-                          <span className="text-black font-medium">Select all</span>
-                        </label>
-                        {permissionsList
-                        .sort((a, b) => (a.category || '').localeCompare(b.category || '') || a.name.localeCompare(b.name))
-                        .map((p) => (
-                          <label
-                            key={p.permissionId ?? p.code}
-                            className="flex items-center gap-2 px-3 py-2 hover:bg-[#434E78]/5 cursor-pointer text-sm font-sans"
-                          >
+                          onChange={() => toggleCategory(category)}
+                          className="h-4 w-4 rounded"
+                        />
+                        <span className="text-body font-semibold text-ink flex-1">{category}</span>
+                        <span className="text-meta text-ink-subtle tabular">{on}/{codes.length}</span>
+                      </label>
+                      <div className="py-1">
+                        {byCategory[category].map((p) => (
+                          <label key={p.permissionId ?? p.code} className="flex items-start gap-2.5 px-3 py-1.5 hover:bg-surface-muted cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={(roleForm.permissions ?? []).includes(p.code)}
+                              checked={selected.includes(p.code)}
                               onChange={() => togglePermission(p.code)}
-                              className="rounded border-[#434E78]/30 text-[#434E78] focus:ring-[#434E78]"
+                              className="mt-0.5 h-4 w-4 rounded"
                             />
-                            <span className="text-black">{p.name}</span>
-                            <span className="text-black/50 text-xs font-mono">{p.code}</span>
+                            <span className="min-w-0">
+                              <span className="block text-body text-ink">{p.name}</span>
+                              <span className="block text-[11px] text-ink-subtle font-mono">{p.code}</span>
+                            </span>
                           </label>
                         ))}
-                      </>
-                    )}
-                  </div>
-                )}
+                      </div>
+                    </fieldset>
+                  );
+                })}
               </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={closeRoleModal}
-                  className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                >
-                  {editingRole ? 'Update Role' : 'Add Role'}
-                </button>
-              </div>
-            </form>
+            )}
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
 
-      {roleToDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
-            <h2 className="text-xl font-semibold mb-2 text-black font-sans">Delete role</h2>
-            <p className="text-black/70 text-sm font-sans mb-6">
-              Are you sure you want to delete {roleToDelete.name}?
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setRoleToDelete(null)}
-                disabled={deleting}
-                className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans disabled:opacity-60"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDeleteRole(roleToDelete)}
-                disabled={deleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-azure-sm hover:bg-red-700 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
-              >
-                {deleting ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={Boolean(roleToDelete)}
+        title="Delete role"
+        body={
+          <>
+            Delete <span className="font-medium text-ink">{roleToDelete?.name}</span> and its{' '}
+            {roleToDelete?.permissions?.length ?? 0} permissions?
+          </>
+        }
+        confirmLabel="Delete role"
+        busy={deleting}
+        onCancel={() => setRoleToDelete(null)}
+        onConfirm={() => roleToDelete && handleDeleteRole(roleToDelete)}
+      />
     </div>
   );
 };

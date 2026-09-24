@@ -1,11 +1,33 @@
-import { useState, useEffect, useCallback } from 'react';
+import Button, { IconButton } from '../components/Button';
+import Badge from '../components/Badge';
+import PageHeader from '../components/PageHeader';
+import Modal from '../components/Modal';
+import Field from '../components/Field';
+import ConfirmDialog from '../components/ConfirmDialog';
+import EmptyState from '../components/EmptyState';
+import { inputClass } from '../utils/formStyles';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { priorityRulesService } from '../services/priorityRulesService';
-import { PriorityRule, PriorityRuleCreate, RuleConditions } from '../types';
+import { PriorityRule, PriorityRuleCreate } from '../types';
 import { useWorkflows } from '../hooks/useWorkflows';
 import LoadingSpinner from '../components/LoadingSpinner';
-import ConditionBuilder from '../components/ConditionBuilder';
-import { FiSettings, FiPlus, FiEdit, FiTrash2, FiLayers } from 'react-icons/fi';
+import ConditionBuilder, { describeConditions } from '../components/ConditionBuilder';
+import { FiCheck, FiEdit2, FiGitMerge, FiGlobe, FiPlus, FiSliders, FiTrash2 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import { priorityRank, priorityTone } from '../utils/status';
+
+const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
+
+const EMPTY_FORM: PriorityRuleCreate = {
+  ruleName: '',
+  priority: 'Medium',
+  salience: 0,
+  isActive: true,
+  conditionsJson: '{"all":[]}',
+  maxWorkloadScore: undefined,
+  teamName: undefined,
+  workflowId: undefined,
+};
 
 const PriorityRules = () => {
   const { workflows, loading: workflowsLoading } = useWorkflows();
@@ -13,13 +35,11 @@ const PriorityRules = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingRule, setEditingRule] = useState<PriorityRule | null>(null);
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | 'global' | null>(null);
   const [showActiveOnly, setShowActiveOnly] = useState(false);
   const [ruleToDelete, setRuleToDelete] = useState<PriorityRule | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  // Group rules by workflow
-  const [rulesByWorkflow, setRulesByWorkflow] = useState<Map<string | 'global', PriorityRule[]>>(new Map());
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState<PriorityRuleCreate>(EMPTY_FORM);
 
   const loadRules = useCallback(async () => {
     try {
@@ -38,47 +58,29 @@ const PriorityRules = () => {
     loadRules();
   }, [loadRules]);
 
-  useEffect(() => {
-    // Group rules by workflow
-    const grouped = new Map<string | 'global', PriorityRule[]>();
-    
-    // Global rules (no workflowId)
-    const globalRules = rules.filter(r => !r.workflowId);
-    if (globalRules.length > 0) {
-      grouped.set('global', globalRules);
-    }
-    
-    // Workflow-specific rules
-    workflows.forEach(workflow => {
-      const workflowRules = rules.filter(r => r.workflowId === workflow.workflowId);
-      if (workflowRules.length > 0) {
-        grouped.set(workflow.workflowId, workflowRules);
-      }
-    });
-    
-    setRulesByWorkflow(grouped);
+  // Global rules first, then one group per workflow — every workflow is listed,
+  // even with no rules, so it is clear where a rule could be added.
+  const groups = useMemo(() => {
+    const byPriority = (a: PriorityRule, b: PriorityRule) => priorityRank(a.priority) - priorityRank(b.priority);
+    return [
+      { id: 'global' as const, name: 'All workflows', description: 'Global rules apply to every enquiry.', rules: rules.filter((r) => !r.workflowId).sort(byPriority) },
+      ...workflows.map((w) => ({
+        id: w.workflowId,
+        name: w.workflowName,
+        description: 'Only enquiries on this workflow.',
+        rules: rules.filter((r) => r.workflowId === w.workflowId).sort(byPriority),
+      })),
+    ];
   }, [rules, workflows]);
 
-
   const handleAddRule = (workflowId: string | 'global') => {
-    setSelectedWorkflowId(workflowId);
     setEditingRule(null);
-    setFormData({
-      ruleName: '',
-      priority: 'Medium',
-      salience: 0,
-      isActive: true,
-      conditionsJson: '{"all":[]}',
-      maxWorkloadScore: undefined,
-      teamName: undefined,
-      workflowId: workflowId === 'global' ? undefined : workflowId,
-    });
+    setFormData({ ...EMPTY_FORM, workflowId: workflowId === 'global' ? undefined : workflowId });
     setShowModal(true);
   };
 
   const handleEdit = (rule: PriorityRule) => {
     setEditingRule(rule);
-    setSelectedWorkflowId(rule.workflowId || 'global');
     setFormData({
       ruleName: rule.ruleName,
       priority: rule.priority,
@@ -90,6 +92,11 @@ const PriorityRules = () => {
       workflowId: rule.workflowId,
     });
     setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingRule(null);
   };
 
   const handleDeleteRule = async (rule: PriorityRule) => {
@@ -107,42 +114,18 @@ const PriorityRules = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!formData.ruleName.trim()) {
+      toast.error('Give the rule a name');
+      return;
+    }
+    setSaving(true);
     try {
-      // Determine the workflowId to use
-      let finalWorkflowId: string | undefined;
-      
-      if (editingRule) {
-        // When editing, use formData.workflowId (user might have changed it)
-        finalWorkflowId = formData.workflowId;
-      } else {
-        // When creating, prioritize selectedWorkflowId
-        if (selectedWorkflowId && selectedWorkflowId !== 'global') {
-          finalWorkflowId = selectedWorkflowId as string;
-        } else if (selectedWorkflowId === 'global') {
-          finalWorkflowId = undefined;
-        } else {
-          // Fallback to formData.workflowId if selectedWorkflowId is null
-          finalWorkflowId = formData.workflowId;
-        }
-      }
-      
-      // Build submit data with explicit workflowId
-      const submitData: PriorityRuleCreate = { 
-        ...formData,
-        workflowId: finalWorkflowId
-      };
-      
-      // Debug logging
-      console.log('Submitting rule:', {
-        selectedWorkflowId,
-        formDataWorkflowId: formData.workflowId,
-        finalWorkflowId: submitData.workflowId,
-        isEditing: !!editingRule,
-        submitData: JSON.parse(JSON.stringify(submitData)) // Convert to plain object for logging
-      });
-      
+      // The scope picker writes formData.workflowId directly; creating from a
+      // workflow's group pre-fills it, so formData is the single source here.
+      const submitData: PriorityRuleCreate = { ...formData, workflowId: formData.workflowId || undefined };
+
       if (editingRule) {
         await priorityRulesService.update(editingRule.ruleId, submitData);
         toast.success('Rule updated successfully');
@@ -150,459 +133,224 @@ const PriorityRules = () => {
         await priorityRulesService.create(submitData);
         toast.success('Rule created successfully');
       }
-      setShowModal(false);
-      // Reset selectedWorkflowId after successful submission
-      setSelectedWorkflowId(null);
-      setEditingRule(null);
+      closeModal();
       loadRules();
     } catch (error: any) {
       toast.error(editingRule ? 'Failed to update rule' : 'Failed to create rule');
       console.error('Error saving rule:', error);
-      console.error('Error response:', error.response?.data);
-      console.error('Submit data that failed:', {
-        selectedWorkflowId,
-        formDataWorkflowId: formData.workflowId,
-        formData: formData
-      });
+    } finally {
+      setSaving(false);
     }
-  };
-
-  // Form state
-  const [formData, setFormData] = useState<PriorityRuleCreate>({
-    ruleName: '',
-    priority: 'Medium',
-    salience: 0,
-    isActive: true,
-    conditionsJson: '{"all":[]}',
-    maxWorkloadScore: undefined,
-    teamName: undefined,
-    workflowId: undefined,
-  });
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority.toLowerCase()) {
-      case 'critical':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'high':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'low':
-        return 'bg-green-100 text-green-800 border-green-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const formatConditions = (conditionsJson: string): string => {
-    try {
-      const conditions: RuleConditions = JSON.parse(conditionsJson);
-      if (conditions.all && conditions.all.length > 0) {
-        return `${conditions.all.length} condition(s)`;
-      }
-      if (conditions.any && conditions.any.length > 0) {
-        return `${conditions.any.length} condition(s)`;
-      }
-      return 'No conditions';
-    } catch {
-      return 'Invalid JSON';
-    }
-  };
-
-  const getWorkflowName = (workflowId?: string): string => {
-    if (!workflowId) return 'Global';
-    const workflow = workflows.find(w => w.workflowId === workflowId);
-    return workflow?.workflowName || `Workflow #${workflowId}`;
   };
 
   if (workflowsLoading || loading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner label="Loading priority rules" />;
   }
 
-  const globalRules = rulesByWorkflow.get('global') || [];
+  const activeCount = rules.filter((r) => r.isActive).length;
 
   return (
-    <div className="p-8 bg-white min-h-screen font-sans">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6 pb-4 border-b border-[#434E78]/20">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-semibold text-black mb-1 font-sans tracking-tight">
-                Priority Rules
-              </h1>
-              <p className="text-black/70 text-sm font-sans">
-                Configure workflow-specific rules to automatically assign task priority
-              </p>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showActiveOnly}
-                onChange={(e) => setShowActiveOnly(e.target.checked)}
-                className="rounded"
-              />
-              <span className="text-sm text-black/70">Active only</span>
+    <div>
+      <PageHeader
+        title="Priority Rules"
+        subtitle="Conditions that set an enquiry's priority automatically when it is raised. The priority then decides its SLA target."
+        meta={
+          <>
+            <span>{rules.length} rule{rules.length === 1 ? '' : 's'}</span>
+            <span>{activeCount} active</span>
+          </>
+        }
+        actions={
+          <>
+            <label className="inline-flex items-center gap-2.5 h-10 px-1 cursor-pointer text-body text-ink-muted select-none">
+              <span className="relative inline-flex items-center">
+                <input
+                  type="checkbox"
+                  checked={showActiveOnly}
+                  onChange={(e) => setShowActiveOnly(e.target.checked)}
+                  className="peer sr-only"
+                />
+                <span className="h-5 w-9 rounded-full bg-line-strong peer-checked:bg-primary transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2" />
+                <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow-azure-sm transition-transform peer-checked:translate-x-4" />
+              </span>
+              Active only
             </label>
-          </div>
+            <Button variant="primary" icon={<FiPlus />} onClick={() => handleAddRule('global')}>
+              Add Rule
+            </Button>
+          </>
+        }
+      />
+
+      {workflows.length === 0 && rules.length === 0 ? (
+        <div className="card">
+          <EmptyState
+            icon={<FiSliders />}
+            title="No workflows found"
+            body="Create workflows first to configure priority rules."
+          />
         </div>
-
-        {/* Global Rules Section */}
-        {globalRules.length > 0 && (
-          <div className="mb-6">
-            <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 overflow-hidden">
-              <div className="bg-[#434E78]/5 px-5 py-3 border-b border-[#434E78]/10 flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <FiLayers className="text-[#434E78] text-lg" />
-                  <h2 className="text-lg font-semibold text-black font-sans">Global Rules</h2>
-                  <span className="text-xs text-black/60 font-sans">(Apply to all workflows)</span>
-                </div>
-                <button
-                  onClick={() => handleAddRule('global')}
-                  className="text-sm text-[#434E78] font-medium hover:text-[#434E78]/80 flex items-center gap-1 font-sans"
-                >
-                  <FiPlus className="text-base" />
-                  Add Rule
-                </button>
-              </div>
-              <div className="p-4 space-y-2">
-                {globalRules.map((rule) => (
-                  <div
-                    key={rule.ruleId}
-                    className="flex items-center justify-between p-3 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/10 hover:bg-[#434E78]/10 transition-colors"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-azure-sm text-xs font-medium border ${getPriorityColor(rule.priority)} font-sans`}>
-                          {rule.priority}
-                        </span>
-                        <span className="text-sm font-semibold text-black font-sans">{rule.ruleName}</span>
-                        {!rule.isActive && (
-                          <span className="text-xs text-black/50 font-sans">(Inactive)</span>
-                        )}
-                      </div>
-                      <div className="text-xs text-black/60 mt-1 font-sans">
-                        {formatConditions(rule.conditionsJson)}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleEdit(rule)}
-                        className="text-[#434E78] hover:text-[#434E78]/80 transition-colors"
-                        title="Edit"
-                      >
-                        <FiEdit className="text-lg" />
-                      </button>
-                      <button
-                        onClick={() => setRuleToDelete(rule)}
-                        className="text-red-600 hover:text-red-800 transition-colors"
-                        title="Delete"
-                      >
-                        <FiTrash2 className="text-lg" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Workflows Grid */}
-        {workflows.length === 0 ? (
-          <div className="bg-white rounded-azure-sm shadow-azure-sm p-12 text-center border border-[#434E78]/20">
-            <div className="max-w-md mx-auto">
-              <div className="bg-[#434E78]/10 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <FiSettings className="text-3xl text-[#434E78]" />
-              </div>
-              <h3 className="text-lg font-semibold text-black mb-2 font-sans">No workflows found</h3>
-              <p className="text-black/70 text-sm font-sans">
-                Create workflows first to configure priority rules.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {workflows.map((workflow) => {
-              const workflowRules = rulesByWorkflow.get(workflow.workflowId) || [];
-              const activeRulesCount = workflowRules.filter(r => r.isActive).length;
-
-              return (
-                <div
-                  key={workflow.workflowId}
-                  className="bg-white rounded-azure-sm shadow-azure-sm hover:shadow-azure-md transition-all duration-200 border border-[#434E78]/20 overflow-hidden group flex flex-col"
-                >
-                  <div className="p-5 flex-1">
-                    <div className="flex justify-between items-start mb-3">
-                      <h2 className="text-lg font-semibold text-black group-hover:text-black/80 transition-colors font-sans">
-                        {workflow.workflowName}
-                      </h2>
-                      {activeRulesCount > 0 && (
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-emerald-500 rounded-full" title={`${activeRulesCount} active rule(s)`}></div>
-                        </div>
-                      )}
-                    </div>
-
-                    <p className="text-black/70 mb-4 text-sm line-clamp-2 font-sans">
-                      {workflow.description || 'No description provided'}
-                    </p>
-
-                    <div className="space-y-2.5 pt-4 border-t border-[#434E78]/10">
-                      {workflow.teamName && (
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-black/60 font-sans">Team</span>
-                          <span className="font-medium text-black font-sans">{workflow.teamName}</span>
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-black/60 font-sans">Rules</span>
-                        <span className="font-medium text-black font-sans">
-                          {workflowRules.length} rule{workflowRules.length !== 1 ? 's' : ''}
-                          {activeRulesCount > 0 && ` (${activeRulesCount} active)`}
-                        </span>
-                      </div>
-
-                      {workflowRules.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-[#434E78]/10 space-y-2 max-h-48 overflow-y-auto">
-                          {workflowRules.map((rule) => (
-                            <div
-                              key={rule.ruleId}
-                              className="flex items-center justify-between p-2 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/10"
-                            >
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border ${getPriorityColor(rule.priority)} font-sans`}>
-                                    {rule.priority}
-                                  </span>
-                                  <span className="text-xs font-semibold text-black truncate font-sans">{rule.ruleName}</span>
-                                  {!rule.isActive && (
-                                    <span className="text-xs text-black/50 font-sans">(Inactive)</span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1 ml-2">
-                                <button
-                                  onClick={() => handleEdit(rule)}
-                                  className="text-[#434E78] hover:text-[#434E78]/80 transition-colors"
-                                  title="Edit"
-                                >
-                                  <FiEdit className="text-sm" />
-                                </button>
-                                <button
-                                  onClick={() => setRuleToDelete(rule)}
-                                  className="text-red-600 hover:text-red-800 transition-colors"
-                                  title="Delete"
-                                >
-                                  <FiTrash2 className="text-sm" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {workflowRules.length === 0 && (
-                        <div className="mt-3 pt-3 border-t border-[#434E78]/10">
-                          <p className="text-xs text-black/50 text-center font-sans">No rules configured</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="bg-[#434E78]/5 px-5 py-2.5 border-t border-[#434E78]/10">
-                    <button
-                      onClick={() => handleAddRule(workflow.workflowId)}
-                      className="text-sm text-[#434E78] font-medium group-hover:text-[#434E78]/80 font-sans flex items-center gap-1"
-                    >
-                      <FiPlus className="text-base" />
-                      Add Rule →
-                    </button>
+      ) : (
+        <div className="space-y-5">
+          {groups.map((group) => (
+            <section key={group.id} className="card overflow-hidden" aria-labelledby={`rules-${group.id}`}>
+              <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-line-subtle">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span aria-hidden="true" className="h-8 w-8 shrink-0 rounded-control bg-surface-sunken text-ink-muted flex items-center justify-center">
+                    {group.id === 'global' ? <FiGlobe /> : <FiGitMerge />}
+                  </span>
+                  <div className="min-w-0">
+                    <h2 id={`rules-${group.id}`} className="text-body font-semibold text-ink truncate">
+                      {group.name}
+                    </h2>
+                    <p className="text-meta text-ink-subtle">{group.description}</p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Add Global Rule Button (if no global rules exist) */}
-        {globalRules.length === 0 && (
-          <div className="mt-6">
-            <button
-              onClick={() => handleAddRule('global')}
-              className="bg-[#434E78] text-white px-5 py-2.5 rounded-azure-sm hover:bg-[#434E78]/90 flex items-center shadow-azure-sm hover:shadow-azure-md transition-all font-medium text-sm"
-            >
-              <FiPlus className="mr-2" />
-              Add Global Rule
-            </button>
-          </div>
-        )}
-
-        {/* Create/Edit Modal */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-azure-sm shadow-azure-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <h2 className="text-2xl font-semibold text-black mb-4 font-sans">
-                {editingRule ? 'Edit Priority Rule' : 'Create Priority Rule'}
-              </h2>
-              {selectedWorkflowId && selectedWorkflowId !== 'global' && (
-                <p className="text-sm text-black/70 mb-4 font-sans">
-                  For workflow: <span className="font-semibold">{getWorkflowName(selectedWorkflowId as string)}</span>
-                </p>
+                <Button size="sm" variant="ghost" icon={<FiPlus />} onClick={() => handleAddRule(group.id)}>
+                  Add rule
+                </Button>
+              </header>
+              {group.rules.length === 0 ? (
+                <p className="px-5 py-4 text-body text-ink-subtle">No rules configured.</p>
+              ) : (
+                <ul className="divide-y divide-line-subtle">
+                  {group.rules.map((rule) => (
+                    <li key={rule.ruleId} className={`flex items-center gap-4 px-5 py-3 ${rule.isActive ? '' : 'opacity-70'}`}>
+                      <div className="w-[88px] shrink-0">
+                        <Badge dot tone={priorityTone(rule.priority)}>{rule.priority}</Badge>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-body font-medium text-ink truncate">
+                          {rule.ruleName}
+                          {!rule.isActive && <span className="ml-2 text-meta font-normal text-ink-subtle">Inactive</span>}
+                        </p>
+                        <p className="text-meta text-ink-subtle truncate" title={describeConditions(rule.conditionsJson)}>
+                          When {describeConditions(rule.conditionsJson)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <IconButton size="sm" label={`Edit ${rule.ruleName}`} icon={<FiEdit2 />} onClick={() => handleEdit(rule)} />
+                        <IconButton size="sm" tone="danger" label={`Delete ${rule.ruleName}`} icon={<FiTrash2 />} onClick={() => setRuleToDelete(rule)} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
-              {selectedWorkflowId === 'global' && (
-                <p className="text-sm text-black/70 mb-4 font-sans">
-                  <span className="font-semibold">Global Rule</span> (applies to all workflows)
-                </p>
-              )}
-              <form onSubmit={handleSubmit}>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-black mb-1 font-sans">
-                      Rule Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.ruleName}
-                      onChange={(e) => setFormData({ ...formData, ruleName: e.target.value })}
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] font-sans"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-black mb-1 font-sans">
-                      Priority *
-                    </label>
-                    <select
-                      required
-                      value={formData.priority}
-                      onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] font-sans"
-                    >
-                      <option value="Critical">Critical</option>
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-black mb-2 font-sans">
-                      Conditions *
-                    </label>
-                    <ConditionBuilder
-                      value={formData.conditionsJson}
-                      onChange={(json) => setFormData((prev) => ({ ...prev, conditionsJson: json }))}
-                    />
-                  </div>
-
-                  {/* Show selected workflow when creating from a workflow card */}
-                  {selectedWorkflowId && selectedWorkflowId !== 'global' && (
-                    <div className="p-3 bg-[#434E78]/10 border border-[#434E78]/20 rounded-azure-sm">
-                      <label className="block text-sm font-medium text-black mb-1 font-sans">
-                        Selected Workflow
-                      </label>
-                      <p className="text-sm text-black/70 font-sans">
-                        {workflows.find(w => w.workflowId === selectedWorkflowId)?.workflowName || `Workflow ID: ${selectedWorkflowId}`}
-                      </p>
-                      <p className="text-xs text-black/50 mt-1 font-sans">
-                        This rule will apply only to this workflow
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Only show workflow selector for global rules or when no workflow is pre-selected */}
-                  {(!selectedWorkflowId || selectedWorkflowId === 'global') && (
-                    <div>
-                      <label className="block text-sm font-medium text-black mb-1 font-sans">
-                        Workflow (optional)
-                      </label>
-                      <select
-                        value={formData.workflowId || ''}
-                        onChange={(e) => setFormData({ ...formData, workflowId: e.target.value || undefined })}
-                        className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] font-sans"
-                      >
-                        <option value="">Global (All Workflows)</option>
-                        {workflows.map((workflow) => (
-                          <option key={workflow.workflowId} value={workflow.workflowId}>
-                            {workflow.workflowName}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-xs text-black/60 mt-1">
-                        Leave empty for global rule, or select a specific workflow
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.isActive}
-                      onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                      className="rounded"
-                    />
-                    <label className="text-sm font-medium text-black font-sans">
-                      Active
-                    </label>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      setSelectedWorkflowId(null);
-                      setEditingRule(null);
-                    }}
-                    className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm text-black hover:bg-[#434E78]/5 transition-colors font-sans"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 transition-colors font-sans"
-                  >
-                    {editingRule ? 'Update' : 'Create'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {ruleToDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
-            <h2 className="text-xl font-semibold mb-2 text-black font-sans">Delete rule</h2>
-            <p className="text-black/70 text-sm font-sans mb-6">
-              Are you sure you want to delete this rule?
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setRuleToDelete(null)}
-                disabled={deleting}
-                className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans disabled:opacity-60"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDeleteRule(ruleToDelete)}
-                disabled={deleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-azure-sm hover:bg-red-700 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
-              >
-                {deleting ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
+            </section>
+          ))}
         </div>
       )}
+
+      <Modal
+        isOpen={showModal}
+        title={editingRule ? 'Edit Priority Rule' : 'Create Priority Rule'}
+        description="When its conditions match, a newly raised enquiry gets this priority."
+        icon={<FiSliders />}
+        size="lg"
+        onClose={closeModal}
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeModal} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="primary" icon={<FiCheck />} loading={saving} onClick={() => handleSubmit()}>
+              {editingRule ? 'Update' : 'Create'}
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <Field htmlFor="rule-name" label="Rule name" required>
+            <input
+              id="rule-name"
+              type="text"
+              required
+              value={formData.ruleName}
+              onChange={(e) => setFormData({ ...formData, ruleName: e.target.value })}
+              className={inputClass}
+              placeholder="e.g. Government projects are high priority"
+            />
+          </Field>
+
+          <fieldset>
+            <legend className="block text-body font-medium text-ink mb-1.5">Sets priority to</legend>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {PRIORITIES.map((p) => {
+                const checked = formData.priority === p;
+                return (
+                  <label
+                    key={p}
+                    className={`flex items-center gap-2 h-10 px-3 rounded-control border cursor-pointer text-body font-medium
+                      has-[:focus-visible]:shadow-focus ${
+                        checked ? 'border-primary bg-primary-subtle text-ink' : 'border-line-strong text-ink-muted hover:border-[#A9B0C4]'
+                      }`}
+                  >
+                    <input
+                      type="radio"
+                      name="rule-priority"
+                      value={p}
+                      checked={checked}
+                      onChange={() => setFormData({ ...formData, priority: p })}
+                      className="sr-only"
+                    />
+                    <Badge dot tone={priorityTone(p)} className="!ring-0 !bg-transparent !px-0">{p}</Badge>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <Field htmlFor="rule-scope" label="Applies to" help="A global rule applies to enquiries on every workflow.">
+            <select
+              id="rule-scope"
+              value={formData.workflowId || ''}
+              onChange={(e) => setFormData({ ...formData, workflowId: e.target.value || undefined })}
+              className={inputClass}
+            >
+              <option value="">All workflows (global)</option>
+              {workflows.map((workflow) => (
+                <option key={workflow.workflowId} value={workflow.workflowId}>
+                  {workflow.workflowName}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <div>
+            <p className="block text-body font-medium text-ink mb-1.5">Conditions</p>
+            <ConditionBuilder
+              value={formData.conditionsJson}
+              onChange={(json) => setFormData((prev) => ({ ...prev, conditionsJson: json }))}
+            />
+          </div>
+
+          <label className="flex items-center gap-2.5 text-body text-ink cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.isActive}
+              onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+              className="h-4 w-4 rounded"
+            />
+            Active
+            <span className="text-ink-subtle">— inactive rules are kept but not evaluated</span>
+          </label>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={Boolean(ruleToDelete)}
+        title="Delete rule"
+        body={
+          <>
+            Delete <span className="font-medium text-ink">{ruleToDelete?.ruleName}</span>? New enquiries will no longer be
+            checked against it.
+          </>
+        }
+        confirmLabel="Delete rule"
+        busy={deleting}
+        onCancel={() => setRuleToDelete(null)}
+        onConfirm={() => ruleToDelete && handleDeleteRule(ruleToDelete)}
+      />
     </div>
   );
 };

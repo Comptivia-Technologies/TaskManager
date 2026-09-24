@@ -59,6 +59,11 @@ builder.Services.AddReverseProxy()
 // HttpClient for proxy
 builder.Services.AddHttpClient();
 
+// Caller permissions are resolved once here and forwarded to the services, so a
+// service can enforce a permission without learning how roles are assigned.
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<APIGateway.Infrastructure.Services.CallerPermissionResolver>();
+
 // CORS
 builder.Services.AddCors(options =>
 {

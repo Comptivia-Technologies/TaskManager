@@ -2,119 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Azure-inspired Design System for Workflow */
 @layer base {
-  * {
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Oxygen',
-      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-      sans-serif;
+  html {
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     margin: 0;
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Oxygen',
-      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-      sans-serif;
+    @apply font-sans bg-canvas text-ink;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #ffffff;
-    color: #000000;
     font-size: 14px;
     line-height: 20px;
+    font-feature-settings: 'ss02' 1; /* Plex's single-storey g reads cleaner at 14px */
   }
 
-  code {
-    font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  code,
+  kbd,
+  pre {
+    @apply font-mono;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-weight: 600;
-    color: #000000;
+    @apply text-ink font-semibold;
     letter-spacing: -0.01em;
   }
 
-  h1 {
-    font-size: 32px;
-    line-height: 40px;
-    font-weight: 600;
-  }
-
-  h2 {
-    font-size: 24px;
-    line-height: 32px;
-    font-weight: 600;
-  }
-
-  h3 {
-    font-size: 20px;
-    line-height: 28px;
-    font-weight: 600;
-  }
-
-  /* Placeholder text styling */
+  /* #646B89 measures 5.2:1 on white — every placeholder clears AA. */
   input::placeholder,
   textarea::placeholder {
-    color: rgba(0, 0, 0, 0.5);
+    color: #646B89;
     opacity: 1;
   }
 
-  /* Select option text */
   select option {
-    color: #000000;
+    color: #11152A;
     background-color: #ffffff;
   }
 
-  /* Animations */
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  /* Native selects share the input chrome, so their arrow has to be drawn too —
+     `appearance: none` on the class list removes the platform one. */
+  select:not([multiple]):not([size]) {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23646B89' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.6' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.25em 1.25em;
+    padding-right: 2.25rem;
+    -webkit-appearance: none;
+    appearance: none;
   }
 
-  @keyframes slide-in {
-    from {
-      opacity: 0;
-      transform: translateX(-20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: #434E78;
   }
 
-  .animate-fade-in {
-    animation: fade-in 0.6s ease-out;
+  ::selection {
+    background: #DFE3F0;
+    color: #11152A;
+  }
+}
+
+@layer components {
+  /* Uppercase micro-label: section eyebrows, table headers, field groups. */
+  .eyebrow {
+    @apply text-label font-semibold uppercase text-ink-subtle;
   }
 
-  .animate-slide-in {
-    animation: slide-in 0.5s ease-out;
+  /* The working surface. Border does the separating; the shadow is barely there. */
+  .card {
+    @apply bg-surface border border-line rounded-card shadow-azure-sm;
   }
 }
 
 @layer utilities {
-  /* Azure-inspired shadows */
-  .shadow-azure-sm {
-    box-shadow: 0 1.6px 3.6px 0 rgba(0, 0, 0, 0.132), 0 0.3px 0.9px 0 rgba(0, 0, 0, 0.108);
-  }
-
-  .shadow-azure-md {
-    box-shadow: 0 3.2px 7.2px 0 rgba(0, 0, 0, 0.132), 0 0.6px 1.8px 0 rgba(0, 0, 0, 0.108);
-  }
-
-  .shadow-azure-lg {
-    box-shadow: 0 6.4px 14.4px 0 rgba(0, 0, 0, 0.132), 0 1.2px 3.6px 0 rgba(0, 0, 0, 0.108);
-  }
-
-  .shadow-azure-xl {
-    box-shadow: 0 12.8px 28.8px 0 rgba(0, 0, 0, 0.132), 0 2.4px 7.2px 0 rgba(0, 0, 0, 0.108);
-  }
-
-  /* Line clamp utility */
   .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -128,79 +89,199 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Hides the scrollbar on strips that scroll sideways but read as one row. */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
 
-/* Custom scrollbar - Blue and white style */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #CFD4E0 transparent;
+}
+
 .scrollbar-thin::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-track {
-  background: #ffffff;
-  border-radius: 4px;
+  background: transparent;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(67, 78, 120, 0.3);
-  border-radius: 4px;
-  border: 2px solid #ffffff;
+  background: #CFD4E0;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: rgba(67, 78, 120, 0.5);
+  background: #A9B0C4;
+  background-clip: padding-box;
 }
 
-/* Smooth transitions */
-* {
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform;
+/* Transitions are scoped to things that actually change state, rather than applied
+   to every node with one duration. */
+a,
+button,
+input,
+select,
+textarea,
+[role='button'],
+[role='tab'] {
+  transition-property: color, background-color, border-color, opacity, box-shadow;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
 
-/* Focus styles - Blue style */
+/* One focus treatment everywhere: a 2px brand outline, offset so it never sits on
+   top of the control's own border. */
+a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid rgb(67, 78, 120);
+textarea:focus-visible,
+[role='button']:focus-visible,
+[role='tab']:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #434E78;
   outline-offset: 2px;
 }
 
-/* Primary button styles */
-.btn-primary {
-  background-color: rgb(67, 78, 120);
+/* Fields show focus with a ring instead, because an offset outline around a
+   full-width input looks detached from it. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+/* Respect a reduced-motion preference. Nothing here is essential to understanding
+   the interface, so all of it can be removed safely. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Skeleton placeholder. Reserves the row's real height so content arriving does not
+   shift what is around it. */
+.skeleton {
+  background: linear-gradient(90deg, #EDEFF4 25%, #F6F7FA 37%, #EDEFF4 63%);
+  background-size: 400% 100%;
+  animation: skeleton-sweep 1.4s ease infinite;
+  border-radius: 4px;
+}
+
+@keyframes skeleton-sweep {
+  from { background-position: 100% 50%; }
+  to   { background-position: 0 50%; }
+}
+
+/* ── Flow loader ────────────────────────────────────────────────────────────
+   Five stage nodes on a rail. A pulse travels the rail and each node fills as
+   it passes, the way an enquiry moves through its stages. One 1.8s cycle. */
+.flow-loader-track {
+  position: relative;
+  overflow: hidden;
+}
+
+.flow-loader-pulse {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  animation: flow-travel 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes flow-travel {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(250%); }
+}
+
+.flow-loader-node {
+  animation: flow-node 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes flow-node {
+  0%, 12%   { background-color: #FFFFFF; border-color: #CFD4E0; transform: scale(1); }
+  22%       { background-color: #434E78; border-color: #434E78; transform: scale(1.18); }
+  38%, 100% { background-color: #FFFFFF; border-color: #CFD4E0; transform: scale(1); }
+}
+
+/* The current stage on a rail breathes, so "where it is now" is the first
+   thing the eye lands on. */
+.stage-halo {
+  animation: stage-halo 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes stage-halo {
+  0%        { box-shadow: 0 0 0 0 rgba(67, 78, 120, 0.35); }
+  70%, 100% { box-shadow: 0 0 0 8px rgba(67, 78, 120, 0); }
+}
+
+/* Keyboard users can jump straight to content. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 8px 16px;
+  background: #434E78;
   color: #ffffff;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 2px;
-  font-weight: 600;
+  border-radius: 6px;
+}
+
+.skip-link:focus {
+  left: 8px;
+  top: 8px;
+}
+
+/* ── Toasts ─────────────────────────────────────────────────────────────────
+   react-toastify ships its own look; these bring it onto the app's surfaces,
+   type and status colours. */
+.Toastify__toast-container {
+  --toastify-font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --toastify-toast-min-height: 52px;
+  --toastify-color-success: #079455;
+  --toastify-color-error: #C9372C;
+  --toastify-color-warning: #DC6803;
+  --toastify-color-info: #434E78;
+  --toastify-text-color-light: #11152A;
+  width: 380px;
+}
+
+.Toastify__toast {
+  border: 1px solid #E3E6EE;
+  border-radius: 10px;
+  padding: 10px 12px;
   font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  line-height: 20px;
+  box-shadow: 0 10px 24px -6px rgba(17, 21, 42, 0.14), 0 2px 6px -2px rgba(17, 21, 42, 0.08);
 }
 
-.btn-primary:hover {
-  background-color: rgb(52, 61, 94);
+.Toastify__toast-icon {
+  width: 18px;
 }
 
-.btn-primary:active {
-  background-color: rgb(40, 47, 70);
+.Toastify__close-button {
+  color: #646B89;
+  opacity: 1;
+  align-self: center;
 }
-
-.btn-secondary {
-  background-color: transparent;
-  color: rgb(67, 78, 120);
-  border: 1px solid rgb(67, 78, 120);
-  padding: 8px 16px;
-  border-radius: 2px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-secondary:hover {
-  background-color: rgba(67, 78, 120, 0.1);
-}
-

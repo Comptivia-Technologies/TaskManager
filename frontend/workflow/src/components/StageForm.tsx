@@ -9,6 +9,7 @@ import {
   StageRow,
   isStageRows,
 } from '../types/stageForms';
+import { inputClass } from '../utils/formStyles';
 
 interface StageFormProps {
   schema: StageFormSchema;
@@ -17,6 +18,10 @@ interface StageFormProps {
   readOnly?: boolean;
   /** Needed to resolve an `assignee` field's target stage to its team. */
   stages?: Stage[];
+  /** Labels of required fields left empty on the last attempt; flagged inline. */
+  missing?: string[];
+  /** Drop the card chrome when the form sits inside another container. */
+  bare?: boolean;
 }
 
 /** Splits `assignee` answers out of the form values, keyed by target stage id. */
@@ -79,11 +84,16 @@ export const prefillTables = (
   return next;
 };
 
-const inputClass =
-  'w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm disabled:bg-gray-50 disabled:cursor-not-allowed';
+// Every field on a stage form can be shown read-only while a submission is in
+// flight, so the disabled styling belongs on all of them.
+const fieldClass = inputClass;
 
+// Cells read as a spreadsheet: borderless until hovered or focused, so a BOQ of
+// twenty lines is a grid of values rather than a wall of boxes.
 const cellClass =
-  'w-full px-2 py-1.5 border border-[#434E78]/20 rounded-azure-sm focus:outline-none focus:ring-1 focus:ring-[#434E78] bg-white text-sm disabled:bg-gray-50 disabled:cursor-not-allowed';
+  'w-full h-9 px-2.5 border border-transparent rounded-control bg-transparent text-body text-ink ' +
+  'hover:border-line-strong hover:bg-surface focus:outline-none focus:border-primary focus:bg-surface focus:shadow-focus ' +
+  'disabled:text-ink-muted disabled:cursor-not-allowed disabled:hover:border-transparent';
 
 export const missingRequiredFields = (schema: StageFormSchema, values: StageFormValues): string[] =>
   schema.fields
@@ -96,7 +106,7 @@ export const missingRequiredFields = (schema: StageFormSchema, values: StageForm
     })
     .map((field) => field.label);
 
-const StageForm = ({ schema, values, onChange, readOnly = false, stages = [] }: StageFormProps) => {
+const StageForm = ({ schema, values, onChange, readOnly = false, stages = [], missing = [], bare = false }: StageFormProps) => {
   const setValue = (field: StageField, value: string | number | boolean | StageRow[]) =>
     onChange({ ...values, [field.name]: value });
 
@@ -112,85 +122,102 @@ const StageForm = ({ schema, values, onChange, readOnly = false, stages = [] }: 
         )
       );
 
+    const numeric = (column: StageColumn) => column.type === 'number';
+
     return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left">
-              {columns.map((column) => (
-                <th key={column.name} className="px-2 py-1.5 text-xs font-semibold text-black/60">
-                  {column.label}
-                </th>
-              ))}
-              <th className="w-10" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={columns.length + 1} className="px-2 py-3 text-sm text-black/50">
-                  Nothing added yet.
-                </td>
-              </tr>
-            )}
-            {rows.map((row, index) => (
-              // Rows are reorderable only by add/remove, so the index is stable enough here.
-              <tr key={index}>
+      <div className="rounded-card border border-line overflow-hidden">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="min-w-full text-body">
+            <thead className="bg-surface-muted">
+              <tr className="text-left">
+                <th scope="col" className="w-10 px-3 h-9 eyebrow border-b border-line">#</th>
                 {columns.map((column) => (
-                  <td key={column.name} className={column.width === 'wide' ? 'px-2 py-1 min-w-[16rem]' : 'px-2 py-1'}>
-                    <input
-                      aria-label={`${column.label} ${index + 1}`}
-                      type={column.type}
-                      disabled={readOnly || column.readOnly}
-                      value={row[column.name] === undefined ? '' : String(row[column.name])}
-                      onChange={(e) => updateCell(index, column, e.target.value)}
-                      className={cellClass}
-                    />
-                  </td>
-                ))}
-                <td className="px-2 py-1">
-                  <button
-                    type="button"
-                    disabled={readOnly}
-                    aria-label={`Remove row ${index + 1}`}
-                    onClick={() => setRows(rows.filter((_, i) => i !== index))}
-                    className="p-1.5 text-black/40 hover:text-red-600 disabled:opacity-40"
+                  <th
+                    key={column.name}
+                    scope="col"
+                    className={`px-2.5 h-9 eyebrow border-b border-line whitespace-nowrap ${numeric(column) ? 'text-right' : ''}`}
                   >
-                    <FiTrash2 />
-                  </button>
-                </td>
+                    {column.label}
+                  </th>
+                ))}
+                <th className="w-10 border-b border-line" />
               </tr>
-            ))}
-          </tbody>
-        </table>
-        <button
-          type="button"
-          disabled={readOnly}
-          onClick={() => setRows([...rows, emptyRow(columns)])}
-          className="mt-2 inline-flex items-center px-3 py-1.5 rounded-azure-sm border border-[#434E78]/30 text-[#434E78] text-sm font-medium hover:bg-[#434E78]/5 disabled:opacity-50"
-        >
-          <FiPlus className="mr-1.5" />
-          {field.addLabel ?? 'Add row'}
-        </button>
+            </thead>
+            <tbody className="divide-y divide-line-subtle">
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={columns.length + 2} className="px-4 py-6 text-center text-body text-ink-subtle">
+                    Nothing added yet.
+                  </td>
+                </tr>
+              )}
+              {rows.map((row, index) => (
+                // Rows are reorderable only by add/remove, so the index is stable enough here.
+                <tr key={index} className="group hover:bg-surface-muted/60">
+                  <td className="px-3 font-mono text-meta text-ink-subtle tabular">{index + 1}</td>
+                  {columns.map((column) => (
+                    <td
+                      key={column.name}
+                      className={`px-1 py-1 ${column.width === 'wide' ? 'min-w-[15rem]' : column.width === 'narrow' ? 'min-w-[6rem]' : 'min-w-[9rem]'}`}
+                    >
+                      <input
+                        aria-label={`${column.label} ${index + 1}`}
+                        type={column.type}
+                        disabled={readOnly || column.readOnly}
+                        value={row[column.name] === undefined ? '' : String(row[column.name])}
+                        onChange={(e) => updateCell(index, column, e.target.value)}
+                        className={`${cellClass} ${numeric(column) ? 'text-right font-mono tabular text-meta' : ''}`}
+                      />
+                    </td>
+                  ))}
+                  <td className="px-1.5">
+                    <button
+                      type="button"
+                      disabled={readOnly}
+                      aria-label={`Remove row ${index + 1}`}
+                      onClick={() => setRows(rows.filter((_, i) => i !== index))}
+                      className="h-8 w-8 inline-flex items-center justify-center rounded-control text-ink-subtle
+                        opacity-60 group-hover:opacity-100 hover:text-danger hover:bg-danger-subtle disabled:opacity-30 cursor-pointer"
+                    >
+                      <FiTrash2 aria-hidden="true" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-line bg-surface-muted">
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={() => setRows([...rows, emptyRow(columns)])}
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-control text-meta font-medium text-primary
+              hover:bg-primary-subtle disabled:opacity-50 cursor-pointer"
+          >
+            <FiPlus aria-hidden="true" />
+            {field.addLabel ?? 'Add row'}
+          </button>
+          <span className="text-meta text-ink-subtle tabular">
+            {rows.length} {rows.length === 1 ? 'line' : 'lines'}
+          </span>
+        </div>
       </div>
     );
   };
 
-  return (
-    <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 overflow-hidden mb-4">
-      <div className="px-6 py-4 border-b border-[#434E78]/10">
-        <h2 className="text-lg font-semibold text-black">{schema.title}</h2>
-        {schema.description && <p className="text-sm text-black/60 mt-1">{schema.description}</p>}
-      </div>
-      <div className="px-6 py-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+  const body = (
+    <div className={`grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-5 ${bare ? '' : 'px-5 py-5'}`}>
         {schema.fields.map((field) => {
           const value = values[field.name];
           const isWide = field.type === 'textarea' || field.type === 'table';
+          const isMissing = missing.includes(field.label);
+          const errorId = `${field.name}-error`;
           return (
-            <div key={field.name} className={isWide ? 'md:col-span-2' : undefined}>
-              <label htmlFor={field.name} className="block text-black text-sm font-semibold mb-2">
+            <div key={field.name} className={isWide ? 'md:col-span-2' : undefined} data-missing={isMissing || undefined}>
+              <label htmlFor={field.name} className="block text-body font-medium text-ink mb-1.5">
                 {field.label}
-                {field.required && <span className="text-red-600"> *</span>}
+                {field.required && <span className="text-danger ml-0.5" aria-hidden="true">*</span>}
               </label>
 
               {field.type === 'table' && renderTable(field)}
@@ -201,7 +228,7 @@ const StageForm = ({ schema, values, onChange, readOnly = false, stages = [] }: 
                 );
                 if (!target) {
                   return (
-                    <p className="text-xs text-black/60">
+                    <p className="text-meta text-ink-subtle">
                       Stage “{field.targetStage}” is not on this workflow, so nobody can be appointed.
                     </p>
                   );
@@ -226,7 +253,9 @@ const StageForm = ({ schema, values, onChange, readOnly = false, stages = [] }: 
                   placeholder={field.placeholder}
                   value={typeof value === 'string' ? value : ''}
                   onChange={(e) => setValue(field, e.target.value)}
-                  className={inputClass}
+                  aria-invalid={isMissing || undefined}
+                  aria-describedby={isMissing ? errorId : undefined}
+                  className={`${fieldClass} ${isMissing ? 'border-danger' : ''}`}
                 />
               )}
 
@@ -236,7 +265,9 @@ const StageForm = ({ schema, values, onChange, readOnly = false, stages = [] }: 
                   disabled={readOnly}
                   value={typeof value === 'string' ? value : ''}
                   onChange={(e) => setValue(field, e.target.value)}
-                  className={inputClass}
+                  aria-invalid={isMissing || undefined}
+                  aria-describedby={isMissing ? errorId : undefined}
+                  className={`${fieldClass} ${isMissing ? 'border-danger' : ''}`}
                 >
                   <option value="">Select...</option>
                   {(field.options ?? []).map((option) => (
@@ -248,16 +279,20 @@ const StageForm = ({ schema, values, onChange, readOnly = false, stages = [] }: 
               )}
 
               {field.type === 'checkbox' && (
-                <label className="flex items-center gap-2 text-sm text-black">
+                <label
+                  className={`flex items-center gap-2.5 min-h-[40px] px-3 rounded-control border text-body text-ink cursor-pointer
+                    ${value === true ? 'border-success-border bg-success-subtle' : isMissing ? 'border-danger bg-danger-subtle/40' : 'border-line-strong bg-surface hover:border-[#A9B0C4]'}`}
+                >
                   <input
                     id={field.name}
                     type="checkbox"
                     disabled={readOnly}
                     checked={value === true}
                     onChange={(e) => setValue(field, e.target.checked)}
-                    className="h-4 w-4 rounded border-[#434E78]/40 text-[#434E78] focus:ring-[#434E78]"
+                    aria-invalid={isMissing || undefined}
+                    className="h-4 w-4 rounded"
                   />
-                  {field.placeholder ?? 'Yes'}
+                  {field.placeholder ?? 'Yes, confirmed'}
                 </label>
               )}
 
@@ -275,16 +310,44 @@ const StageForm = ({ schema, values, onChange, readOnly = false, stages = [] }: 
                   onChange={(e) =>
                     setValue(field, field.type === 'number' ? Number(e.target.value) : e.target.value)
                   }
-                  className={inputClass}
+                  aria-invalid={isMissing || undefined}
+                  aria-describedby={isMissing ? errorId : undefined}
+                  className={`${fieldClass} ${field.type === 'number' ? 'font-mono tabular' : ''} ${isMissing ? 'border-danger' : ''}`}
                 />
               )}
 
-              {field.help && <p className="mt-1 text-xs text-black/60">{field.help}</p>}
+              {isMissing ? (
+                <p id={errorId} className="mt-1.5 text-meta text-danger">
+                  {field.type === 'table' ? 'Add at least one line.' : field.type === 'checkbox' ? 'Confirm this before completing.' : 'Required.'}
+                </p>
+              ) : (
+                field.help && <p className="mt-1.5 text-meta text-ink-subtle">{field.help}</p>
+              )}
             </div>
           );
         })}
       </div>
-    </div>
+  );
+
+  if (bare) return body;
+
+  const required = schema.fields.filter((f) => f.required).length;
+
+  return (
+    <section className="card overflow-hidden" aria-labelledby="stage-form-title">
+      <header className="px-5 pt-4 pb-3 border-b border-line-subtle flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="stage-form-title" className="text-title font-semibold text-ink">{schema.title}</h2>
+          {schema.description && <p className="text-meta text-ink-subtle mt-0.5">{schema.description}</p>}
+        </div>
+        {required > 0 && (
+          <span className="text-meta text-ink-subtle">
+            <span className="text-danger">*</span> {required} required
+          </span>
+        )}
+      </header>
+      {body}
+    </section>
   );
 };
 
