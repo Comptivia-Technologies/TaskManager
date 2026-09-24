@@ -18,6 +18,8 @@ public class TaskDbContext : DbContext
     public DbSet<TaskStageData> TaskStageDataEntries { get; set; }
     public DbSet<TaskAttachment> TaskAttachments { get; set; }
     public DbSet<TaskStageNomination> TaskStageNominations { get; set; }
+    public DbSet<GmailIngestedMessage> GmailIngestedMessages { get; set; }
+    public DbSet<GmailWatchState> GmailWatchStates { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -112,6 +114,23 @@ public class TaskDbContext : DbContext
             entity.Property(e => e.NominatedAt).IsRequired().HasColumnType("timestamp with time zone");
             entity.HasIndex(e => e.TaskId);
             entity.HasIndex(e => new { e.TaskId, e.StageId });
+        });
+
+        modelBuilder.Entity<GmailIngestedMessage>(entity =>
+        {
+            entity.ToTable("GmailIngestedMessage");
+            entity.HasKey(e => e.MessageId);
+            entity.Property(e => e.MessageId).HasMaxLength(64);
+            entity.Property(e => e.TaskId).IsRequired(false);
+            entity.Property(e => e.ProcessedAt).IsRequired().HasColumnType("timestamp with time zone");
+        });
+
+        modelBuilder.Entity<GmailWatchState>(entity =>
+        {
+            entity.ToTable("GmailWatchState");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.HistoryId).IsRequired().HasMaxLength(40);
+            entity.Property(e => e.UpdatedAt).IsRequired().HasColumnType("timestamp with time zone");
         });
 
         modelBuilder.Entity<TaskAttachment>(entity =>

@@ -9,6 +9,7 @@ namespace TaskService.Application.Interfaces;
 public interface ITaskService
 {
     System.Threading.Tasks.Task<TaskReadDto> CreateTaskAsync(TaskCreateDto createDto);
+    System.Threading.Tasks.Task<TaskReadDto> CreateTaskForOrganizationAsync(TaskCreateDto createDto, Guid organizationId);
     System.Threading.Tasks.Task<TaskReadDto?> GetTaskByIdAsync(Guid taskId);
     System.Threading.Tasks.Task UpdateTaskStatusAsync(Guid taskId, DomainTaskStatus newStatus);
     /// <summary>

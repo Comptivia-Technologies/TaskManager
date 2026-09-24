@@ -478,20 +478,22 @@ const Members = () => {
                   />
                 </div>
               )}
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Role
-                </label>
-                <input
-                  type="text"
-                  value={formData.role}
-                  onChange={(e) =>
-                    setFormData({ ...formData, role: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                />
-              </div>
+              {isEditMode && (
+                <div className="mb-4">
+                  <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                    Role
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.role}
+                    onChange={(e) =>
+                      setFormData({ ...formData, role: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
+                    required
+                  />
+                </div>
+              )}
               <div className="mb-4">
                 <label className="block text-black text-sm font-semibold mb-2 font-sans">
                   Skill Level

@@ -3,6 +3,7 @@ using TaskService.Infrastructure.Persistence;
 using TaskService.Application.Interfaces;
 using TaskService.Infrastructure.Repositories;
 using TaskService.Infrastructure.Storage;
+using TaskService.Application.Gmail;
 using TaskService.Application.Services;
 using TaskService.Application.EventHandlers;
 using Shared.Messaging;
@@ -67,7 +68,9 @@ builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
 builder.Services.AddScoped<ITaskAttachmentService, TaskAttachmentService>();
 
 // Services
+builder.Services.Configure<GmailOptions>(builder.Configuration.GetSection(GmailOptions.SectionName));
 builder.Services.AddScoped<ITaskService, TaskService.Application.Services.TaskService>();
+builder.Services.AddScoped<IGmailInboundService, GmailInboundService>();
 
 // Event Handlers
 builder.Services.AddScoped<TaskCreatedEventHandler>();
@@ -506,6 +509,18 @@ using (var scope = app.Services.CreateScope())
                 );
                 CREATE INDEX IF NOT EXISTS ""IX_TaskStageNomination_TaskId"" ON ""TaskStageNomination"" (""TaskId"");
                 CREATE INDEX IF NOT EXISTS ""IX_TaskStageNomination_Task_Stage"" ON ""TaskStageNomination"" (""TaskId"", ""StageId"");
+
+                CREATE TABLE IF NOT EXISTS ""GmailIngestedMessage"" (
+                    ""MessageId"" VARCHAR(64) PRIMARY KEY,
+                    ""TaskId"" UUID,
+                    ""ProcessedAt"" TIMESTAMP WITH TIME ZONE NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS ""GmailWatchState"" (
+                    ""Id"" INTEGER PRIMARY KEY,
+                    ""HistoryId"" VARCHAR(40) NOT NULL,
+                    ""UpdatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL
+                );
             ";
             await stageDataCommand.ExecuteNonQueryAsync();
             logger.LogInformation("Verified: TaskStageData, TaskAttachment tables and Tasks.DataJson column exist.");

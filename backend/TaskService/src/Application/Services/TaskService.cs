@@ -56,6 +56,11 @@ public class TaskService : ITaskService
         if (string.IsNullOrEmpty(orgIdHeader) || !Guid.TryParse(orgIdHeader, out var organizationId))
             throw new UnauthorizedAccessException("Organization context required (X-Organization-Id header).");
 
+        return await CreateTaskForOrganizationAsync(createDto, organizationId);
+    }
+
+    public async System.Threading.Tasks.Task<TaskReadDto> CreateTaskForOrganizationAsync(TaskCreateDto createDto, Guid organizationId)
+    {
         var task = new DomainTask
         {
             TaskId = Guid.NewGuid(),
