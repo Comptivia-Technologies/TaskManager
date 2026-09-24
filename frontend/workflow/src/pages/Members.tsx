@@ -113,7 +113,10 @@ const Members = () => {
   // Linking an existing member leaves their stored name and email alone; only
   // the login association changes.
   const handleLinkLogin = (email: string) => {
-    setSelectedProductHubUser(productHubUsers.find((u) => u.email === email) ?? null);
+    const user = productHubUsers.find((u) => u.email === email) ?? null;
+    setSelectedProductHubUser(user);
+    // The role follows the login, so linking one refreshes a stale job title.
+    if (user?.role) setFormData((prev) => ({ ...prev, role: user.role }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -479,18 +482,19 @@ const Members = () => {
                 </div>
               )}
               <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
+                <label htmlFor="member-role" className="block text-black text-sm font-semibold mb-2 font-sans">
                   Role
                 </label>
                 <input
+                  id="member-role"
                   type="text"
-                  value={formData.role}
-                  onChange={(e) =>
-                    setFormData({ ...formData, role: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
+                  value={formData.role || '—'}
+                  readOnly
+                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm bg-gray-50 text-sm font-sans cursor-not-allowed"
                 />
+                <p className="text-xs text-black/60 mt-1 font-sans">
+                  Taken from the user's role. Change it where roles are assigned, not here.
+                </p>
               </div>
               <div className="mb-4">
                 <label className="block text-black text-sm font-semibold mb-2 font-sans">

@@ -11,7 +11,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import StageForm, { missingRequiredFields } from '../components/StageForm';
 import StageAssigneePicker, { AUTO_ASSIGN } from '../components/StageAssigneePicker';
 import { formatDateToIST } from '../utils/dateUtils';
-import { PERMISSIONS, hasPermission } from '../utils/roleUtils';
+import { PERMISSIONS, hasPermission, isOversightTeam } from '../utils/roleUtils';
 import { getStageForm } from '../utils/stageFormRegistry';
 
 const REGISTER_TAB = 'register';
@@ -64,8 +64,9 @@ const MyEnquiries = () => {
   const [newAssignee, setNewAssignee] = useState(AUTO_ASSIGN);
   const [newAssigneeBlocked, setNewAssigneeBlocked] = useState(false);
 
-  const canSeeRegister = hasPermission(permissions, PERMISSIONS.tasksView);
-  const canSeeStageOfOthers = hasPermission(permissions, PERMISSIONS.workflowsView);
+  // Only the oversight teams follow every enquiry. Everyone else sees the work
+  // assigned to them, whatever their role happens to permit elsewhere.
+  const canSeeRegister = isOversightTeam(currentMember?.teamName);
   const canRegister = hasPermission(permissions, PERMISSIONS.tasksManage);
 
   // One tab per stage this member's team owns. Derived from the workflows call,
@@ -274,7 +275,7 @@ const MyEnquiries = () => {
   }
 
   const activeStage = myStages.find((s) => s.stageId === activeTab);
-  const showStage = activeTab === REGISTER_TAB ? canSeeStageOfOthers : !isIntakeTab;
+  const showStage = activeTab === REGISTER_TAB || !isIntakeTab;
 
   return (
     <div className="p-8 lg:p-10 bg-white min-h-screen font-sans">

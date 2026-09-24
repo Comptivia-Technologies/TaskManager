@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { FiArrowLeft, FiCheck, FiCornerUpLeft, FiDownload, FiPaperclip, FiUpload, FiUser } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import LoadingSpinner from '../components/LoadingSpinner';
-import StageForm, { extractNominations, missingRequiredFields } from '../components/StageForm';
+import StageForm, { extractNominations, missingRequiredFields, prefillTables } from '../components/StageForm';
 import StageAssigneePicker, { AUTO_ASSIGN } from '../components/StageAssigneePicker';
+import StageValues from '../components/StageValues';
 import TaskHistoryGraph, { resolveCurrentStageId } from '../components/TaskHistoryGraph';
 import { useAuth } from '../contexts/AuthContext';
 import { taskService } from '../services/taskService';
@@ -13,7 +14,8 @@ import { Stage, Task, TaskAttachment, TaskStageData, TaskStageHistory, Workflow 
 import { StageFormValues } from '../types/stageForms';
 import { formatDateToIST } from '../utils/dateUtils';
 import { PERMISSIONS, hasPermission } from '../utils/roleUtils';
-import { getStageForm } from '../utils/stageFormRegistry';
+import { getStageForm, stageFieldLabels } from '../utils/stageFormRegistry';
+import { autoRoutingReason } from '../utils/stageRouting';
 
 const apiErrorMessage = (error: any, fallback: string) =>
   error?.response?.data?.error || error?.response?.data?.message || fallback;
@@ -89,11 +91,24 @@ const TaskDetail = () => {
     const intakeValues =
       taskData.stageId && taskData.stageId === firstStageId ? parseJson(taskData.dataJson) : {};
 
-    setFormValues(
-      alreadySubmitted
-        ? (parseJson(alreadySubmitted.dataJson) as StageFormValues)
-        : (intakeValues as StageFormValues)
+    const startingValues = (
+      alreadySubmitted ? parseJson(alreadySubmitted.dataJson) : intakeValues
+    ) as StageFormValues;
+
+    // Tables that continue an earlier stage's list start from that list, so
+    // procurement prices the engineer's items instead of retyping them.
+    const currentStageName = (workflowData?.stages ?? []).find(
+      (stage) => stage.stageId === taskData.stageId
+    )?.stageName;
+    const submittedByStageName = (workflowData?.stages ?? []).reduce<Record<string, Record<string, unknown>>>(
+      (byName, stage) => {
+        const row = stageDataRows.find((data) => data.stageId === stage.stageId);
+        return row ? { ...byName, [stage.stageName.trim().toLowerCase()]: parseJson(row.dataJson) } : byName;
+      },
+      {}
     );
+
+    setFormValues(prefillTables(getStageForm(currentStageName), startingValues, submittedByStageName));
     return historyData;
   }, [id]);
 
@@ -241,6 +256,9 @@ const TaskDetail = () => {
   const canAct = isAssignee && !taskDone && Boolean(currentStage);
   const earlierStages = currentStage ? stages.filter((stage) => stage.stageOrder < currentStage.stageOrder) : [];
   const nextStage = currentStage ? stages.find((stage) => stage.stageOrder > currentStage.stageOrder) : undefined;
+  // Some stages route themselves, so offering a choice would only let someone
+  // override a decision that was already made.
+  const autoRouting = autoRoutingReason(nextStage, stages);
   const canSeeProgression = hasPermission(permissions, PERMISSIONS.workflowsView);
 
   const currentSchema = getStageForm(currentStage?.stageName);
@@ -363,7 +381,16 @@ const TaskDetail = () => {
               </div>
             </div>
 
-            {nextStage && (
+            {nextStage && autoRouting && (
+              <div className="mt-4 pt-4 border-t border-[#434E78]/10">
+                <p className="text-xs text-black/60">
+                  <span className="font-medium text-black">{nextStage.stageName}</span> {autoRouting}, so there is
+                  nobody to choose here.
+                </p>
+              </div>
+            )}
+
+            {nextStage && !autoRouting && (
               <div className="mt-4 pt-4 border-t border-[#434E78]/10 max-w-md">
                 <StageAssigneePicker
                   teamId={nextStage.teamId}
@@ -382,14 +409,7 @@ const TaskDetail = () => {
         {Object.keys(enquiryRecord).length > 0 && !isFirstStage && (
           <div className="bg-white rounded-azure-sm shadow-azure-sm border border-[#434E78]/20 p-6 mb-4">
             <h2 className="text-lg font-semibold text-black mb-4">Enquiry record</h2>
-            <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-              {Object.entries(enquiryRecord).map(([key, value]) => (
-                <div key={key}>
-                  <dt className="text-xs text-black/60">{key}</dt>
-                  <dd className="font-medium text-black break-words">{String(value)}</dd>
-                </div>
-              ))}
-            </dl>
+            <StageValues values={enquiryRecord} labels={stageFieldLabels(stages[0]?.stageName)} />
           </div>
         )}
 
@@ -464,14 +484,7 @@ const TaskDetail = () => {
                       <p className="text-sm font-semibold text-[#434E78] mb-2">
                         {stage.stageOrder}. {stage.stageName}
                       </p>
-                      <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-                        {Object.entries(submitted).map(([key, value]) => (
-                          <div key={key}>
-                            <dt className="text-xs text-black/60">{key}</dt>
-                            <dd className="text-black break-words">{String(value)}</dd>
-                          </div>
-                        ))}
-                      </dl>
+                      <StageValues values={submitted} labels={stageFieldLabels(stage.stageName)} />
                     </div>
                   );
                 })}

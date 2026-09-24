@@ -100,6 +100,14 @@ public class TaskStageStartedEventHandler
                 var lastAssignment = await _historyRepository.GetLastAssignmentAsync(@event.TaskId, @event.StageId);
                 preferredMemberId = lastAssignment?.MemberId;
             }
+            if (!preferredMemberId.HasValue)
+            {
+                // Finally, a team that has already worked on this enquiry keeps it with
+                // the same person. Procurement hands the BOQ back to the engineer who
+                // listed the items, and both approvals hand the quotation back to the
+                // administrator who raised it, with nobody having to choose.
+                preferredMemberId = await FindTeamContinuityMemberAsync(@event, task.OrganizationId);
+            }
 
             var teamChanged = await CheckIfReassignmentNeededAsync(task, @event);
             var restorePreviousMember = preferredMemberId.HasValue && task.MemberId != preferredMemberId;
@@ -184,6 +192,67 @@ public class TaskStageStartedEventHandler
                 @event.TaskId, correlationId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// The person from this stage's team who most recently held any stage of this
+    /// task. Null when the team is arriving for the first time, which leaves the
+    /// choice to the nomination or the workload engine.
+    /// </summary>
+    private async Task<Guid?> FindTeamContinuityMemberAsync(TaskStageStartedEvent @event, Guid organizationId)
+    {
+        try
+        {
+            var assignments = await _historyRepository.GetAssignmentsAsync(@event.TaskId);
+            if (assignments.Count == 0)
+                return null;
+
+            var teamMemberIds = await GetTeamMemberIdsAsync(@event.TeamId, organizationId);
+            if (teamMemberIds.Count == 0)
+                return null;
+
+            // Assignments come back newest first, so this is the team's latest holder.
+            var previousHolder = assignments.FirstOrDefault(a => teamMemberIds.Contains(a.MemberId));
+            if (previousHolder == null)
+                return null;
+
+            _logger.LogInformation(
+                "Stage returns to the team's previous holder. TaskId: {TaskId}, StageName: {StageName}, MemberId: {MemberId}",
+                @event.TaskId, @event.StageName, previousHolder.MemberId);
+
+            return previousHolder.MemberId;
+        }
+        catch (Exception ex)
+        {
+            // Continuity is a convenience; losing it must not stall the stage.
+            _logger.LogWarning(ex,
+                "Could not determine the team's previous holder, falling back to workload. TaskId: {TaskId}, StageId: {StageId}",
+                @event.TaskId, @event.StageId);
+            return null;
+        }
+    }
+
+    private async Task<HashSet<Guid>> GetTeamMemberIdsAsync(Guid teamId, Guid organizationId)
+    {
+        var workflowManagementApiUrl = _configuration["WorkflowManagementApi:BaseUrl"]
+            ?? throw new InvalidOperationException("WorkflowManagementApi:BaseUrl configuration is required");
+
+        var response = await GetWithOrgHeaderAsync($"{workflowManagementApiUrl}/teams/{teamId}/members", organizationId);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "Failed to read members for team {TeamId}. StatusCode: {StatusCode}",
+                teamId, response.StatusCode);
+            return new HashSet<Guid>();
+        }
+
+        var json = await response.Content.ReadAsStringAsync();
+        var members = JsonSerializer.Deserialize<List<MemberInfo>>(json, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        return members?.Select(m => m.MemberId).ToHashSet() ?? new HashSet<Guid>();
     }
 
     /// <summary>

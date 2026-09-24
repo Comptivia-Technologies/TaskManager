@@ -60,6 +60,8 @@ const TeamMemberModal = ({
       userId: user.userId,
       firstName: firstName || formData.firstName,
       lastName: lastName || formData.lastName,
+      // The job title comes with the login; it is not a separate thing to maintain.
+      role: user.role || '',
     });
   };
 
@@ -228,18 +230,16 @@ const TeamMemberModal = ({
           </div>
 
           <div className="mb-4">
-            <label htmlFor="tm-role" className="block text-black text-sm font-semibold mb-2 font-sans">Role *</label>
+            <label htmlFor="tm-role" className="block text-black text-sm font-semibold mb-2 font-sans">Role</label>
             <input
               id="tm-role"
               type="text"
-              value={formData.role}
-              onChange={(e) => onChange({ ...formData, role: e.target.value })}
-              className={inputClass}
-              placeholder="e.g., Engineer, Procurement, Manager"
-              required
+              value={formData.role || '—'}
+              readOnly
+              className={`${inputClass} bg-gray-50 cursor-not-allowed`}
             />
             <p className="text-xs text-black/60 mt-1 font-sans">
-              A descriptive job title. It does not grant any permissions.
+              Taken from the user's role. Change it where roles are assigned, not here.
             </p>
           </div>
 
