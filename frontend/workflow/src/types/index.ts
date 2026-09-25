@@ -148,17 +148,6 @@ export interface Task {
   updatedAt: string;
 }
 
-export interface TaskCreate {
-  taskName: string;
-  description?: string;
-  status: string;
-  priority: string;
-  dueDate?: string;
-  workflowId: string;
-  stageId?: string;
-  assignedToMemberId?: string;
-}
-
 export interface TaskUpdate {
   taskName: string;
   description?: string;
@@ -192,36 +181,6 @@ export interface PaginatedTasksResponse {
   page: number;
   limit: number;
   totalPages: number;
-}
-
-// SLA and task priorities are now fully dynamic, so this is a free-form string
-export type PriorityLevel = string;
-
-export interface ManagedTask {
-  taskId: string;
-  title: string;
-  description?: string;
-  status: string;
-  priority: string;
-  externalTaskId?: string;
-  payload: unknown;
-  workflowId: string;
-  workflowName: string;
-  slaConfigurationId?: string;
-  slaPriority?: PriorityLevel | string;
-  slaResponseTimeMinutes?: number;
-  slaResolutionTimeMinutes?: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ManagedTaskCreate {
-  title: string;
-  description?: string;
-  priority: PriorityLevel;
-  externalTaskId?: string;
-  payload?: unknown;
-  teamId?: string;
 }
 
 export interface SLAConfiguration {

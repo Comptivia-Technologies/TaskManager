@@ -1,10 +1,17 @@
+import Button, { IconButton } from '../components/Button';
+import Field from './Field';
+import PageHeader from './PageHeader';
+import WorkflowMap from './flow/WorkflowMap';
+import { moveStage, syncStages } from '../utils/stageSync';
+import { inputClass } from '../utils/formStyles';
 import { useState, useEffect } from 'react';
 import { useTeams } from '../hooks/useTeams';
 import { workflowService } from '../services/workflowService';
-import { stageService } from '../services/stageService';
 import { Workflow, WorkflowUpdate } from '../types';
 import { toast } from 'react-toastify';
-import { FiX, FiEdit2, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiArrowDown, FiArrowUp, FiCheck, FiPlus, FiTrash2, FiX } from 'react-icons/fi';
+import { apiErrorMessage } from '../utils/apiError';
+import { TEAM_FALLBACK, teamColors } from '../utils/theme';
 
 interface WorkflowEditProps {
   workflow: Workflow;
@@ -13,8 +20,8 @@ interface WorkflowEditProps {
 }
 
 interface StageForm {
-  stageId?: string; // Existing stage has ID, new stage doesn't have an ID (this is used to keep track of the stage ID)
-  tempId?: number; // Temporary ID for new stages (this is used to keep track of the order of the stages when they are added)
+  stageId?: string; // Existing stages keep their id; new ones have none until saved.
+  tempId?: number; // Stable key for a stage that has not been saved yet.
   stageName: string;
   stageOrder: number;
   teamId: string;
@@ -24,109 +31,66 @@ interface StageForm {
   timeoutMinutes?: number;
 }
 
+/**
+ * Edit a workflow's name, description and stages. Stages are edited in place —
+ * rename, re-team, reorder, remove — with the swimlane preview redrawing as you
+ * go. Nothing is written until Save, which syncs the whole list in one pass.
+ */
 const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
   const { teams } = useTeams();
   const [workflowName, setWorkflowName] = useState(workflow.workflowName);
   const [description, setDescription] = useState(workflow.description || '');
   const [stages, setStages] = useState<StageForm[]>([]);
-  const [editingStageIndex, setEditingStageIndex] = useState<number | null>(null);
   const [nextTempId, setNextTempId] = useState(1);
-  const [stageForm, setStageForm] = useState<StageForm>({
-    stageName: '',
-    stageOrder: 1,
-    teamId: teams.length > 0 ? teams[0].teamId : '',
-  });
+  const [newStageName, setNewStageName] = useState('');
+  const [newStageTeam, setNewStageTeam] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setWorkflowName(workflow.workflowName);
     setDescription(workflow.description || '');
-    // Convert existing stages to StageForm format
-    const existingStages: StageForm[] = (workflow.stages || []).map(stage => ({
-      stageId: stage.stageId,
-      stageName: stage.stageName,
-      stageOrder: stage.stageOrder,
-      teamId: stage.teamId,
-      teamName: stage.teamName,
-      stageType: stage.stageType || 'Process',
-      transitionPolicy: stage.transitionPolicy || 'OnComplete',
-      timeoutMinutes: stage.timeoutMinutes,
-    }));
+    const existingStages: StageForm[] = [...(workflow.stages || [])]
+      .sort((a, b) => a.stageOrder - b.stageOrder)
+      .map((stage) => ({
+        stageId: stage.stageId,
+        stageName: stage.stageName,
+        stageOrder: stage.stageOrder,
+        teamId: stage.teamId,
+        teamName: stage.teamName,
+        stageType: stage.stageType || 'Process',
+        transitionPolicy: stage.transitionPolicy || 'OnComplete',
+        timeoutMinutes: stage.timeoutMinutes,
+      }));
     setStages(existingStages);
     setNextTempId(1);
-  }, [workflow, teams]);
+  }, [workflow]);
+
+  const updateStage = (index: number, patch: Partial<StageForm>) =>
+    setStages((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
 
   const handleAddStage = () => {
-    if (!stageForm.stageName.trim()) {
+    if (!newStageName.trim()) {
       toast.error('Please enter a stage name');
       return;
     }
-
-    if (!stageForm.teamId) {
+    if (!newStageTeam) {
       toast.error('Please select a team for the stage');
       return;
     }
-
-    if (editingStageIndex !== null) {
-      // Update existing stage
-      const updated = [...stages];
-      updated[editingStageIndex] = { ...stageForm };
-      setStages(updated);
-      setEditingStageIndex(null);
-    } else {
-      // Add new stage
-      const newStage: StageForm = {
-        ...stageForm,
-        tempId: nextTempId,
-        stageOrder: stages.length + 1,
-      };
-      setStages([...stages, newStage]);
-      setNextTempId(nextTempId + 1);
-    }
-    
-    // Reset form
-    setStageForm({
-      stageName: '',
-      stageOrder: stages.length + 1,
-      teamId: teams.length > 0 ? teams[0].teamId : '',
-    });
+    setStages([
+      ...stages,
+      { tempId: nextTempId, stageName: newStageName.trim(), stageOrder: stages.length + 1, teamId: newStageTeam },
+    ]);
+    setNextTempId(nextTempId + 1);
+    setNewStageName('');
   };
 
-  const handleEditStage = (index: number) => {
-    setEditingStageIndex(index);
-    setStageForm(stages[index]);
-  };
-
-  const handleDeleteStage = (index: number) => {
-    const updatedStages = stages.filter((_, i) => i !== index).map((s, i) => ({
-      ...s,
-      stageOrder: i + 1,
-    }));
-    setStages(updatedStages);
-    if (editingStageIndex === index) {
-      setEditingStageIndex(null);
-      setStageForm({
-        stageName: '',
-        stageOrder: updatedStages.length + 1,
-        teamId: teams.length > 0 ? teams[0].teamId : '',
-      });
-    } else if (editingStageIndex !== null && editingStageIndex > index) {
-      setEditingStageIndex(editingStageIndex - 1);
-    }
-  };
-
-  const handleCancelStageEdit = () => {
-    setEditingStageIndex(null);
-    setStageForm({
-      stageName: '',
-      stageOrder: stages.length + 1,
-      teamId: teams.length > 0 ? teams[0].teamId : '',
-    });
-  };
+  const handleDeleteStage = (index: number) =>
+    setStages(stages.filter((_, i) => i !== index).map((s, i) => ({ ...s, stageOrder: i + 1 })));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!workflowName.trim()) {
       toast.error('Please enter a workflow name');
       return;
@@ -137,183 +101,118 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
       return;
     }
 
-    if (stages.some(s => !s.teamId)) {
+    if (stages.some((s) => !s.stageName.trim())) {
+      toast.error('Every stage needs a name');
+      return;
+    }
+
+    if (stages.some((s) => !s.teamId)) {
       toast.error('Please assign a team to all stages');
       return;
     }
 
     setLoading(true);
     try {
-      // Update workflow name and description
       const updateData: WorkflowUpdate = {
         workflowName: workflowName.trim(),
         description: description.trim() || undefined,
       };
-      
+
       await workflowService.update(workflow.workflowId, updateData);
-      
-      // Get original stage IDs
-      const originalStageIds = new Set((workflow.stages || []).map(s => s.stageId));
-      const currentStageIds = new Set(stages.filter(s => s.stageId).map(s => s.stageId!));
-      
-      // Delete stages that were removed
-      const stagesToDelete = Array.from(originalStageIds).filter(id => !currentStageIds.has(id));
-      for (const stageId of stagesToDelete) {
-        await stageService.delete(stageId);
-      }
-      
-      // Update existing stages and create new ones
-      for (let i = 0; i < stages.length; i++) {
-        const stage = stages[i];
-        const stageOrder = i + 1;
-        
-        if (stage.stageId) {
-          // Update existing stage
-          const originalStage = workflow.stages?.find(s => s.stageId === stage.stageId);
-          if (originalStage) {
-            const hasChanges = 
-              originalStage.stageName !== stage.stageName ||
-              originalStage.stageOrder !== stageOrder ||
-              originalStage.teamId !== stage.teamId;
-            
-            if (hasChanges) {
-              await stageService.update(stage.stageId, {
-                stageName: stage.stageName,
-                stageOrder: stageOrder,
-                teamId: stage.teamId,
-                stageType: stage.stageType || 'Process',
-                transitionPolicy: stage.transitionPolicy || 'OnComplete',
-                timeoutMinutes: stage.timeoutMinutes,
-              });
-            }
-          }
-        } else {
-          // Create new stage
-          await stageService.create({
-            stageName: stage.stageName,
-            stageOrder: stageOrder,
-            workflowId: workflow.workflowId,
-            teamId: stage.teamId,
-            stageType: stage.stageType || 'Process',
-            transitionPolicy: stage.transitionPolicy || 'OnComplete',
-            timeoutMinutes: stage.timeoutMinutes,
-          });
-        }
-      }
-      
-      // Update workflow JSON
+
+      await syncStages(workflow.workflowId, stages, workflow.stages || []);
+
       try {
         await workflowService.updateJson(workflow.workflowId);
       } catch (error) {
         console.warn('Failed to update workflow JSON:', error);
       }
-      
+
       toast.success('Workflow updated successfully');
       onSuccess();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to update workflow');
+      toast.error(apiErrorMessage(error, 'Failed to update workflow'));
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="p-8 bg-white font-sans">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#434E78]/20">
-          <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">Edit Workflow</h1>
-          <button
-            onClick={onCancel}
-            className="text-black/70 hover:text-black hover:bg-[#434E78]/10 p-2 rounded-azure-sm transition-colors"
-          >
-            <FiX className="text-xl" />
-          </button>
-        </div>
+  const colors = teamColors(stages.map((s) => ({ teamId: s.teamId, stageOrder: s.stageOrder })));
+  const teamName = (id: string) => teams.find((t) => t.teamId === id)?.teamName;
 
-        <div className="bg-white rounded-azure-sm shadow-azure-md p-8 border border-[#434E78]/20">
-          <form onSubmit={handleSubmit}>
-            <div className="mb-6">
-              <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                Workflow Name *
-              </label>
+  return (
+    <form onSubmit={handleSubmit}>
+      <PageHeader
+        breadcrumbs={[{ label: 'Workflows', onClick: onCancel }]}
+        title="Edit Workflow"
+        subtitle={workflow.workflowName}
+        actions={
+          <>
+            <Button variant="ghost" icon={<FiX />} onClick={onCancel} disabled={loading}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" icon={<FiCheck />} loading={loading}>
+              {loading ? 'Saving…' : 'Save changes'}
+            </Button>
+          </>
+        }
+      />
+
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] gap-6 items-start">
+        <div className="space-y-6">
+          <section className="card px-5 py-5 space-y-4">
+            <Field htmlFor="edit-wf-name" label="Workflow name" required>
               <input
+                id="edit-wf-name"
                 type="text"
                 value={workflowName}
                 onChange={(e) => setWorkflowName(e.target.value)}
-                className="w-full px-4 py-3 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
+                className={inputClass}
                 placeholder="Enter workflow name"
                 required
               />
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                Description
-              </label>
+            </Field>
+            <Field htmlFor="edit-wf-desc" label="Description" hint="Optional">
               <textarea
+                id="edit-wf-desc"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-4 py-3 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                rows={6}
-                placeholder="Enter workflow description (optional)"
+                className={inputClass}
+                rows={3}
+                placeholder="What the workflow is for"
               />
-            </div>
+            </Field>
+          </section>
 
-            <div className="mb-6">
-              <label className="block text-black text-sm font-semibold mb-3 font-sans">
-                Stages
-              </label>
-              
-              {/* Add/Edit Stage Form */}
-              <div className="mb-4 p-4 border border-[#434E78]/30 rounded-azure-sm bg-[#434E78]/5">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                  <div>
-                    <label className="block text-black text-xs font-semibold mb-1 font-sans">
-                      Stage Name *
-                    </label>
+          <section className="card overflow-hidden" aria-labelledby="edit-stages-title">
+            <header className="flex items-center justify-between px-5 py-3 border-b border-line-subtle">
+              <h2 id="edit-stages-title" className="text-title font-semibold text-ink">Stages</h2>
+              <span className="text-meta text-ink-subtle tabular">{stages.length} in order</span>
+            </header>
+            <ol className="divide-y divide-line-subtle">
+              {stages.map((stage, index) => (
+                <li key={stage.stageId || `new-${stage.tempId}`} className="flex items-center gap-2 pl-4 pr-2 py-2.5">
+                  <span className="font-mono text-meta text-ink-subtle w-6 tabular shrink-0">{String(index + 1).padStart(2, '0')}</span>
+                  <span
+                    aria-hidden="true"
+                    className="h-2.5 w-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: (stage.teamId && colors.get(stage.teamId)) || TEAM_FALLBACK }}
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_11rem] gap-2 flex-1 min-w-0">
                     <input
                       type="text"
-                      value={stageForm.stageName}
-                      onChange={(e) =>
-                        setStageForm({ ...stageForm, stageName: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                      placeholder="e.g., To Do, In Progress"
+                      aria-label={`Stage ${index + 1} name`}
+                      value={stage.stageName}
+                      onChange={(e) => updateStage(index, { stageName: e.target.value })}
+                      className={`${inputClass} min-h-[36px] py-1.5`}
                     />
-                  </div>
-                  <div>
-                    <label className="block text-black text-xs font-semibold mb-1 font-sans">
-                      Order *
-                    </label>
-                    <input
-                      type="number"
-                      value={stageForm.stageOrder}
-                      onChange={(e) =>
-                        setStageForm({
-                          ...stageForm,
-                          stageOrder: parseInt(e.target.value) || 1,
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                      min="1"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-black text-xs font-semibold mb-1 font-sans">
-                      Team *
-                    </label>
                     <select
-                    value={stageForm.teamId || ''}
-                    onChange={(e) =>
-                      setStageForm({
-                        ...stageForm,
-                        teamId: e.target.value || '',
-                      })
-                    }
-                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
-                      required
+                      aria-label={`Stage ${index + 1} team`}
+                      value={stage.teamId || ''}
+                      onChange={(e) => updateStage(index, { teamId: e.target.value })}
+                      className={`${inputClass} min-h-[36px] py-1.5`}
                     >
-                      <option value={0}>Select Team</option>
+                      <option value="">Select team…</option>
                       {teams.map((team) => (
                         <option key={team.teamId} value={team.teamId}>
                           {team.teamName}
@@ -321,107 +220,75 @@ const WorkflowEdit = ({ workflow, onSuccess, onCancel }: WorkflowEditProps) => {
                       ))}
                     </select>
                   </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAddStage}
-                    className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                  >
-                    {editingStageIndex !== null ? (
-                      <>
-                        <FiEdit2 className="inline mr-1" />
-                        Update Stage
-                      </>
-                    ) : (
-                      <>
-                        <FiPlus className="inline mr-1" />
-                        Add Stage
-                      </>
-                    )}
-                  </button>
-                  {editingStageIndex !== null && (
-                    <button
-                      type="button"
-                      onClick={handleCancelStageEdit}
-                      className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
+                  <div className="flex items-center shrink-0">
+                    <IconButton size="sm" label={`Move stage ${index + 1} up`} icon={<FiArrowUp />} disabled={index === 0} onClick={() => setStages(moveStage(stages, index, index - 1))} />
+                    <IconButton size="sm" label={`Move stage ${index + 1} down`} icon={<FiArrowDown />} disabled={index === stages.length - 1} onClick={() => setStages(moveStage(stages, index, index + 1))} />
+                    <IconButton size="sm" tone="danger" label={`Delete stage ${index + 1}`} icon={<FiTrash2 />} onClick={() => handleDeleteStage(index)} />
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="px-4 py-3 border-t border-line bg-surface-muted">
+              <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_10rem_auto] gap-2">
+                <input
+                  type="text"
+                  aria-label="New stage name"
+                  value={newStageName}
+                  onChange={(e) => setNewStageName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddStage();
+                    }
+                  }}
+                  placeholder="New stage name"
+                  className={inputClass}
+                />
+                <select
+                  aria-label="New stage team"
+                  value={newStageTeam}
+                  onChange={(e) => setNewStageTeam(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Team…</option>
+                  {teams.map((team) => (
+                    <option key={team.teamId} value={team.teamId}>
+                      {team.teamName}
+                    </option>
+                  ))}
+                </select>
+                <Button icon={<FiPlus />} onClick={handleAddStage}>
+                  Add Stage
+                </Button>
               </div>
-
-              {/* Existing Stages List */}
-              {stages.length > 0 && (
-                <div className="space-y-2">
-                  {stages
-                    .sort((a, b) => a.stageOrder - b.stageOrder)
-                    .map((stage, index) => {
-                      const actualIndex = stages.findIndex(
-                        s => (stage.stageId && s.stageId === stage.stageId) || 
-                             (stage.tempId && s.tempId === stage.tempId)
-                      );
-                      return (
-                        <div
-                          key={stage.stageId || stage.tempId}
-                          className="flex items-center gap-3 p-3 bg-[#434E78]/5 rounded-azure-sm border border-[#434E78]/20"
-                        >
-                          <div className="flex-1">
-                            <div className="text-sm font-semibold text-black font-sans">
-                              {stage.stageOrder}. {stage.stageName}
-                            </div>
-                            <div className="text-xs text-black/60 font-sans">
-                              Team: {teams.find(t => t.teamId === stage.teamId)?.teamName || 'Not assigned'}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleEditStage(actualIndex)}
-                              className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-1.5 rounded-azure-sm transition-colors"
-                              title="Edit stage"
-                            >
-                              <FiEdit2 className="text-base" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteStage(actualIndex)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-azure-sm transition-colors"
-                              title="Delete stage"
-                            >
-                              <FiTrash2 className="text-base" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
             </div>
+          </section>
+        </div>
 
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={onCancel}
-                className="px-5 py-2.5 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-5 py-2.5 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-              >
-                {loading ? 'Updating...' : 'Update Workflow'}
-              </button>
+        <div className="min-w-0 xl:sticky xl:top-6">
+          <p className="eyebrow mb-3">Preview</p>
+          {stages.length > 0 ? (
+            <WorkflowMap
+              compact
+              label="Workflow preview"
+              stages={stages.map((s, i) => ({
+                id: s.stageId || `new-${s.tempId}`,
+                order: i + 1,
+                name: s.stageName || 'Untitled stage',
+                teamId: s.teamId || undefined,
+                teamName: teamName(s.teamId) ?? s.teamName,
+              }))}
+            />
+          ) : (
+            <div className="h-48 rounded-card border border-dashed border-line-strong bg-surface-muted flex items-center justify-center text-meta text-ink-subtle">
+              Add a stage to see the flow.
             </div>
-          </form>
+          )}
+          <p className="mt-2 text-meta text-ink-subtle">Changes are saved together when you press Save changes.</p>
         </div>
       </div>
-    </div>
+    </form>
   );
 };
 
 export default WorkflowEdit;
-

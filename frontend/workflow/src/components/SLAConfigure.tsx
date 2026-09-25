@@ -2,145 +2,153 @@ import { useState, useEffect } from 'react';
 import { useWorkflows } from '../hooks/useWorkflows';
 import { slaService } from '../services/slaService';
 import { toast } from 'react-toastify';
-import { FiChevronLeft, FiChevronRight, FiX, FiCheck, FiClock } from 'react-icons/fi';
+import { FiCheck, FiChevronLeft, FiChevronRight, FiInfo, FiPlus, FiX } from 'react-icons/fi';
+import { apiErrorMessage } from '../utils/apiError';
+import { inputClass } from '../utils/formStyles';
+import { priorityTone } from '../utils/status';
+import Button, { IconButton } from './Button';
+import Field from './Field';
+import PageHeader from './PageHeader';
+import WizardStepper from './WizardStepper';
 
 interface SLAConfigureProps {
   onSuccess: () => void;
   onCancel: () => void;
   initialWorkflowId?: string;
+  /**
+   * Inside another flow (the workflow wizard) only the priorities editor and its
+   * save button render — no page header or step rail of its own.
+   */
+  embedded?: boolean;
 }
 
-const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigureProps) => {
+type TimeUnit = 'minutes' | 'hours' | 'days';
+
+interface PriorityConfig {
+  id: string;
+  name: string;
+  responseTime: number;
+  timeUnit: TimeUnit;
+}
+
+const DEFAULT_PRIORITIES: PriorityConfig[] = [
+  { id: 'critical', name: 'Critical', responseTime: 0, timeUnit: 'minutes' },
+  { id: 'high', name: 'High', responseTime: 0, timeUnit: 'minutes' },
+  { id: 'medium', name: 'Medium', responseTime: 0, timeUnit: 'minutes' },
+  { id: 'low', name: 'Low', responseTime: 0, timeUnit: 'minutes' },
+];
+
+const TONE_DOT: Record<string, string> = {
+  danger: 'bg-danger',
+  warning: 'bg-warning-strong',
+  info: 'bg-info',
+  neutral: 'bg-ink-subtle',
+  primary: 'bg-primary',
+  success: 'bg-success-strong',
+};
+
+const convertToMinutes = (value: number, unit: TimeUnit): number => {
+  switch (unit) {
+    case 'hours':
+      return value * 60;
+    case 'days':
+      return value * 60 * 24;
+    default:
+      return value;
+  }
+};
+
+export const formatTime = (minutes: number): string => {
+  if (minutes === 0) return '0 minutes';
+  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (mins === 0 && hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''}`;
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    if (remainingHours === 0) return `${days} day${days !== 1 ? 's' : ''}`;
+    return `${days} day${days !== 1 ? 's' : ''} ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`;
+  }
+  return `${hours} hour${hours !== 1 ? 's' : ''} ${mins} minute${mins !== 1 ? 's' : ''}`;
+};
+
+const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId, embedded = false }: SLAConfigureProps) => {
   const { workflows } = useWorkflows();
   const [currentStep, setCurrentStep] = useState(initialWorkflowId ? 2 : 1);
   const [completedSteps, setCompletedSteps] = useState<number[]>(initialWorkflowId ? [1] : []);
   const totalSteps = 2;
 
-  const stepLabels = ['Select Workflow', 'Configure Priorities'];
-
-  // Step 1: Select Workflow
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(initialWorkflowId || null);
-
-  // Step 2: Configure dynamic priorities and their response times
-  type TimeUnit = 'minutes' | 'hours' | 'days';
-
-  interface PriorityConfig {
-    id: string;
-    name: string;
-    responseTime: number;
-    timeUnit: TimeUnit;
-  }
-
-  const [priorities, setPriorities] = useState<PriorityConfig[]>([
-    { id: 'critical', name: 'Critical', responseTime: 0, timeUnit: 'minutes' },
-    { id: 'high', name: 'High', responseTime: 0, timeUnit: 'minutes' },
-    { id: 'medium', name: 'Medium', responseTime: 0, timeUnit: 'minutes' },
-    { id: 'low', name: 'Low', responseTime: 0, timeUnit: 'minutes' },
-  ]);
-
+  const [priorities, setPriorities] = useState<PriorityConfig[]>(DEFAULT_PRIORITIES);
   const [newPriorityName, setNewPriorityName] = useState('');
-
   const [loading, setLoading] = useState(false);
   const [existingConfig, setExistingConfig] = useState<any>(null);
 
   // Fetch existing SLA config when workflow is selected
   useEffect(() => {
     const fetchExistingConfig = async () => {
-      if (selectedWorkflowId) {
-        try {
-          const config = await slaService.getByWorkflowId(selectedWorkflowId);
-          setExistingConfig(config);
-          
-          // Populate priority configs with existing values - load ALL priorities, even with 0 response time
-          if (config && config.priorityLevels) {
-            const loadedPriorities: PriorityConfig[] = Object.entries(config.priorityLevels).map(
-              ([name, value]: [string, { responseTime: number }], index) => {
-                const existingTime = value?.responseTime || 0;
-                let displayTime = 0;
-                let unit: TimeUnit = 'minutes';
+      if (!selectedWorkflowId) {
+        setPriorities(DEFAULT_PRIORITIES);
+        return;
+      }
+      try {
+        const config = await slaService.getByWorkflowId(selectedWorkflowId);
+        setExistingConfig(config);
 
-                // Always convert time, even if 0
-                if (existingTime > 0) {
-                  if (existingTime < 60) {
-                    displayTime = existingTime;
-                    unit = 'minutes';
-                  } else if (existingTime < 1440) {
-                    displayTime = Math.floor(existingTime / 60);
-                    unit = 'hours';
-                  } else {
-                    displayTime = Math.floor(existingTime / 1440);
-                    unit = 'days';
-                  }
+        // Load ALL priorities, even with 0 response time
+        if (config && config.priorityLevels) {
+          const loadedPriorities: PriorityConfig[] = Object.entries(config.priorityLevels).map(
+            ([name, value]: [string, { responseTime: number }], index) => {
+              const existingTime = value?.responseTime || 0;
+              let displayTime = 0;
+              let unit: TimeUnit = 'minutes';
+              if (existingTime > 0) {
+                if (existingTime < 60) {
+                  displayTime = existingTime;
+                } else if (existingTime < 1440) {
+                  displayTime = Math.floor(existingTime / 60);
+                  unit = 'hours';
                 } else {
-                  // Even if 0, keep it as 0 with minutes unit
-                  displayTime = 0;
-                  unit = 'minutes';
+                  displayTime = Math.floor(existingTime / 1440);
+                  unit = 'days';
                 }
-
-                return {
-                  id: `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}-${index}`,
-                  name,
-                  responseTime: displayTime,
-                  timeUnit: unit,
-                };
               }
-            );
-
-            // Always replace with loaded priorities - this ensures ALL priorities from config are shown
-            setPriorities(loadedPriorities);
-          } else {
-            // If no existing config, reset to defaults
-            setPriorities([
-              { id: 'critical', name: 'Critical', responseTime: 0, timeUnit: 'minutes' },
-              { id: 'high', name: 'High', responseTime: 0, timeUnit: 'minutes' },
-              { id: 'medium', name: 'Medium', responseTime: 0, timeUnit: 'minutes' },
-              { id: 'low', name: 'Low', responseTime: 0, timeUnit: 'minutes' },
-            ]);
-          }
-        } catch (error) {
-          // No existing config
-          setExistingConfig(null);
-          // Reset to defaults
-          setPriorities([
-            { id: 'critical', name: 'Critical', responseTime: 0, timeUnit: 'minutes' },
-            { id: 'high', name: 'High', responseTime: 0, timeUnit: 'minutes' },
-            { id: 'medium', name: 'Medium', responseTime: 0, timeUnit: 'minutes' },
-            { id: 'low', name: 'Low', responseTime: 0, timeUnit: 'minutes' },
-          ]);
+              return {
+                id: `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}-${index}`,
+                name,
+                responseTime: displayTime,
+                timeUnit: unit,
+              };
+            }
+          );
+          setPriorities(loadedPriorities);
+        } else {
+          setPriorities(DEFAULT_PRIORITIES);
         }
-      } else {
-        // No workflow selected, reset to defaults
-        setPriorities([
-          { id: 'critical', name: 'Critical', responseTime: 0, timeUnit: 'minutes' },
-          { id: 'high', name: 'High', responseTime: 0, timeUnit: 'minutes' },
-          { id: 'medium', name: 'Medium', responseTime: 0, timeUnit: 'minutes' },
-          { id: 'low', name: 'Low', responseTime: 0, timeUnit: 'minutes' },
-        ]);
+      } catch (error) {
+        setExistingConfig(null);
+        setPriorities(DEFAULT_PRIORITIES);
       }
     };
     fetchExistingConfig();
   }, [selectedWorkflowId]);
 
-  const priorityColorClasses = [
-    'bg-red-100 text-red-800 border-red-300',
-    'bg-orange-100 text-orange-800 border-orange-300',
-    'bg-yellow-100 text-yellow-800 border-yellow-300',
-    'bg-blue-100 text-blue-800 border-blue-300',
-    'bg-purple-100 text-purple-800 border-purple-300',
-    'bg-emerald-100 text-emerald-800 border-emerald-300',
-  ];
+  const updatePriority = (id: string, patch: Partial<PriorityConfig>) =>
+    setPriorities((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
 
-  const convertToMinutes = (value: number, unit: 'minutes' | 'hours' | 'days'): number => {
-    switch (unit) {
-      case 'minutes':
-        return value;
-      case 'hours':
-        return value * 60;
-      case 'days':
-        return value * 60 * 24;
-      default:
-        return value;
+  const addPriority = () => {
+    const trimmed = newPriorityName.trim();
+    if (!trimmed) return;
+    if (priorities.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
+      toast.error('A priority with this name already exists');
+      return;
     }
+    setPriorities([
+      ...priorities,
+      { id: `${trimmed.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`, name: trimmed, responseTime: 0, timeUnit: 'minutes' },
+    ]);
+    setNewPriorityName('');
   };
 
   const handleSubmit = async () => {
@@ -149,22 +157,15 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
       return;
     }
 
-    // Validate that at least one priority has a response time
-    const hasAnyTime = priorities.some((p) => p.responseTime > 0);
-
-    if (!hasAnyTime) {
+    if (!priorities.some((p) => p.responseTime > 0)) {
       toast.error('Please set response time for at least one priority level');
       return;
     }
 
     setLoading(true);
     try {
-      // Convert all priority configs to minutes - save ALL priorities, even with 0 response time
-      const currentConfig: {
-        [key: string]: { responseTime: number };
-      } = {};
-
       // Save ALL priorities, not just ones with responseTime > 0
+      const currentConfig: { [key: string]: { responseTime: number } } = {};
       priorities.forEach((priority) => {
         if (priority.name.trim()) {
           currentConfig[priority.name.trim()] = {
@@ -174,52 +175,151 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
       });
 
       if (existingConfig) {
-        // Update existing configuration
         await slaService.update(selectedWorkflowId, { priorityLevels: currentConfig });
         toast.success('SLA configuration updated successfully');
       } else {
-        // Create new configuration
-        await slaService.create({
-          workflowId: selectedWorkflowId,
-          priorityLevels: currentConfig,
-        });
+        await slaService.create({ workflowId: selectedWorkflowId, priorityLevels: currentConfig });
         toast.success('SLA configuration created successfully');
       }
 
-      // Mark final step as completed
       if (!completedSteps.includes(2)) {
         setCompletedSteps([...completedSteps, 2]);
       }
       onSuccess();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to save SLA configuration');
+      toast.error(apiErrorMessage(error, 'Failed to save SLA configuration'));
     } finally {
       setLoading(false);
     }
   };
 
+  const canSave = priorities.some((p) => p.name.trim() && p.responseTime > 0);
+  const selectedWorkflow = workflows.find((w) => w.workflowId === selectedWorkflowId);
+
+  const prioritiesEditor = (
+    <div>
+      {existingConfig && (
+        <div className="mb-4 flex items-start gap-2.5 px-4 py-3 bg-info-subtle border border-info-border rounded-card text-body text-info">
+          <FiInfo aria-hidden="true" className="mt-0.5 shrink-0" />
+          This workflow already has response times. Changes here replace them.
+        </div>
+      )}
+
+      <div className="rounded-card border border-line overflow-hidden">
+        <div className="hidden sm:grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(0,1fr)_2.5rem] gap-3 px-4 h-9 items-center bg-surface-muted border-b border-line">
+          <span className="eyebrow">Priority</span>
+          <span className="eyebrow">Respond within</span>
+          <span className="eyebrow">Total</span>
+          <span />
+        </div>
+        <ul className="divide-y divide-line-subtle">
+          {priorities.map((priority) => {
+            const totalMinutes = convertToMinutes(priority.responseTime, priority.timeUnit);
+            return (
+              <li key={priority.id} className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(0,1fr)_2.5rem] gap-3 px-4 py-3 items-center">
+                <div className="relative">
+                  <span aria-hidden="true" className={`absolute left-3 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full ${TONE_DOT[priorityTone(priority.name)]}`} />
+                  <input
+                    type="text"
+                    aria-label="Priority name"
+                    value={priority.name}
+                    onChange={(e) => updatePriority(priority.id, { name: e.target.value })}
+                    className={`${inputClass} pl-7 font-medium`}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    aria-label={`${priority.name} response time`}
+                    value={priority.responseTime || ''}
+                    onChange={(e) => updatePriority(priority.id, { responseTime: parseInt(e.target.value) || 0 })}
+                    className={`${inputClass} font-mono tabular`}
+                    placeholder="0"
+                  />
+                  <select
+                    aria-label={`${priority.name} time unit`}
+                    value={priority.timeUnit}
+                    onChange={(e) => updatePriority(priority.id, { timeUnit: e.target.value as TimeUnit })}
+                    className={`${inputClass} w-32 shrink-0`}
+                  >
+                    <option value="minutes">Minutes</option>
+                    <option value="hours">Hours</option>
+                    <option value="days">Days</option>
+                  </select>
+                </div>
+                <span className={`text-meta ${totalMinutes > 0 ? 'text-ink' : 'text-ink-subtle'}`}>
+                  {totalMinutes > 0 ? formatTime(totalMinutes) : 'Not set — due immediately'}
+                </span>
+                <div className="flex justify-end">
+                  {priorities.length > 1 && (
+                    <IconButton
+                      size="sm"
+                      tone="danger"
+                      label={`Remove ${priority.name || 'priority'}`}
+                      icon={<FiX />}
+                      onClick={() => setPriorities((prev) => prev.filter((p) => p.id !== priority.id))}
+                    />
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <form
+          className="flex flex-col sm:flex-row gap-2 px-4 py-3 border-t border-line bg-surface-muted"
+          onSubmit={(e) => {
+            e.preventDefault();
+            addPriority();
+          }}
+        >
+          <label htmlFor="new-priority" className="sr-only">New priority name</label>
+          <input
+            id="new-priority"
+            type="text"
+            value={newPriorityName}
+            onChange={(e) => setNewPriorityName(e.target.value)}
+            placeholder="Add a priority level, e.g. Very Critical"
+            className={`${inputClass} sm:max-w-sm`}
+          />
+          <Button type="submit" size="md" icon={<FiPlus />} disabled={!newPriorityName.trim()}>
+            Add Priority
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div>
+        {prioritiesEditor}
+        <div className="mt-4 flex justify-end">
+          <Button variant="primary" loading={loading} disabled={!canSave} onClick={handleSubmit} icon={<FiCheck />}>
+            {loading ? 'Saving…' : 'Save Configuration'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   const renderStepContent = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <div>
-            <h2 className="text-xl font-semibold mb-4 text-black font-sans">Select Workflow</h2>
-            <p className="text-black/70 mb-6 text-sm font-sans">
-              Choose the workflow you want to configure SLA settings for.
-            </p>
-            {workflows.length === 0 ? (
-              <div className="text-center py-8 text-black/70 font-sans">
-                <p>No workflows available. Please create a workflow first.</p>
-              </div>
-            ) : (
-              <div>
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Workflow *
-                </label>
+    if (currentStep === 1) {
+      return (
+        <div className="max-w-xl">
+          <h2 className="text-title font-semibold text-ink">Select Workflow</h2>
+          <p className="mt-1 mb-6 text-body text-ink-muted">Response times are set per workflow.</p>
+          {workflows.length === 0 ? (
+            <p className="py-6 text-body text-ink-muted">No workflows available. Create a workflow first.</p>
+          ) : (
+            <>
+              <Field htmlFor="sla-workflow" label="Workflow" required>
                 <select
+                  id="sla-workflow"
                   value={selectedWorkflowId || ''}
                   onChange={(e) => setSelectedWorkflowId(e.target.value || null)}
-                  className="w-full px-4 py-3 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-black text-sm font-sans"
+                  className={inputClass}
                   required
                 >
                   <option value="">Select a workflow</option>
@@ -230,362 +330,95 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
                     </option>
                   ))}
                 </select>
-                {selectedWorkflowId && (
-                  <div className="mt-4 p-4 bg-[#434E78]/5 border border-[#434E78]/20 rounded-azure-sm">
-                    {(() => {
-                      const selectedWorkflow = workflows.find(w => w.workflowId === selectedWorkflowId);
-                      return selectedWorkflow ? (
-                        <div>
-                          <p className="text-sm font-semibold text-black mb-1 font-sans">
-                            {selectedWorkflow.workflowName}
-                          </p>
-                          {selectedWorkflow.description && (
-                            <p className="text-sm text-black/70 mb-2 font-sans">
-                              {selectedWorkflow.description}
-                            </p>
-                          )}
-                          {selectedWorkflow.teamName && (
-                            <p className="text-xs text-black/60 font-sans">
-                              Team: {selectedWorkflow.teamName}
-                            </p>
-                          )}
-                        </div>
-                      ) : null;
-                    })()}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-
-      case 2:
-        return (
-          <div>
-            <h2 className="text-xl font-semibold mb-4 text-black font-sans">Configure Priorities</h2>
-            <p className="text-black/70 mb-6 text-sm font-sans">
-              Add and configure any number of priority levels, and set response times for each. You must configure at least one priority.
-            </p>
-            {selectedWorkflowId && (
-              <div className="mb-6 p-4 bg-[#434E78]/5 border border-[#434E78]/20 rounded-azure-sm">
-                <p className="text-sm text-black/70 font-sans">
-                  <strong>Workflow:</strong> {workflows.find(w => w.workflowId === selectedWorkflowId)?.workflowName}
-                </p>
-              </div>
-            )}
-            {existingConfig && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-azure-sm">
-                <p className="text-sm text-blue-800 font-sans">
-                  <strong>Note:</strong> This workflow already has SLA configurations. You can update all priority levels below.
-                </p>
-              </div>
-            )}
-            <div className="space-y-4">
-              {/* Add Priority */}
-              <div className="p-4 border border-dashed border-[#434E78]/40 rounded-azure-sm bg-[#f9fafb]">
-                <div className="flex flex-col md:flex-row md:items-end gap-3">
-                  <div className="flex-1">
-                    <label className="block text-xs font-semibold mb-1 opacity-75">
-                      New Priority Name
-                    </label>
-                    <input
-                      type="text"
-                      value={newPriorityName}
-                      onChange={(e) => setNewPriorityName(e.target.value)}
-                      placeholder="e.g. Very Critical, Urgent, Low Impact"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-transparent bg-white text-gray-900 text-sm font-sans"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const trimmed = newPriorityName.trim();
-                      if (!trimmed) return;
-                      if (priorities.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
-                        toast.error('A priority with this name already exists');
-                        return;
-                      }
-                      setPriorities([
-                        ...priorities,
-                        {
-                          id: `${trimmed.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
-                          name: trimmed,
-                          responseTime: 0,
-                          timeUnit: 'minutes',
-                        },
-                      ]);
-                      setNewPriorityName('');
-                    }}
-                    className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 text-sm font-medium shadow-azure-sm"
-                  >
-                    Add Priority
-                  </button>
+              </Field>
+              {selectedWorkflow && (
+                <div className="mt-4 rounded-card bg-surface-muted border border-line px-4 py-3">
+                  <p className="text-body font-medium text-ink">{selectedWorkflow.workflowName}</p>
+                  {selectedWorkflow.description && <p className="text-meta text-ink-subtle mt-0.5">{selectedWorkflow.description}</p>}
+                  <p className="text-meta text-ink-subtle mt-1">{selectedWorkflow.stages?.length ?? 0} stages</p>
                 </div>
-              </div>
-
-              {/* Existing priorities */}
-              {priorities.map((priority, index) => {
-                const totalMinutes = convertToMinutes(priority.responseTime, priority.timeUnit);
-                const colorClass = priorityColorClasses[index % priorityColorClasses.length];
-
-                return (
-                  <div
-                    key={priority.id}
-                    className={`p-4 border-2 rounded-azure-sm ${colorClass}`}
-                  >
-                    <div className="flex items-center justify-between mb-3 gap-3">
-                      <div className="flex-1">
-                        <label className="block text-xs font-semibold mb-1 opacity-75">
-                          Priority Name
-                        </label>
-                        <input
-                          type="text"
-                          value={priority.name}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setPriorities((prev) =>
-                              prev.map((p) =>
-                                p.id === priority.id ? { ...p, name: value } : p
-                              )
-                            );
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-transparent bg-white text-gray-900 text-sm font-sans"
-                        />
-                      </div>
-                      {priorities.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPriorities((prev) =>
-                              prev.filter((p) => p.id !== priority.id)
-                            );
-                          }}
-                          className="text-xs text-black/70 hover:text-black underline"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-semibold mb-1 opacity-75">
-                          Response Time
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={priority.responseTime || ''}
-                          onChange={(e) => {
-                            const value = parseInt(e.target.value) || 0;
-                            setPriorities((prev) =>
-                              prev.map((p) =>
-                                p.id === priority.id ? { ...p, responseTime: value } : p
-                              )
-                            );
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-transparent bg-white text-gray-900 text-sm font-sans"
-                          placeholder="Enter time"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold mb-1 opacity-75">
-                          Unit
-                        </label>
-                        <select
-                          value={priority.timeUnit}
-                          onChange={(e) => {
-                            const unit = e.target.value as TimeUnit;
-                            setPriorities((prev) =>
-                              prev.map((p) =>
-                                p.id === priority.id ? { ...p, timeUnit: unit } : p
-                              )
-                            );
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-transparent bg-white text-gray-900 text-sm font-sans"
-                        >
-                          <option value="minutes">Minutes</option>
-                          <option value="hours">Hours</option>
-                          <option value="days">Days</option>
-                        </select>
-                      </div>
-                    </div>
-                    {totalMinutes > 0 && (
-                      <div className="mt-2 text-xs opacity-75">
-                        Total: <strong>{formatTime(totalMinutes)}</strong>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
+              )}
+            </>
+          )}
+        </div>
+      );
     }
-  };
-
-  const formatTime = (minutes: number): string => {
-    if (minutes === 0) return '0 minutes';
-    if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (mins === 0) return `${hours} hour${hours !== 1 ? 's' : ''}`;
-    if (hours >= 24) {
-      const days = Math.floor(hours / 24);
-      const remainingHours = hours % 24;
-      if (remainingHours === 0) return `${days} day${days !== 1 ? 's' : ''}`;
-      return `${days} day${days !== 1 ? 's' : ''} ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`;
-    }
-    return `${hours} hour${hours !== 1 ? 's' : ''} ${mins} minute${mins !== 1 ? 's' : ''}`;
+    return (
+      <div>
+        <h2 className="text-title font-semibold text-ink">Configure Priorities</h2>
+        <p className="mt-1 mb-6 text-body text-ink-muted">
+          How quickly each priority must be picked up
+          {selectedWorkflow ? <> on <span className="font-medium text-ink">{selectedWorkflow.workflowName}</span></> : null}. Set at
+          least one — a workflow with none never assigns its enquiries, and a priority left at zero is due the moment it is assigned.
+        </p>
+        {prioritiesEditor}
+      </div>
+    );
   };
 
   const isStepCompleted = (step: number) => completedSteps.includes(step);
 
-  const handleStepClick = (step: number) => {
-    if (isStepCompleted(step) || step === currentStep) {
-      setCurrentStep(step);
-    }
-  };
-
   return (
-    <div className="p-8 bg-white font-sans">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#434E78]/20">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#434E78]/10 rounded-azure-sm flex items-center justify-center">
-              <FiClock className="text-xl text-[#434E78]" />
-            </div>
-            <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">Configure SLA</h1>
-          </div>
-          <button
-            onClick={onCancel}
-            className="text-black/70 hover:text-black hover:bg-[#434E78]/10 p-2 rounded-azure-sm transition-colors"
-          >
-            <FiX className="text-xl" />
-          </button>
+    <div>
+      <PageHeader
+        title="Configure SLA"
+        subtitle="Response times for each priority level of a workflow."
+        actions={
+          <Button variant="ghost" icon={<FiX />} onClick={onCancel}>
+            Cancel
+          </Button>
+        }
+      />
+
+      <div className="card">
+        <div className="px-4 sm:px-8 pt-6 pb-5 border-b border-line-subtle max-w-xl mx-auto">
+          <WizardStepper
+            steps={[{ label: 'Select workflow' }, { label: 'Set response times' }]}
+            current={currentStep}
+            completed={completedSteps}
+            onStepClick={(step) => {
+              if (isStepCompleted(step) || step === currentStep) setCurrentStep(step);
+            }}
+          />
         </div>
 
-        <div className="flex gap-8">
-          {/* Vertical Step Indicator on Left */}
-          <div className="w-16 flex-shrink-0">
-            <div className="bg-white rounded-azure-sm shadow-azure-md p-4 border border-[#434E78]/20">
-              <div className="relative">
-                <div className="space-y-8">
-                  {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => {
-                    const isCompleted = isStepCompleted(step);
-                    const isActive = step === currentStep;
-                    const isPast = step < currentStep;
+        <div className="px-5 sm:px-8 py-7">{renderStepContent()}</div>
 
-                    return (
-                      <div key={step} className="relative flex items-center">
-                        {step < totalSteps && (
-                          <div className="absolute left-3 top-3 w-0.5 z-0" style={{ height: '56px' }}>
-                            <div
-                              className={`w-full h-full ${
-                                isCompleted || isPast ? 'bg-emerald-600' : 'bg-[#434E78]/30'
-                              }`}
-                            />
-                          </div>
-                        )}
-
-                        <div
-                          className={`relative z-10 flex-shrink-0 ${
-                            isCompleted || isActive ? 'cursor-pointer' : 'cursor-not-allowed'
-                          }`}
-                          onClick={() => handleStepClick(step)}
-                          title={
-                            isCompleted
-                              ? `Go to ${stepLabels[step - 1]}`
-                              : isActive
-                              ? `Current step: ${stepLabels[step - 1]}`
-                              : 'Complete previous steps first'
-                          }
-                        >
-                          {isCompleted && (
-                            <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center border-2 border-white hover:bg-emerald-700 transition-colors shadow-azure-sm">
-                              <FiCheck className="text-white text-xs font-semibold" />
-                            </div>
-                          )}
-                          {isActive && !isCompleted && (
-                            <div className="relative">
-                              <div
-                                className="absolute inset-0 rounded-full bg-[#434E78] animate-ping opacity-75"
-                                style={{ animationDuration: '2s' }}
-                              ></div>
-                              <div className="relative w-6 h-6 rounded-full bg-[#434E78] flex items-center justify-center border-2 border-white hover:bg-[#434E78]/90 transition-colors shadow-azure-md">
-                                <span className="text-white text-xs font-semibold z-10 relative">{step}</span>
-                              </div>
-                            </div>
-                          )}
-                          {!isActive && !isCompleted && (
-                            <div className="w-6 h-6 rounded-full bg-[#434E78]/20 flex items-center justify-center border-2 border-white">
-                              <span className="text-black text-xs font-semibold">{step}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Main Content Area */}
-          <div className="flex-1">
-            <div className="bg-white rounded-azure-sm shadow-azure-md p-8 mb-6 border border-[#434E78]/20">
-              {renderStepContent()}
-            </div>
-
-            <div className="flex justify-between">
-              <button
-                onClick={() => {
-                  const previousStep = Math.max(1, currentStep - 1);
-                  setCompletedSteps(completedSteps.filter((step) => step < previousStep));
-                  setCurrentStep(previousStep);
-                }}
-                disabled={currentStep === 1}
-                className="flex items-center px-5 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 disabled:opacity-50 disabled:cursor-not-allowed text-black font-medium text-sm transition-colors font-sans"
-              >
-                <FiChevronLeft className="mr-2" />
-                Back
-              </button>
-              {currentStep < totalSteps ? (
-                <button
-                  onClick={() => {
-                    // Validate step 1
-                    if (currentStep === 1 && !selectedWorkflowId) {
-                      toast.error('Please select a workflow');
-                      return;
-                    }
-                    // Mark current step as completed
-                    if (!completedSteps.includes(currentStep)) {
-                      setCompletedSteps([...completedSteps, currentStep]);
-                    }
-                    setCurrentStep(Math.min(totalSteps, currentStep + 1));
-                  }}
-                  className="flex items-center px-5 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                >
-                  Next
-                  <FiChevronRight className="ml-2" />
-                </button>
-              ) : (
-                <button
-                  onClick={handleSubmit}
-                  disabled={
-                    loading ||
-                    !priorities.some((p) => p.name.trim() && p.responseTime > 0)
-                  }
-                  className="flex items-center px-5 py-2 bg-emerald-600 text-white rounded-azure-sm hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                >
-                  {loading ? 'Saving...' : 'Save Configuration'}
-                </button>
-              )}
-            </div>
-          </div>
+        <div className="flex items-center justify-between gap-3 px-5 sm:px-8 py-4 border-t border-line-subtle bg-surface-muted rounded-b-card">
+          <Button
+            variant="secondary"
+            icon={<FiChevronLeft />}
+            onClick={() => {
+              const previousStep = Math.max(1, currentStep - 1);
+              setCompletedSteps(completedSteps.filter((step) => step < previousStep));
+              setCurrentStep(previousStep);
+            }}
+            disabled={currentStep === 1}
+          >
+            Back
+          </Button>
+          {currentStep < totalSteps ? (
+            <Button
+              variant="primary"
+              trailingIcon={<FiChevronRight />}
+              onClick={() => {
+                if (currentStep === 1 && !selectedWorkflowId) {
+                  toast.error('Please select a workflow');
+                  return;
+                }
+                if (!completedSteps.includes(currentStep)) {
+                  setCompletedSteps([...completedSteps, currentStep]);
+                }
+                setCurrentStep(Math.min(totalSteps, currentStep + 1));
+              }}
+            >
+              Next
+            </Button>
+          ) : (
+            <Button variant="primary" loading={loading} disabled={!canSave} onClick={handleSubmit} icon={<FiCheck />}>
+              {loading ? 'Saving…' : 'Save Configuration'}
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -593,4 +426,3 @@ const SLAConfigure = ({ onSuccess, onCancel, initialWorkflowId }: SLAConfigurePr
 };
 
 export default SLAConfigure;
-

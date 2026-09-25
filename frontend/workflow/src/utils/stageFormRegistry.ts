@@ -52,18 +52,54 @@ const SCHEMAS: Record<string, StageFormSchema> = {
   },
   'verify site information': {
     title: 'Verify site information',
-    description: 'Check the site record against the enquiry before pricing.',
+    description: 'Check the site record against the enquiry, then list what procurement must price.',
     fields: [
       { name: 'quantitiesVerified', label: 'Quantities verified against the enquiry', type: 'checkbox', required: true },
       { name: 'gapsResolved', label: 'Gaps resolved with client or site team', type: 'textarea' },
       { name: 'assumptions', label: 'Assumptions', type: 'textarea', required: true },
       { name: 'exclusions', label: 'Proposed exclusions', type: 'textarea', required: true },
+      {
+        name: 'materials',
+        label: 'Items to be priced',
+        type: 'table',
+        required: true,
+        addLabel: 'Add item',
+        help: 'Procurement prices exactly these items, so list every product the quotation needs.',
+        columns: [
+          { name: 'item', label: 'Item / product', type: 'text', width: 'wide' },
+          { name: 'specification', label: 'Specification', type: 'text', width: 'wide' },
+          { name: 'unit', label: 'Unit', type: 'text', width: 'narrow' },
+          { name: 'quantity', label: 'Qty', type: 'number', width: 'narrow' },
+        ],
+      },
     ],
   },
   'obtain supplier prices': {
     title: 'Obtain supplier prices',
-    description: 'Compare offers and recommend the pricing basis.',
+    description: 'Price each item the engineer listed, then recommend the basis.',
     fields: [
+      {
+        name: 'pricedItems',
+        label: 'Supplier pricing',
+        type: 'table',
+        required: true,
+        addLabel: 'Add item',
+        help: 'Carried over from the engineer. Add a row for anything extra that must be priced.',
+        prefillFrom: {
+          stage: 'Verify Site Information',
+          field: 'materials',
+          columns: ['item', 'specification', 'unit', 'quantity'],
+        },
+        columns: [
+          { name: 'item', label: 'Item / product', type: 'text', width: 'wide' },
+          { name: 'specification', label: 'Specification', type: 'text', width: 'wide' },
+          { name: 'unit', label: 'Unit', type: 'text', width: 'narrow' },
+          { name: 'quantity', label: 'Qty', type: 'number', width: 'narrow' },
+          { name: 'supplier', label: 'Supplier', type: 'text' },
+          { name: 'unitPrice', label: 'Unit price', type: 'number', width: 'narrow' },
+          { name: 'leadTime', label: 'Lead time', type: 'text', width: 'narrow' },
+        ],
+      },
       { name: 'quotesRequested', label: 'Quotations requested', type: 'number', required: true },
       { name: 'quotesReceived', label: 'Quotations received', type: 'number', required: true },
       { name: 'shortfallReason', label: 'Reason if fewer than three', type: 'textarea', help: 'Required when fewer than three comparable quotations were obtained.' },
@@ -73,8 +109,29 @@ const SCHEMAS: Record<string, StageFormSchema> = {
   },
   'prepare & check boq': {
     title: 'Prepare & check BOQ',
-    description: 'Priced bill of quantities and the margin applied.',
+    description: 'Build the bill of quantities from the supplier pricing, then apply the margin.',
     fields: [
+      {
+        name: 'boqLines',
+        label: 'Bill of quantities',
+        type: 'table',
+        required: true,
+        addLabel: 'Add BOQ line',
+        help: 'Started from the supplier pricing. Add, edit or remove lines as the BOQ requires.',
+        prefillFrom: {
+          stage: 'Obtain Supplier Prices',
+          field: 'pricedItems',
+          columns: ['item', 'specification', 'unit', 'quantity', 'unitPrice'],
+        },
+        columns: [
+          { name: 'item', label: 'Description', type: 'text', width: 'wide' },
+          { name: 'specification', label: 'Specification', type: 'text', width: 'wide' },
+          { name: 'unit', label: 'Unit', type: 'text', width: 'narrow' },
+          { name: 'quantity', label: 'Qty', type: 'number', width: 'narrow' },
+          { name: 'unitPrice', label: 'Rate', type: 'number', width: 'narrow' },
+          { name: 'amount', label: 'Amount', type: 'number', width: 'narrow' },
+        ],
+      },
       { name: 'boqReference', label: 'BOQ reference', type: 'text', required: true },
       { name: 'materialCost', label: 'Material cost', type: 'number', required: true },
       { name: 'labourCost', label: 'Labour & equipment cost', type: 'number', required: true },
@@ -87,12 +144,10 @@ const SCHEMAS: Record<string, StageFormSchema> = {
   },
   'manager approval': {
     title: 'Manager approval',
-    description: 'Approve the costing package so the quotation can be drafted.',
+    description: 'Review the BOQ as submitted. Approve it, or send it back with a note saying what to change.',
     fields: [
       { name: 'decision', label: 'Decision', type: 'select', required: true, options: [{ value: 'approved', label: 'Approved to draft quotation' }] },
-      { name: 'approvedAmount', label: 'Approved amount', type: 'number', required: true },
-      { name: 'marginConfirmed', label: 'Margin and exclusions reviewed', type: 'checkbox', required: true },
-      { name: 'comments', label: 'Comments', type: 'textarea' },
+      { name: 'reviewNotes', label: 'Notes', type: 'textarea', help: 'Anything the team should know. To ask for changes, use Send Back instead.' },
     ],
   },
   'draft quotation': {
@@ -118,12 +173,10 @@ const SCHEMAS: Record<string, StageFormSchema> = {
   },
   'senior management approval': {
     title: 'Senior management approval',
-    description: 'Approve the final client-facing quotation before issue.',
+    description: 'Review the quotation as drafted. Approve it for issue, or send it back with a note.',
     fields: [
       { name: 'decision', label: 'Decision', type: 'select', required: true, options: [{ value: 'approved', label: 'Approved for issue' }] },
-      { name: 'approvedRevision', label: 'Approved revision', type: 'text', required: true },
-      { name: 'approvedAmount', label: 'Approved amount', type: 'number', required: true },
-      { name: 'comments', label: 'Comments', type: 'textarea' },
+      { name: 'reviewNotes', label: 'Notes', type: 'textarea', help: 'Anything the team should know. To ask for changes, use Send Back instead.' },
     ],
   },
   'issue to client & close': {
@@ -149,3 +202,29 @@ export const getStageForm = (stageName?: string): StageFormSchema =>
 
 export const hasStageForm = (stageName?: string): boolean =>
   Boolean(stageName && SCHEMAS[normalise(stageName)]);
+
+// Stages whose owner is appointed earlier by someone else — the team lead naming
+// the engineer, for example. Nobody downstream gets to pick for these.
+const APPOINTED_STAGES = new Set(
+  Object.values(SCHEMAS)
+    .flatMap((schema) => schema.fields)
+    .filter((field) => field.type === 'assignee' && field.targetStage)
+    .map((field) => normalise(field.targetStage!))
+);
+
+export const isAppointedStage = (stageName?: string): boolean =>
+  Boolean(stageName && APPOINTED_STAGES.has(normalise(stageName)));
+
+/** Field name to its label, for reading back what an earlier stage submitted. */
+export const stageFieldLabels = (stageName?: string): Record<string, string> =>
+  getStageForm(stageName).fields.reduce<Record<string, string>>(
+    (labels, field) => ({
+      ...labels,
+      [field.name]: field.label,
+      ...(field.columns ?? []).reduce<Record<string, string>>(
+        (cols, column) => ({ ...cols, [column.name]: column.label }),
+        {}
+      ),
+    }),
+    {}
+  );

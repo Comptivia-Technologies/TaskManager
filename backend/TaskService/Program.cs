@@ -521,6 +521,16 @@ using (var scope = app.Services.CreateScope())
                     ""HistoryId"" VARCHAR(40) NOT NULL,
                     ""UpdatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS ""GmailMailbox"" (
+                    ""MailboxId"" UUID PRIMARY KEY,
+                    ""OrganizationId"" UUID NOT NULL,
+                    ""Email"" VARCHAR(320) NOT NULL,
+                    ""RefreshToken"" TEXT NOT NULL,
+                    ""HistoryId"" VARCHAR(40) NOT NULL DEFAULT '',
+                    ""ConnectedAt"" TIMESTAMP WITH TIME ZONE NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_GmailMailbox_Email"" ON ""GmailMailbox"" (""Email"");
             ";
             await stageDataCommand.ExecuteNonQueryAsync();
             logger.LogInformation("Verified: TaskStageData, TaskAttachment tables and Tasks.DataJson column exist.");

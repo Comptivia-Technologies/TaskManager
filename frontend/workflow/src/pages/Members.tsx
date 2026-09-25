@@ -1,3 +1,15 @@
+import Button, { IconButton } from '../components/Button';
+import PageHeader from '../components/PageHeader';
+import Modal from '../components/Modal';
+import Field from '../components/Field';
+import ConfirmDialog from '../components/ConfirmDialog';
+import DataTable from '../components/DataTable';
+import EmptyState from '../components/EmptyState';
+import SearchInput from '../components/SearchInput';
+import Avatar from '../components/Avatar';
+import Badge from '../components/Badge';
+import SkillMeter, { SKILL_LABELS } from '../components/SkillMeter';
+import { inputClass, readOnlyInputClass } from '../utils/formStyles';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,8 +19,9 @@ import { memberService } from '../services/memberService';
 import { userService } from '../services/userService';
 import { Member, User } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { FiEdit, FiTrash2, FiFilter, FiSearch, FiPlus, FiUser } from 'react-icons/fi';
+import { FiAlertTriangle, FiCheckCircle, FiEdit2, FiEye, FiPlus, FiTrash2, FiUser } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import { apiErrorMessage } from '../utils/apiError';
 
 function splitFullName(fullName: string): { firstName: string; lastName: string } {
   const parts = fullName.trim().split(/\s+/);
@@ -39,6 +52,7 @@ const Members = () => {
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | 'all'>('all');
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const loadProductHubUsers = useCallback(async () => {
     if (!organizationId) return;
@@ -54,7 +68,6 @@ const Members = () => {
     loadProductHubUsers();
   }, [loadProductHubUsers]);
 
-
   const handleOpenModal = (member?: Member) => {
     if (member) {
       setSelectedMember(member);
@@ -69,13 +82,7 @@ const Members = () => {
       setSelectedProductHubUser(null);
     } else {
       setIsEditMode(false);
-      setFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        role: '',
-        skillLevel: 1,
-      });
+      setFormData({ firstName: '', lastName: '', email: '', role: '', skillLevel: 1 });
       setSelectedMember(null);
       setSelectedProductHubUser(null);
     }
@@ -87,13 +94,7 @@ const Members = () => {
     setIsEditMode(false);
     setSelectedMember(null);
     setSelectedProductHubUser(null);
-    setFormData({
-      firstName: '',
-      lastName: '',
-      email: '',
-      role: '',
-      skillLevel: 1,
-    });
+    setFormData({ firstName: '', lastName: '', email: '', role: '', skillLevel: 1 });
   };
 
   const handleProductHubUserSelect = (email: string) => {
@@ -113,43 +114,42 @@ const Members = () => {
   // Linking an existing member leaves their stored name and email alone; only
   // the login association changes.
   const handleLinkLogin = (email: string) => {
-    setSelectedProductHubUser(productHubUsers.find((u) => u.email === email) ?? null);
+    const user = productHubUsers.find((u) => u.email === email) ?? null;
+    setSelectedProductHubUser(user);
+    // The role follows the login, so linking one refreshes a stale job title.
+    if (user?.role) setFormData((prev) => ({ ...prev, role: user.role }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    setSaving(true);
     try {
       if (isEditMode && selectedMember) {
         await memberService.update(selectedMember.memberId, {
           ...formData,
-          teamId: selectedMember.teamId, // Keep original teamId
-          userId: selectedProductHubUser?.userId
+          teamId: selectedMember.teamId, // Team changes happen on the Teams page
+          userId: selectedProductHubUser?.userId,
         });
         toast.success('Member updated successfully');
-        handleCloseModal();
-        refetch();
       } else {
-        const createData = {
+        await memberService.create({
           firstName: formData.firstName,
           lastName: formData.lastName,
           email: formData.email,
           role: formData.role,
           skillLevel: formData.skillLevel,
           userId: selectedProductHubUser?.userId,
-        };
-        await memberService.create(createData);
+        });
         toast.success('Member created successfully');
-        handleCloseModal();
-        refetch();
       }
+      handleCloseModal();
+      refetch();
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error 
-        || error.response?.data?.message 
-        || error.message 
-        || `Failed to ${isEditMode ? 'update' : 'create'} member`;
+      const errorMessage = apiErrorMessage(error, `Failed to ${isEditMode ? 'update' : 'create'} member`);
       toast.error(errorMessage);
       console.error('Member creation error:', error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -161,414 +161,267 @@ const Members = () => {
       setMemberToDelete(null);
       refetch();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to delete member');
+      toast.error(apiErrorMessage(error, 'Failed to delete member'));
     } finally {
       setDeleting(false);
     }
   };
 
-  const handleViewDetails = (member: Member) => {
-    navigate(`/members/${member.memberId}`);
-  };
-
+  const term = searchTerm.toLowerCase();
   const filteredMembers = members.filter((member) => {
-    // Filter by search term
     const matchesSearch =
-      member.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (member.teamName && member.teamName.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    // Filter by team
+      member.firstName.toLowerCase().includes(term) ||
+      member.lastName.toLowerCase().includes(term) ||
+      member.email.toLowerCase().includes(term) ||
+      (member.teamName && member.teamName.toLowerCase().includes(term));
     const matchesTeam = selectedTeamFilter === 'all' || (member.teamId && member.teamId === selectedTeamFilter);
-    
     return matchesSearch && matchesTeam;
   });
 
+  const unlinked = members.filter((m) => !m.userId).length;
+
   if (loading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner label="Loading members" />;
   }
 
   return (
-    <div className="p-8 bg-white font-sans">
-      <div className="flex justify-between items-center mb-6 pb-4 border-b border-[#434E78]/20">
-        <h1 className="text-3xl font-semibold text-black font-sans tracking-tight">Members</h1>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-[#434E78] text-white px-4 py-2 rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans flex items-center"
-        >
-          <FiPlus className="mr-2" />
-          Create Member
-        </button>
-      </div>
+    <div>
+      <PageHeader
+        title="Members"
+        subtitle="People who can be assigned stage work. Each belongs to exactly one team."
+        meta={
+          <>
+            <span>{members.length} members</span>
+            {unlinked > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-warning font-medium">
+                <FiAlertTriangle aria-hidden="true" />
+                {unlinked} without a login — they cannot see their work
+              </span>
+            )}
+          </>
+        }
+        actions={
+          <Button variant="primary" icon={<FiPlus />} onClick={() => handleOpenModal()}>
+            Create Member
+          </Button>
+        }
+      />
 
-      <div className="mb-6 flex flex-col md:flex-row gap-4">
-        <div className="w-full md:w-64">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FiSearch className="text-[#434E78] text-base" />
-            </div>
-            <input
-              type="text"
-              placeholder="Search members..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-            />
-          </div>
-        </div>
-        <div className="w-full md:w-64">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FiFilter className="text-[#434E78] text-base" />
-            </div>
+      <DataTable<Member>
+        caption="Members"
+        rows={filteredMembers}
+        rowKey={(m) => m.memberId}
+        onRowClick={(m) => navigate(`/members/${m.memberId}`)}
+        toolbar={
+          <>
+            <SearchInput label="Search members" placeholder="Search by name, email or team" value={searchTerm} onChange={setSearchTerm} className="w-full sm:w-72" />
+            <label htmlFor="member-team-filter" className="sr-only">Filter by team</label>
             <select
+              id="member-team-filter"
               value={selectedTeamFilter}
-              onChange={(e) =>
-                setSelectedTeamFilter(
-                  e.target.value === 'all' ? 'all' : e.target.value
-                )
-              }
-              className="w-full pl-10 pr-4 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans appearance-none cursor-pointer"
+              onChange={(e) => setSelectedTeamFilter(e.target.value === 'all' ? 'all' : e.target.value)}
+              className={`${inputClass} !min-h-[36px] h-9 !py-1 w-full sm:w-52`}
             >
-              <option value="all">All Teams</option>
+              <option value="all">All teams</option>
               {teams.map((team) => (
                 <option key={team.teamId} value={team.teamId}>
                   {team.teamName}
                 </option>
               ))}
             </select>
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-              <svg
-                className="w-4 h-4 text-[#434E78]"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
+            <span className="sm:ml-auto text-meta text-ink-subtle tabular">
+              {filteredMembers.length} of {members.length}
+            </span>
+          </>
+        }
+        empty={
+          <EmptyState
+            icon={<FiUser />}
+            title={members.length === 0 ? 'No members yet' : 'No members found'}
+            body={members.length === 0 ? 'Create a member for each person who will work on stages.' : 'Nobody matches that search or team.'}
+          />
+        }
+        mobileCard={(m) => (
+          <div className="flex items-center gap-3">
+            <Avatar name={`${m.firstName} ${m.lastName}`} size="md" />
+            <div className="min-w-0">
+              <p className="font-semibold text-ink truncate">{m.firstName} {m.lastName}</p>
+              <p className="text-meta text-ink-subtle truncate">{m.teamName || 'Unassigned'} · {m.role}</p>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-azure-sm shadow-azure-sm overflow-hidden border border-[#434E78]/20">
-        <table className="min-w-full divide-y divide-[#434E78]/20">
-          <thead className="bg-[#434E78]/5">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                Email
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                Team
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                Role
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-semibold text-black uppercase tracking-wider font-sans">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-[#434E78]/20">
-            {filteredMembers.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-black/60 font-sans">
-                  No members found
-                </td>
-              </tr>
-            ) : (
-              filteredMembers.map((member) => (
-                <tr key={member.memberId} className="hover:bg-[#434E78]/5 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap font-semibold text-black font-sans">
-                    {member.firstName} {member.lastName}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
-                    {member.email}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
-                    {member.teamName || 'Unassigned'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-black/70 font-sans">
-                    {member.role}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleViewDetails(member)}
-                      className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-2 rounded-azure-sm mr-2 transition-colors"
-                      title="View Details"
-                    >
-                      <FiUser className="text-base" />
-                    </button>
-                    <button
-                      onClick={() => handleOpenModal(member)}
-                      className="text-[#434E78] hover:text-[#434E78]/80 hover:bg-[#434E78]/10 p-2 rounded-azure-sm mr-2 transition-colors"
-                      title="Edit"
-                    >
-                      <FiEdit className="text-base" />
-                    </button>
-                    <button
-                      onClick={() => setMemberToDelete(member)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-azure-sm transition-colors"
-                      title="Delete"
-                    >
-                      <FiTrash2 className="text-base" />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
-            <h2 className="text-xl font-semibold mb-4 text-black font-sans">
-              {isEditMode ? 'Edit Member' : 'Create Member'}
-            </h2>
-            <form onSubmit={handleSubmit}>
-              {isEditMode ? (
-                <>
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                      First Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.firstName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, firstName: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.lastName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, lastName: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      readOnly
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm bg-gray-50 text-sm font-sans cursor-not-allowed"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                      Linked Login <span className="text-xs text-black/60 font-normal">(required to see assigned work)</span>
-                    </label>
-                    {selectedMember?.userId ? (
-                      <input
-                        type="text"
-                        value={selectedMember.userId}
-                        readOnly
-                        className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm bg-gray-50 text-sm font-sans cursor-not-allowed"
-                      />
-                    ) : (
-                      <select
-                        value={selectedProductHubUser?.email ?? ''}
-                        onChange={(e) => handleLinkLogin(e.target.value)}
-                        className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                      >
-                        <option value="">Not linked — select a user to link...</option>
-                        {productHubUsers
-                          .filter((u) => !members.some((m) => m.userId && m.userId === u.userId))
-                          .map((u) => (
-                            <option key={u.userId} value={u.email}>
-                              {u.fullName} ({u.email})
-                            </option>
-                          ))}
-                      </select>
-                    )}
-                  </div>
-                </>
+        )}
+        columns={[
+          {
+            key: 'name',
+            header: 'Member',
+            sortValue: (m) => `${m.firstName} ${m.lastName}`.toLowerCase(),
+            render: (m) => (
+              <div className="flex items-center gap-3 min-w-0">
+                <Avatar name={`${m.firstName} ${m.lastName}`} size="md" />
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink truncate">{m.firstName} {m.lastName}</p>
+                  <p className="text-meta text-ink-subtle truncate">{m.email}</p>
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: 'team',
+            header: 'Team',
+            sortValue: (m) => m.teamName ?? '',
+            render: (m) => (m.teamName ? <span className="text-ink">{m.teamName}</span> : <span className="text-ink-subtle">Unassigned</span>),
+          },
+          {
+            key: 'role',
+            header: 'Role',
+            hideOnMobile: true,
+            sortValue: (m) => m.role ?? '',
+            render: (m) => <span className="text-ink-muted">{m.role || '—'}</span>,
+          },
+          {
+            key: 'skill',
+            header: 'Skill',
+            hideOnMobile: true,
+            sortValue: (m) => m.skillLevel,
+            render: (m) => <SkillMeter level={m.skillLevel} showLabel={false} />,
+          },
+          {
+            key: 'login',
+            header: 'Login',
+            hideOnMobile: true,
+            sortValue: (m) => (m.userId ? 1 : 0),
+            render: (m) =>
+              m.userId ? (
+                <Badge tone="success" icon={<FiCheckCircle />}>Linked</Badge>
               ) : (
-                <>
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                      Email <span className="text-xs text-black/60 font-normal">(from Product Hub)</span>
-                    </label>
-                    <select
-                      value={formData.email}
-                      onChange={(e) => handleProductHubUserSelect(e.target.value)}
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                      required
-                    >
-                      <option value="">Select a user...</option>
-                      {productHubUsers
-                        .filter(
-                          (u) =>
-                            !members.some(
-                              (m) => m.email === u.email || (m.userId && m.userId === u.userId)
-                            )
-                        )
-                        .map((u) => (
-                          <option key={u.userId} value={u.email}>
-                            {u.fullName} ({u.email})
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                      First Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.firstName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, firstName: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.lastName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, lastName: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                      required
-                    />
-                  </div>
-                </>
-              )}
-              {/* Team - Show only in edit mode, read-only */}
-              {isEditMode && selectedMember && (
-                <div className="mb-4">
-                  <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                    Team <span className="text-xs text-black/60 font-normal">(Change team from Teams page)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedMember.teamName || 'Unassigned'}
-                    disabled
-                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm bg-gray-50 text-sm font-sans cursor-not-allowed"
-                  />
-                </div>
-              )}
-              {isEditMode && (
-                <div className="mb-4">
-                  <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                    Role
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.role}
-                    onChange={(e) =>
-                      setFormData({ ...formData, role: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                    required
-                  />
-                </div>
-              )}
-              <div className="mb-4">
-                <label className="block text-black text-sm font-semibold mb-2 font-sans">
-                  Skill Level
-                </label>
-                <select
-                  value={formData.skillLevel}
-                  onChange={(e) =>
-                    setFormData({ ...formData, skillLevel: parseInt(e.target.value) })
-                  }
-                  className="w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans"
-                  required
-                >
-                  <option value={1}>1 - Beginner</option>
-                  <option value={2}>2 - Junior</option>
-                  <option value={3}>3 - Intermediate</option>
-                  <option value={4}>4 - Advanced</option>
-                  <option value={5}>5 - Expert</option>
-                </select>
-                <p className="text-xs text-black/60 mt-1 font-sans">
-                  Skill level (1-5) used for workload calculations
-                </p>
+                <Badge tone="warning" icon={<FiAlertTriangle />}>Not linked</Badge>
+              ),
+          },
+          {
+            key: 'actions',
+            header: 'Actions',
+            align: 'right',
+            width: '132px',
+            render: (m) => (
+              <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                <IconButton size="sm" label="View Details" icon={<FiEye />} onClick={() => navigate(`/members/${m.memberId}`)} />
+                <IconButton size="sm" label={`Edit ${m.firstName}`} icon={<FiEdit2 />} onClick={() => handleOpenModal(m)} />
+                <IconButton size="sm" tone="danger" label={`Delete ${m.firstName}`} icon={<FiTrash2 />} onClick={() => setMemberToDelete(m)} />
               </div>
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-                >
-                  {isEditMode ? 'Update' : 'Create'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            ),
+          },
+        ]}
+      />
 
-      {memberToDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
-            <h2 className="text-xl font-semibold mb-2 text-black font-sans">Delete member</h2>
-            <p className="text-black/70 text-sm font-sans mb-6">
-              Are you sure you want to delete {memberToDelete.firstName} {memberToDelete.lastName}?
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setMemberToDelete(null)}
-                disabled={deleting}
-                className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans disabled:opacity-60"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDeleteMember(memberToDelete)}
-                disabled={deleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-azure-sm hover:bg-red-700 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-60"
-              >
-                {deleting ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
+      <Modal
+        isOpen={isModalOpen}
+        title={isEditMode ? 'Edit Member' : 'Create Member'}
+        icon={<FiUser />}
+        onClose={handleCloseModal}
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleCloseModal} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" form="member-form" loading={saving}>
+              {isEditMode ? 'Update' : 'Create'}
+            </Button>
+          </>
+        }
+      >
+        <form id="member-form" onSubmit={handleSubmit} className="space-y-4">
+          {isEditMode ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field htmlFor="member-first" label="First Name" required>
+                  <input id="member-first" type="text" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className={inputClass} required />
+                </Field>
+                <Field htmlFor="member-last" label="Last Name" required>
+                  <input id="member-last" type="text" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className={inputClass} required />
+                </Field>
+              </div>
+              <Field htmlFor="member-email" label="Email">
+                <input id="member-email" type="email" value={formData.email} readOnly className={readOnlyInputClass} />
+              </Field>
+              <Field htmlFor="member-login" label="Linked Login" hint="(required to see assigned work)">
+                {selectedMember?.userId ? (
+                  <input id="member-login" type="text" value={selectedMember.userId} readOnly className={`${readOnlyInputClass} font-mono text-meta`} />
+                ) : (
+                  <select id="member-login" value={selectedProductHubUser?.email ?? ''} onChange={(e) => handleLinkLogin(e.target.value)} className={inputClass}>
+                    <option value="">Not linked — select a user to link…</option>
+                    {productHubUsers
+                      .filter((u) => !members.some((m) => m.userId && m.userId === u.userId))
+                      .map((u) => (
+                        <option key={u.userId} value={u.email}>
+                          {u.fullName} ({u.email})
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </Field>
+              {selectedMember && (
+                <Field htmlFor="member-team" label="Team" hint="(change it from the Teams page)">
+                  <input id="member-team" type="text" value={selectedMember.teamName || 'Unassigned'} disabled className={readOnlyInputClass} />
+                </Field>
+              )}
+            </>
+          ) : (
+            <>
+              <Field htmlFor="member-new-login" label="Email" hint="(from Product Hub)" required>
+                <select id="member-new-login" value={formData.email} onChange={(e) => handleProductHubUserSelect(e.target.value)} className={inputClass} required>
+                  <option value="">Select a user…</option>
+                  {productHubUsers
+                    .filter((u) => !members.some((m) => m.email === u.email || (m.userId && m.userId === u.userId)))
+                    .map((u) => (
+                      <option key={u.userId} value={u.email}>
+                        {u.fullName} ({u.email})
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field htmlFor="member-new-first" label="First Name" required>
+                  <input id="member-new-first" type="text" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className={inputClass} required />
+                </Field>
+                <Field htmlFor="member-new-last" label="Last Name" required>
+                  <input id="member-new-last" type="text" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className={inputClass} required />
+                </Field>
+              </div>
+            </>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field htmlFor="member-role" label="Role" help="Taken from the user's role. Change it where roles are assigned, not here.">
+              <input id="member-role" type="text" value={formData.role || '—'} readOnly className={readOnlyInputClass} />
+            </Field>
+            <Field htmlFor="member-skill" label="Skill Level" required help="Used in workload calculations.">
+              <select id="member-skill" value={formData.skillLevel} onChange={(e) => setFormData({ ...formData, skillLevel: parseInt(e.target.value) })} className={inputClass} required>
+                {SKILL_LABELS.map((label, i) => (
+                  <option key={label} value={i + 1}>
+                    {i + 1} — {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={Boolean(memberToDelete)}
+        title="Delete member"
+        body={
+          <>
+            Delete <span className="font-medium text-ink">{memberToDelete?.firstName} {memberToDelete?.lastName}</span>? Work can no
+            longer be assigned to them.
+          </>
+        }
+        confirmLabel="Delete member"
+        busy={deleting}
+        onCancel={() => setMemberToDelete(null)}
+        onConfirm={() => memberToDelete && handleDeleteMember(memberToDelete)}
+      />
     </div>
   );
 };
 
 export default Members;
-
-
-

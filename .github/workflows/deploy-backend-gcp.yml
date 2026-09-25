@@ -100,7 +100,7 @@ jobs:
           base="ASPNETCORE_FORWARDEDHEADERS_ENABLED=true,EVENTBUS_PROVIDER=GCP,EventBus__GCP__ProjectId=${GCP_PROJECT},EventBus__GCP__ServicePrefix=task-manager,EventBus__GCP__SchedulerLocation=${GCP_REGION},EventBus__GCP__TasksQueueId=task-manager-schedules,EventBus__GCP__ServiceAccountEmail=${RUNTIME_SA},DB_HOST=ep-spring-field-a15ak7se-pooler.ap-southeast-1.aws.neon.tech,DB_PORT=5432,DB_USER=neondb_owner,Cors__AllowedOrigin=http://localhost:3000"
 
           deploy() {
-            local name="$1" db="$2" min="$3" extra="${4:-}"
+            local name="$1" db="$2" min="$3" extra="${4:-}" secrets="${5:-}"
             local args=(
               run deploy "$name"
               --project "$GCP_PROJECT"
@@ -111,7 +111,7 @@ jobs:
               --allow-unauthenticated
               --memory 512Mi
               --min-instances "$min"
-              --set-secrets "DB_PASSWORD=neon-db-password:latest"
+              --set-secrets "DB_PASSWORD=neon-db-password:latest${secrets}"
               --set-env-vars "${base},DB_NAME=${db}${extra}"
               --quiet
             )
@@ -128,7 +128,7 @@ jobs:
           deploy sla-manager-service WorkflowManagement 1
           deploy workload-service WorkflowManagement 1
           deploy workflow-service WorkflowManagement 1 ",TaskServiceApi__BaseUrl=${task}/api"
-          deploy task-service TaskService 1 ",WorkflowManagementApi__BaseUrl=${wm}/api"
+          deploy task-service TaskService 1 ",WorkflowManagementApi__BaseUrl=${wm}/api" ",Gmail__ClientId=gmail-client-id:latest,Gmail__ClientSecret=gmail-client-secret:latest,Gmail__WatchKey=gmail-watch-key:latest"
 
           gcloud run deploy api-gateway \
             --project "$GCP_PROJECT" \

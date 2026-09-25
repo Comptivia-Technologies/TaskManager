@@ -21,3 +21,12 @@ export const hasPermission = (permissions: string[] | null, code: string) =>
 
 export const hasAnyPermission = (permissions: string[] | null, codes: string[]) =>
   permissions === null || codes.some((code) => permissions.includes(code));
+
+// Teams that oversee the whole process rather than working a stage of it. Only
+// these see every enquiry; everyone else sees the work assigned to them. Keyed by
+// team name for the same reason the stage forms are — teams are created per
+// organisation, so there is no fixed id to match on.
+export const OVERSIGHT_TEAMS = ['management', 'senior management'];
+
+export const isOversightTeam = (teamName?: string) =>
+  Boolean(teamName && OVERSIGHT_TEAMS.includes(teamName.trim().toLowerCase()));

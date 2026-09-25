@@ -75,3 +75,21 @@ Object.defineProperty(window, 'location', {
   },
   writable: true,
 });
+
+
+// jsdom does not implement matchMedia, which both the responsive dialog and Framer
+// Motion's reduced-motion check rely on. Defaults to "no match", i.e. a desktop
+// viewport with no motion preference set.
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
+});

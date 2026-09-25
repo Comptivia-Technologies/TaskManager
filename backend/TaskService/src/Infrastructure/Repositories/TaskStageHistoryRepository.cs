@@ -46,6 +46,14 @@ public class TaskStageHistoryRepository : ITaskStageHistoryRepository
             .FirstOrDefaultAsync();
     }
 
+    public async System.Threading.Tasks.Task<IReadOnlyList<TaskStageHistory>> GetAssignmentsAsync(Guid taskId)
+    {
+        return await _context.TaskStageHistories
+            .Where(h => h.TaskId == taskId && h.Action == TaskStageHistory.Assigned)
+            .OrderByDescending(h => h.Sequence)
+            .ToListAsync();
+    }
+
     private async System.Threading.Tasks.Task AppendOnceAsync(TaskStageHistory entry)
     {
         var exists = await _context.TaskStageHistories

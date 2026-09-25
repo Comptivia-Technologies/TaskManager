@@ -48,10 +48,10 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Tasks')).not.toBeInTheDocument();
   });
 
-  it('always shows Enquiry', () => {
+  it('always shows Enquiries', () => {
     mockPermissions = [];
     renderSidebar();
-    expect(screen.getByText('Enquiry')).toBeInTheDocument();
+    expect(screen.getByText('Enquiries')).toBeInTheDocument();
   });
 
   it('hides admin areas when the role grants no permissions', () => {

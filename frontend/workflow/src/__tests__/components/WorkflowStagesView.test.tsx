@@ -13,28 +13,27 @@ jest.mock('react-icons/fi', () => {
 });
 
 describe('WorkflowStagesView', () => {
-  it('renders overview and stages count', () => {
-    jest.useFakeTimers();
-    const workflow: any = {
-      workflowId: 'w1',
-      workflowName: 'WF',
-      description: '',
-      createdAt: new Date().toISOString(),
-      stages: [
-        { stageId: 's1', stageName: 'A', stageOrder: 2, teamId: 't1', teamName: 'Team 1', createdAt: '', updatedAt: '' },
-        { stageId: 's2', stageName: 'B', stageOrder: 1, teamId: 't1', teamName: 'Team 1', createdAt: '', updatedAt: '' },
-      ],
-    };
+  const workflow: any = {
+    workflowId: 'w1',
+    workflowName: 'WF',
+    description: '',
+    createdAt: new Date().toISOString(),
+    stages: [
+      { stageId: 's1', stageName: 'A', stageOrder: 2, teamId: 't1', teamName: 'Team 1', createdAt: '', updatedAt: '' },
+      { stageId: 's2', stageName: 'B', stageOrder: 1, teamId: 't1', teamName: 'Team 1', createdAt: '', updatedAt: '' },
+    ],
+  };
 
-    const { unmount } = render(<WorkflowStagesView workflow={workflow} />);
-    expect(screen.getByText('Workflow Overview')).toBeInTheDocument();
+  it('lists every stage in order with its totals', () => {
+    render(<WorkflowStagesView workflow={workflow} />);
     expect(screen.getByText('Total Stages')).toBeInTheDocument();
-    expect(screen.getByText('A')).toBeInTheDocument();
-    expect(screen.getByText('B')).toBeInTheDocument();
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual(['B', 'A']);
+  });
 
-    jest.runOnlyPendingTimers();
-    unmount();
-    jest.useRealTimers();
+  it('says where each stage hands over to', () => {
+    render(<WorkflowStagesView workflow={workflow} />);
+    // B is first, so it hands over to A; A is last and hands over to nothing.
+    expect(screen.getAllByText('A').length).toBeGreaterThan(1);
   });
 });
-

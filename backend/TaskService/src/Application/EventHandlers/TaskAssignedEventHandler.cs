@@ -231,31 +231,17 @@ public class TaskAssignedEventHandler
             }
             // Removed: Map Assigned to Pending - WorkloadService handles both statuses
 
-            // First, check if task already exists in WorkflowManagement.API
-            var searchResponse = await GetWithOrgHeaderAsync(
-                $"{workflowManagementApiUrl}/tasks/workflow/{task.WorkflowId.Value}",
-                task.OrganizationId);
+            // Both sides share the TaskId, which is preserved when the row is first
+            // created below, so the copy is found by id. Matching on TaskName meant
+            // two enquiries with the same name updated each other.
+            var existingWorkflowTask = await FindWorkflowTaskAsync(
+                workflowManagementApiUrl, task.TaskId, task.OrganizationId);
 
-            WorkflowTaskInfo? existingWorkflowTask = null;
-            if (searchResponse.IsSuccessStatusCode)
+            if (existingWorkflowTask != null)
             {
-                var tasksJson = await searchResponse.Content.ReadAsStringAsync();
-                var tasks = System.Text.Json.JsonSerializer.Deserialize<List<WorkflowTaskInfo>>(tasksJson, new System.Text.Json.JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                // Find existing task by name (or description containing TaskId)
-                existingWorkflowTask = tasks?.FirstOrDefault(t => 
-                    t.TaskName == task.TaskName || 
-                    (t.Description != null && t.Description.Contains(task.TaskId.ToString())));
-
-                if (existingWorkflowTask != null)
-                {
-                    _logger.LogInformation(
-                        "Found existing task in WorkflowManagement.API. TaskId: {TaskId}, WorkflowTaskId: {WorkflowTaskId}, CurrentAssignedMemberId: {CurrentMemberId}",
-                        task.TaskId, existingWorkflowTask.TaskId, existingWorkflowTask.AssignedToMemberId);
-                }
+                _logger.LogInformation(
+                    "Found existing task in WorkflowManagement.API. TaskId: {TaskId}, CurrentAssignedMemberId: {CurrentMemberId}",
+                    task.TaskId, existingWorkflowTask.AssignedToMemberId);
             }
 
             if (existingWorkflowTask != null)
@@ -419,6 +405,31 @@ public class TaskAssignedEventHandler
                 "Error syncing task to WorkflowManagement.API. TaskId: {TaskId}",
                 task.TaskId);
         }
+    }
+
+    /// <summary>
+    /// The WorkflowManagement copy of this task, or null if it has not been created
+    /// yet. Looked up by id: both sides use the same TaskId.
+    /// </summary>
+    private async System.Threading.Tasks.Task<WorkflowTaskInfo?> FindWorkflowTaskAsync(
+        string workflowManagementApiUrl, Guid taskId, Guid organizationId)
+    {
+        var response = await GetWithOrgHeaderAsync($"{workflowManagementApiUrl}/tasks/{taskId}", organizationId);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "Could not read task {TaskId} from WorkflowManagement.API. StatusCode: {StatusCode}",
+                taskId, response.StatusCode);
+            return null;
+        }
+
+        var json = await response.Content.ReadAsStringAsync();
+        return System.Text.Json.JsonSerializer.Deserialize<WorkflowTaskInfo>(json,
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
     }
 
     private async System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> GetWithOrgHeaderAsync(string url, Guid organizationId)

@@ -1,3 +1,13 @@
+import {
+  BRAND,
+  INK_MUTED,
+  LINE_STRONG,
+  SUCCESS,
+  SUCCESS_STRONG,
+  SURFACE_MUTED,
+  WARNING,
+  WHITE,
+} from '../utils/theme';
 import { useId, useMemo } from 'react';
 import { TaskStageHistory } from '../types';
 
@@ -151,8 +161,7 @@ interface TaskHistoryGraphProps {
   stages?: StageGraphSource[];
 }
 
-const BRAND = '#434E78';
-const RETURNED = '#ea580c';
+const RETURNED = WARNING;
 const GLOW = 20;
 
 const TaskHistoryGraph = ({ history, currentStageId, stages }: TaskHistoryGraphProps) => {
@@ -180,7 +189,7 @@ const TaskHistoryGraph = ({ history, currentStageId, stages }: TaskHistoryGraphP
   const shadowId = `node-shadow-${markerScope}`;
 
   return (
-    <section className="mb-4 rounded-azure-sm border border-[#434E78]/20 bg-gradient-to-b from-[#434E78]/10 to-white px-4 py-3" aria-label="Stage progression">
+    <section aria-label="Route taken">
       <style>{`
         @keyframes stage-ping {
           0% { transform: scale(1); opacity: 0.75; }
@@ -193,19 +202,19 @@ const TaskHistoryGraph = ({ history, currentStageId, stages }: TaskHistoryGraphP
         }
       `}</style>
       <div className="flex items-center justify-between gap-3 mb-3">
-        <h3 className="text-sm font-semibold text-black font-sans">Stage progression</h3>
-        <div className="flex items-center gap-3 text-xs text-black/60 font-sans">
+        <h3 className="text-body font-semibold text-ink">Route taken, including returns</h3>
+        <div className="flex items-center gap-3 text-meta text-ink-subtle">
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-5 border-t-2 border-[#434E78]" />
+            <span className="inline-block w-5 border-t-2 border-primary" />
             Forward
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-5 border-t-2 border-orange-600" />
+            <span className="inline-block w-5 border-t-2 border-warning" />
             Returned
           </span>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto scrollbar-thin">
         <svg
           role="img"
           aria-label={pathLabel(nodes, edges)}
@@ -281,10 +290,10 @@ const TaskHistoryGraph = ({ history, currentStageId, stages }: TaskHistoryGraphP
             const status = node.id === activeId ? 'current' : activeNode && node.order < activeNode.order ? 'completed' : 'upcoming';
             const orderLabel = node.order > 0 && node.order < Number.MAX_SAFE_INTEGER ? String(node.order) : String(index + 1);
             const x = xAt(index);
-            const fill = status === 'current' ? BRAND : status === 'completed' ? '#059669' : '#f8f9fb';
-            const stroke = status === 'upcoming' ? '#d1d5db' : '#ffffff';
-            const numberFill = status === 'upcoming' ? '#6b7280' : '#ffffff';
-            const nameFill = status === 'current' ? BRAND : status === 'completed' ? '#047857' : '#6b7280';
+            const fill = status === 'current' ? BRAND : status === 'completed' ? SUCCESS_STRONG : SURFACE_MUTED;
+            const stroke = status === 'upcoming' ? LINE_STRONG : WHITE;
+            const numberFill = status === 'upcoming' ? INK_MUTED : WHITE;
+            const nameFill = status === 'current' ? BRAND : status === 'completed' ? SUCCESS : INK_MUTED;
             return (
               <g key={node.id} data-current={status === 'current' ? 'true' : 'false'} data-status={status}>
                 <title>{node.name}</title>
@@ -296,7 +305,7 @@ const TaskHistoryGraph = ({ history, currentStageId, stages }: TaskHistoryGraphP
                   cy={centerY}
                   r={RADIUS}
                   fill={fill}
-                  stroke={status === 'completed' ? '#059669' : stroke}
+                  stroke={status === 'completed' ? SUCCESS_STRONG : stroke}
                   strokeWidth={status === 'current' ? 3 : 2}
                   filter={status === 'upcoming' ? undefined : `url(#${shadowId})`}
                 />
@@ -320,7 +329,7 @@ const TaskHistoryGraph = ({ history, currentStageId, stages }: TaskHistoryGraphP
                   fontSize="11"
                   fontWeight="600"
                   fontFamily="inherit"
-                  stroke="#ffffff"
+                  stroke={WHITE}
                   strokeWidth="4"
                   paintOrder="stroke"
                 >

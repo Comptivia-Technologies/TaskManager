@@ -1,28 +1,28 @@
-import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FiLayers, FiUsers, FiUser, FiUserCheck, FiClock, FiActivity, FiSettings, FiLogOut, FiChevronDown, FiChevronRight, FiInbox } from 'react-icons/fi';
+import { FiCommand, FiLogOut, FiSearch } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
-import { PERMISSIONS, hasPermission } from '../utils/roleUtils';
+import { hasPermission } from '../utils/roleUtils';
+import { NAV_GROUPS, visibleDestinations } from '../utils/navigation';
+import BrandMark from './BrandMark';
+import Avatar from './Avatar';
 
-type MenuLink = { path: string; label: string; icon: React.ComponentType<{ className?: string }> };
-type MenuGroup = {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children: { path: string; label: string }[];
-};
-type MenuItem = MenuLink | MenuGroup;
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
-const isGroup = (item: MenuItem): item is MenuGroup => 'children' in item;
+interface SidebarProps {
+  /** Opens the command palette. Omitted where there is no palette to open. */
+  onSearch?: () => void;
+}
 
-const Sidebar = () => {
+/**
+ * The navigation shell: product mark, search, the areas this role can reach —
+ * grouped by what a person is doing there — and who is signed in.
+ */
+const Sidebar = ({ onSearch }: SidebarProps) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut, user, permissions } = useAuth();
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+  const { signOut, user, permissions, currentMember } = useAuth();
 
-  const isActive = (path: string) => {
-    return location.pathname === path || location.pathname.startsWith(`${path}/`);
-  };
+  const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
   const handleSignOut = async () => {
     try {
@@ -33,133 +33,103 @@ const Sidebar = () => {
     }
   };
 
-  const userManagementChildren = [
-    { path: '/users', label: 'Users', permission: PERMISSIONS.usersView },
-    { path: '/roles-permissions', label: 'Roles & Permissions', permission: PERMISSIONS.rolesView },
-  ].filter((child) => hasPermission(permissions, child.permission));
-
-  const menuItems: MenuItem[] = [
-    { path: '/enquiry', label: 'Enquiry', icon: FiInbox },
-    ...([
-      { path: '/workflows', label: 'Workflows', icon: FiLayers, permission: PERMISSIONS.workflowsView },
-      { path: '/teams', label: 'Teams', icon: FiUsers, permission: PERMISSIONS.teamsView },
-      { path: '/members', label: 'Members', icon: FiUser, permission: PERMISSIONS.membersView },
-      { path: '/sla-configuration', label: 'SLA Configuration', icon: FiClock, permission: PERMISSIONS.slaView },
-      { path: '/workload-configuration', label: 'Workload Configuration', icon: FiActivity, permission: PERMISSIONS.workloadView },
-      { path: '/priority-rules', label: 'Priority Rules', icon: FiSettings, permission: PERMISSIONS.priorityRulesView },
-    ]
-      .filter((item) => hasPermission(permissions, item.permission))
-      .map(({ permission, ...item }) => item) as MenuItem[]),
-    ...(userManagementChildren.length > 0
-      ? [{
-          label: 'User Management',
-          icon: FiUserCheck,
-          children: userManagementChildren.map(({ permission, ...child }) => child),
-        } as MenuItem]
-      : []),
-  ];
+  const destinations = visibleDestinations(permissions, hasPermission);
+  const displayName = currentMember
+    ? `${currentMember.firstName} ${currentMember.lastName}`.trim()
+    : user?.email ?? '';
+  // Without a linked member the email is already the name line, so nothing goes under it.
+  const secondary = currentMember ? currentMember.teamName || currentMember.role : undefined;
 
   return (
-    <div className="fixed left-0 top-0 h-full w-64 bg-[#434E78] text-white shadow-azure-lg z-40 flex flex-col">
-      <div className="p-6 border-b border-white/20">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white/20 rounded-azure-sm flex items-center justify-center">
-            <FiLayers className="text-xl text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-white leading-tight">Workflow</h1>
-            <p className="text-xs text-white/80 leading-tight">Management</p>
-          </div>
+    <div className="h-full w-64 bg-shell text-shell-text flex flex-col">
+      <div className="h-16 px-5 flex items-center gap-3 shrink-0">
+        <BrandMark size={30} />
+        <div className="leading-tight min-w-0">
+          <p className="text-[15px] font-semibold text-white tracking-tight">Workflow</p>
+          <p className="text-meta text-shell-muted">Management</p>
         </div>
       </div>
-      <nav className="mt-2 px-2 py-4 flex-1">
-        {menuItems.map((item) => {
-          if (isGroup(item)) {
-            const Icon = item.icon;
-            const isExpanded = expandedGroup === item.label;
-            const hasActiveChild = item.children.some((c) => isActive(c.path));
-            return (
-              <div key={item.label} className="mb-1">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandedGroup(isExpanded ? null : item.label)
-                  }
-                  className={`w-full flex items-center px-4 py-3 rounded-azure-sm transition-all duration-150 text-left ${
-                    hasActiveChild
-                      ? 'bg-white/20 text-white shadow-azure-sm'
-                      : 'text-white/80 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <Icon className={`mr-3 text-lg ${hasActiveChild ? 'text-white' : 'text-white/70'}`} />
-                  <span className="font-medium text-sm flex-1">{item.label}</span>
-                  {isExpanded ? (
-                    <FiChevronDown className="text-lg text-white/70" />
-                  ) : (
-                    <FiChevronRight className="text-lg text-white/70" />
-                  )}
-                </button>
-                {isExpanded && (
-                  <div className="ml-4 mt-1 pl-4 border-l border-white/20 space-y-0.5">
-                    {item.children.map((child) => {
-                      const active = isActive(child.path);
-                      return (
-                        <Link
-                          key={child.path}
-                          to={child.path}
-                          className={`flex items-center px-3 py-2 rounded-azure-sm transition-all duration-150 text-sm ${
-                            active
-                              ? 'bg-white/20 text-white'
-                              : 'text-white/80 hover:bg-white/10 hover:text-white'
-                          }`}
-                        >
-                          <span className="font-medium">{child.label}</span>
-                          {active && (
-                            <div className="ml-auto w-1 h-4 bg-white rounded-full" />
-                          )}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
-          const Icon = item.icon;
-          const active = isActive(item.path);
+
+      {onSearch && (
+        <div className="px-3 pb-2">
+          <button
+            type="button"
+            onClick={onSearch}
+            className="w-full h-9 flex items-center gap-2.5 px-3 rounded-control bg-white/[0.06] ring-1 ring-inset ring-white/[0.08]
+              text-shell-muted hover:text-white hover:bg-white/[0.09] cursor-pointer text-body"
+          >
+            <FiSearch aria-hidden="true" className="shrink-0" />
+            <span className="flex-1 text-left">Search</span>
+            <kbd className="font-mono text-[11px] text-shell-muted bg-white/[0.06] px-1.5 py-0.5 rounded inline-flex items-center gap-0.5">
+              {isMac ? <FiCommand aria-hidden="true" /> : 'Ctrl'} K
+            </kbd>
+          </button>
+        </div>
+      )}
+
+      <nav aria-label="Main" className="flex-1 overflow-y-auto scrollbar-none px-3 pb-4">
+        {NAV_GROUPS.map((group) => {
+          const items = destinations.filter((d) => d.group === group);
+          if (items.length === 0) return null;
           return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center px-4 py-3 mb-1 rounded-azure-sm transition-all duration-150 ${
-                active
-                  ? 'bg-white/20 text-white shadow-azure-sm'
-                  : 'text-white/80 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <Icon className={`mr-3 text-lg ${active ? 'text-white' : 'text-white/70'}`} />
-              <span className="font-medium text-sm">{item.label}</span>
-              {active && (
-                <div className="ml-auto w-1 h-6 bg-white rounded-full"></div>
+            <div key={group} className="mt-4 first:mt-2">
+              {/* "Work" is the whole of it for most people, so it goes unlabelled. */}
+              {group !== 'Work' && (
+                <p className="px-3 mb-1 text-label font-semibold uppercase text-shell-muted/80">{group}</p>
               )}
-            </Link>
+              <ul className="space-y-0.5">
+                {items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.path);
+                  return (
+                    <li key={item.path}>
+                      <Link
+                        to={item.path}
+                        aria-current={active ? 'page' : undefined}
+                        className={`relative flex items-center gap-3 h-9 px-3 rounded-control text-body font-medium ${
+                          active
+                            ? 'bg-white/[0.10] text-white'
+                            : 'text-shell-text hover:bg-white/[0.05] hover:text-white'
+                        }`}
+                      >
+                        {active && (
+                          <span aria-hidden="true" className="absolute -left-3 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-[#8FE3B8]" />
+                        )}
+                        <Icon aria-hidden="true" className={`text-[17px] shrink-0 ${active ? 'text-white' : 'text-shell-muted'}`} />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           );
         })}
       </nav>
-      <div className="border-t border-white/20 p-4">
-        {user && (
-          <button
-            onClick={handleSignOut}
-            className="w-full flex items-center px-4 py-3 rounded-azure-sm transition-all duration-150 text-white/80 hover:bg-white/10 hover:text-white"
-          >
-            <FiLogOut className="mr-3 text-lg text-white/70" />
-            <span className="font-medium text-sm">Sign Out</span>
-          </button>
-        )}
-      </div>
+
+      {user && (
+        <div className="border-t border-shell-line p-3">
+          <div className="flex items-center gap-3 px-2 py-1.5">
+            <Avatar name={displayName} size="md" onDark />
+            <div className="min-w-0 flex-1 leading-tight">
+              <p className="text-body font-medium text-white truncate">{displayName}</p>
+              {secondary && <p className="text-meta text-shell-muted truncate">{secondary}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              aria-label="Sign out"
+              title="Sign out"
+              className="h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-control text-shell-muted
+                hover:text-white hover:bg-white/[0.08] cursor-pointer"
+            >
+              <FiLogOut aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default Sidebar;
-

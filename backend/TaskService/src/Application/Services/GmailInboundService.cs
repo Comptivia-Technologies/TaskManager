@@ -46,29 +46,31 @@ public class GmailInboundService : IGmailInboundService
         var json = Encoding.UTF8.GetString(Convert.FromBase64String(PadBase64(data.Replace('-', '+').Replace('_', '/'))));
         using var notice = JsonDocument.Parse(json);
         var historyId = notice.RootElement.GetProperty("historyId").ToString();
+        var email = notice.RootElement.TryGetProperty("emailAddress", out var emailProp)
+            ? emailProp.GetString()
+            : null;
 
-        var accessToken = await GetAccessTokenAsync();
-        var state = await _db.GmailWatchStates.FirstOrDefaultAsync(s => s.Id == 1);
-        var messageIds = state == null
+        var mailbox = string.IsNullOrWhiteSpace(email)
+            ? null
+            : await _db.GmailMailboxes.FirstOrDefaultAsync(m => m.Email.ToLower() == email.ToLower());
+
+        if (mailbox == null)
+        {
+            _logger.LogWarning("No connected mailbox for Gmail notification {Email}", email);
+            return;
+        }
+
+        var accessToken = await GetAccessTokenAsync(mailbox.RefreshToken);
+        var messageIds = string.IsNullOrEmpty(mailbox.HistoryId)
             ? await ListUnreadAsync(accessToken)
-            : await ListAddedSinceAsync(accessToken, state.HistoryId);
+            : await ListAddedSinceAsync(accessToken, mailbox.HistoryId);
 
         foreach (var messageId in messageIds.Distinct())
         {
             if (await _db.GmailIngestedMessages.AnyAsync(m => m.MessageId == messageId))
                 continue;
 
-            Guid? taskId = null;
-            try
-            {
-                taskId = await CreateFromMessageAsync(accessToken, messageId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to create a task from Gmail message {MessageId}", messageId);
-                throw;
-            }
-
+            var taskId = await CreateFromMessageAsync(accessToken, messageId, mailbox.OrganizationId);
             _db.GmailIngestedMessages.Add(new GmailIngestedMessage
             {
                 MessageId = messageId,
@@ -78,21 +80,81 @@ public class GmailInboundService : IGmailInboundService
             await _db.SaveChangesAsync();
         }
 
-        if (state == null)
+        mailbox.HistoryId = historyId;
+        await _db.SaveChangesAsync();
+    }
+
+    public string BuildAuthorizeUrl(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ClientId) || string.IsNullOrWhiteSpace(_options.OAuthRedirectUri))
+            throw new InvalidOperationException("Gmail OAuth client id and redirect URI are required.");
+
+        var query = new Dictionary<string, string>
         {
-            _db.GmailWatchStates.Add(new GmailWatchState
+            ["client_id"] = _options.ClientId,
+            ["redirect_uri"] = _options.OAuthRedirectUri,
+            ["response_type"] = "code",
+            ["scope"] = "https://www.googleapis.com/auth/gmail.readonly",
+            ["access_type"] = "offline",
+            ["prompt"] = "consent",
+            ["state"] = "gmail"
+        };
+        if (!string.IsNullOrWhiteSpace(email))
+            query["login_hint"] = email.Trim();
+        return "https://accounts.google.com/o/oauth2/v2/auth?" + string.Join("&",
+            query.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+    }
+
+    public async System.Threading.Tasks.Task<IReadOnlyList<GmailMailboxSummary>> ListMailboxesAsync(Guid organizationId)
+    {
+        return await _db.GmailMailboxes
+            .Where(m => m.OrganizationId == organizationId)
+            .OrderBy(m => m.Email)
+            .Select(m => new GmailMailboxSummary(m.MailboxId, m.Email, m.ConnectedAt))
+            .ToListAsync();
+    }
+
+    public async System.Threading.Tasks.Task<GmailMailboxSummary> ConnectAsync(string code, Guid organizationId)
+    {
+        if (organizationId == Guid.Empty)
+            organizationId = _options.OrganizationId;
+        if (organizationId == Guid.Empty)
+            throw new UnauthorizedAccessException("Organization context required.");
+
+        var refreshToken = await ExchangeCodeAsync(code);
+        var accessToken = await GetAccessTokenAsync(refreshToken);
+        var email = await GetProfileEmailAsync(accessToken);
+        var mailbox = await _db.GmailMailboxes.FirstOrDefaultAsync(m => m.Email.ToLower() == email.ToLower());
+        if (mailbox == null)
+        {
+            mailbox = new GmailMailbox
             {
-                Id = 1,
-                HistoryId = historyId,
-                UpdatedAt = DateTime.UtcNow
-            });
+                OrganizationId = organizationId,
+                Email = email,
+                RefreshToken = refreshToken,
+                ConnectedAt = DateTime.UtcNow
+            };
+            _db.GmailMailboxes.Add(mailbox);
         }
         else
         {
-            state.HistoryId = historyId;
-            state.UpdatedAt = DateTime.UtcNow;
+            mailbox.OrganizationId = organizationId;
+            mailbox.RefreshToken = refreshToken;
+            mailbox.ConnectedAt = DateTime.UtcNow;
         }
 
+        mailbox.HistoryId = await StartWatchAsync(accessToken);
+        await _db.SaveChangesAsync();
+        return new GmailMailboxSummary(mailbox.MailboxId, mailbox.Email, mailbox.ConnectedAt);
+    }
+
+    public async System.Threading.Tasks.Task DisconnectAsync(Guid mailboxId, Guid organizationId)
+    {
+        var mailbox = await _db.GmailMailboxes.FirstOrDefaultAsync(m =>
+            m.MailboxId == mailboxId && m.OrganizationId == organizationId);
+        if (mailbox == null)
+            return;
+        _db.GmailMailboxes.Remove(mailbox);
         await _db.SaveChangesAsync();
     }
 
@@ -103,42 +165,18 @@ public class GmailInboundService : IGmailInboundService
         if (string.IsNullOrWhiteSpace(_options.PubSubTopic))
             throw new InvalidOperationException("Gmail:PubSubTopic is required.");
 
-        var accessToken = await GetAccessTokenAsync();
-        var client = _httpClientFactory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        var body = JsonSerializer.Serialize(new
+        var mailboxes = await _db.GmailMailboxes.ToListAsync();
+        foreach (var mailbox in mailboxes)
         {
-            topicName = _options.PubSubTopic,
-            labelIds = new[] { "INBOX" }
-        });
-        var response = await client.PostAsync(
-            "https://gmail.googleapis.com/gmail/v1/users/me/watch",
-            new StringContent(body, Encoding.UTF8, "application/json"));
-        response.EnsureSuccessStatusCode();
-
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var historyId = doc.RootElement.GetProperty("historyId").ToString();
-        var state = await _db.GmailWatchStates.FirstOrDefaultAsync(s => s.Id == 1);
-        if (state == null)
-        {
-            _db.GmailWatchStates.Add(new GmailWatchState
-            {
-                Id = 1,
-                HistoryId = historyId,
-                UpdatedAt = DateTime.UtcNow
-            });
-        }
-        else if (string.IsNullOrEmpty(state.HistoryId))
-        {
-            state.HistoryId = historyId;
-            state.UpdatedAt = DateTime.UtcNow;
+            var accessToken = await GetAccessTokenAsync(mailbox.RefreshToken);
+            mailbox.HistoryId = await StartWatchAsync(accessToken);
         }
 
         await _db.SaveChangesAsync();
-        _logger.LogInformation("Gmail watch renewed. HistoryId: {HistoryId}", historyId);
+        _logger.LogInformation("Gmail watch renewed for {Count} mailboxes", mailboxes.Count);
     }
 
-    private async System.Threading.Tasks.Task<Guid> CreateFromMessageAsync(string accessToken, string messageId)
+    private async System.Threading.Tasks.Task<Guid> CreateFromMessageAsync(string accessToken, string messageId, Guid organizationId)
     {
         var client = _httpClientFactory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -165,12 +203,64 @@ public class GmailInboundService : IGmailInboundService
             Description = plain,
             TaskType = string.Empty,
             TaskData = taskData
-        }, _options.OrganizationId);
+        }, organizationId);
 
         _logger.LogInformation(
             "Created task {TaskId} from Gmail message {MessageId}",
             created.TaskId, messageId);
         return created.TaskId;
+    }
+
+    private async System.Threading.Tasks.Task<string> ExchangeCodeAsync(string code)
+    {
+        var client = _httpClientFactory.CreateClient();
+        var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["code"] = code,
+            ["client_id"] = _options.ClientId,
+            ["client_secret"] = _options.ClientSecret,
+            ["redirect_uri"] = _options.OAuthRedirectUri,
+            ["grant_type"] = "authorization_code"
+        });
+        var response = await client.PostAsync("https://oauth2.googleapis.com/token", form);
+        var payload = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException("Google did not accept the authorization code.");
+
+        using var doc = JsonDocument.Parse(payload);
+        var refreshToken = doc.RootElement.TryGetProperty("refresh_token", out var token) ? token.GetString() : null;
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            throw new InvalidOperationException("Google did not return a refresh token. Connect the mailbox again and allow access.");
+        return refreshToken;
+    }
+
+    private async System.Threading.Tasks.Task<string> GetProfileEmailAsync(string accessToken)
+    {
+        var client = Authorized(accessToken);
+        var response = await client.GetAsync("https://gmail.googleapis.com/gmail/v1/users/me/profile");
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return doc.RootElement.GetProperty("emailAddress").GetString()
+            ?? throw new InvalidOperationException("Gmail profile had no email address.");
+    }
+
+    private async System.Threading.Tasks.Task<string> StartWatchAsync(string accessToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.PubSubTopic))
+            return string.Empty;
+
+        var client = Authorized(accessToken);
+        var body = JsonSerializer.Serialize(new
+        {
+            topicName = _options.PubSubTopic,
+            labelIds = new[] { "INBOX" }
+        });
+        var response = await client.PostAsync(
+            "https://gmail.googleapis.com/gmail/v1/users/me/watch",
+            new StringContent(body, Encoding.UTF8, "application/json"));
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return doc.RootElement.GetProperty("historyId").ToString();
     }
 
     private async System.Threading.Tasks.Task EnsurePushAuthorizedAsync(string? authorizationHeader)
@@ -199,11 +289,11 @@ public class GmailInboundService : IGmailInboundService
             throw new UnauthorizedAccessException("Pub/Sub token audience was rejected.");
     }
 
-    private async System.Threading.Tasks.Task<string> GetAccessTokenAsync()
+    private async System.Threading.Tasks.Task<string> GetAccessTokenAsync(string refreshToken)
     {
         if (string.IsNullOrWhiteSpace(_options.ClientId) ||
             string.IsNullOrWhiteSpace(_options.ClientSecret) ||
-            string.IsNullOrWhiteSpace(_options.RefreshToken))
+            string.IsNullOrWhiteSpace(refreshToken))
             throw new InvalidOperationException("Gmail OAuth client id, secret, and refresh token are required.");
 
         var client = _httpClientFactory.CreateClient();
@@ -211,7 +301,7 @@ public class GmailInboundService : IGmailInboundService
         {
             ["client_id"] = _options.ClientId,
             ["client_secret"] = _options.ClientSecret,
-            ["refresh_token"] = _options.RefreshToken,
+            ["refresh_token"] = refreshToken,
             ["grant_type"] = "refresh_token"
         });
         var response = await client.PostAsync("https://oauth2.googleapis.com/token", form);

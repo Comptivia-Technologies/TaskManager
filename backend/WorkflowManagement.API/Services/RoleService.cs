@@ -11,18 +11,49 @@ public class RoleService : IRoleService
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<Permission> _permissionRepository;
     private readonly ApplicationDbContext _context;
+    private readonly ICurrentOrganizationAccessor _orgAccessor;
     private readonly ILogger<RoleService> _logger;
 
     public RoleService(
         IRepository<Role> roleRepository,
         IRepository<Permission> permissionRepository,
         ApplicationDbContext context,
+        ICurrentOrganizationAccessor orgAccessor,
         ILogger<RoleService> logger)
     {
         _roleRepository = roleRepository;
         _permissionRepository = permissionRepository;
         _context = context;
+        _orgAccessor = orgAccessor;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// A role the caller's organization is allowed to change. Roles with no
+    /// organization are shared by every tenant, so nobody edits them through the API.
+    /// </summary>
+    private async Task<Role?> GetOwnedRoleAsync(Guid roleId)
+    {
+        var orgId = _orgAccessor.GetCurrentOrganizationId();
+        if (!orgId.HasValue)
+            throw new UnauthorizedAccessException("Organization context required.");
+
+        var role = await _roleRepository.GetByIdAsync(roleId);
+        if (role == null)
+            return null;
+
+        if (role.OrganizationId == null)
+            throw new InvalidOperationException("Built-in roles cannot be changed.");
+
+        if (role.OrganizationId != orgId.Value)
+        {
+            _logger.LogWarning(
+                "Refused a role write across organizations. RoleId: {RoleId}, CallerOrg: {CallerOrg}",
+                roleId, orgId.Value);
+            return null;
+        }
+
+        return role;
     }
 
     public async Task<IEnumerable<RoleReadDto>> GetAllAsync()
@@ -62,7 +93,10 @@ public class RoleService : IRoleService
         {
             Name = dto.Name,
             Description = dto.Description,
-            OrganizationId = dto.OrganizationId,
+            // Taken from the caller's token, never from the request: the body could
+            // otherwise create a role in another tenant, or a shared built-in one.
+            OrganizationId = _orgAccessor.GetCurrentOrganizationId()
+                ?? throw new UnauthorizedAccessException("Organization context required."),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -74,7 +108,7 @@ public class RoleService : IRoleService
 
     public async Task<RoleReadDto?> UpdateAsync(Guid roleId, RoleUpdateDto dto)
     {
-        var role = await _roleRepository.GetByIdAsync(roleId);
+        var role = await GetOwnedRoleAsync(roleId);
         if (role == null) return null;
         role.Name = dto.Name;
         role.Description = dto.Description;
@@ -86,25 +120,36 @@ public class RoleService : IRoleService
 
     public async Task<bool> DeleteAsync(Guid roleId)
     {
+        var role = await GetOwnedRoleAsync(roleId);
+        if (role == null) return false;
         return await _roleRepository.DeleteAsync(roleId);
     }
 
+    /// <summary>
+    /// Replaces a role's permissions in one transaction. Done as two commits, a
+    /// failure or a concurrent read between them leaves the role with none, which
+    /// locks every holder of that role out of the application.
+    /// </summary>
     private async System.Threading.Tasks.Task SetRolePermissionsAsync(Guid roleId, List<string> permissionCodes)
     {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var existing = await _context.RolePermissions.Where(rp => rp.RoleId == roleId).ToListAsync();
         _context.RolePermissions.RemoveRange(existing);
-        await _context.SaveChangesAsync();
 
-        if (permissionCodes.Count == 0) return;
-
-        var permissions = await _permissionRepository.GetAllAsync();
-        var codeToId = permissions.ToDictionary(p => p.Code, p => p.PermissionId);
-        foreach (var code in permissionCodes.Distinct())
+        if (permissionCodes.Count > 0)
         {
-            if (!codeToId.TryGetValue(code, out var permissionId)) continue;
-            _context.RolePermissions.Add(new RolePermission { RoleId = roleId, PermissionId = permissionId });
+            var permissions = await _permissionRepository.GetAllAsync();
+            var codeToId = permissions.ToDictionary(p => p.Code, p => p.PermissionId);
+            foreach (var code in permissionCodes.Distinct())
+            {
+                if (!codeToId.TryGetValue(code, out var permissionId)) continue;
+                _context.RolePermissions.Add(new RolePermission { RoleId = roleId, PermissionId = permissionId });
+            }
         }
+
         await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     private static RoleReadDto MapToReadDto(Role role)

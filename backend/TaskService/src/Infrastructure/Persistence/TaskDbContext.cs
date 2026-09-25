@@ -20,6 +20,7 @@ public class TaskDbContext : DbContext
     public DbSet<TaskStageNomination> TaskStageNominations { get; set; }
     public DbSet<GmailIngestedMessage> GmailIngestedMessages { get; set; }
     public DbSet<GmailWatchState> GmailWatchStates { get; set; }
+    public DbSet<GmailMailbox> GmailMailboxes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -123,6 +124,18 @@ public class TaskDbContext : DbContext
             entity.Property(e => e.MessageId).HasMaxLength(64);
             entity.Property(e => e.TaskId).IsRequired(false);
             entity.Property(e => e.ProcessedAt).IsRequired().HasColumnType("timestamp with time zone");
+        });
+
+        modelBuilder.Entity<GmailMailbox>(entity =>
+        {
+            entity.ToTable("GmailMailbox");
+            entity.HasKey(e => e.MailboxId);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(320);
+            entity.Property(e => e.RefreshToken).IsRequired();
+            entity.Property(e => e.HistoryId).IsRequired().HasMaxLength(40);
+            entity.Property(e => e.ConnectedAt).IsRequired().HasColumnType("timestamp with time zone");
+            entity.HasIndex(e => e.Email).IsUnique();
         });
 
         modelBuilder.Entity<GmailWatchState>(entity =>

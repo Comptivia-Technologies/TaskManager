@@ -18,4 +18,7 @@ public class GmailOptions
 
     /// <summary>Shared secret for the watch-renew endpoint. Sent as X-Gmail-Watch-Key.</summary>
     public string WatchKey { get; set; } = string.Empty;
+
+    /// <summary>Must match an Authorized redirect URI on the Web OAuth client.</summary>
+    public string OAuthRedirectUri { get; set; } = "http://localhost:3000/gmail/connected";
 }

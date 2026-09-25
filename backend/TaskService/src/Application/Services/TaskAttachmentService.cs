@@ -12,6 +12,7 @@ public class TaskAttachmentService : ITaskAttachmentService
     private readonly ITaskAttachmentRepository _attachmentRepository;
     private readonly IFileStorage _storage;
     private readonly IConfiguration _configuration;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<TaskAttachmentService> _logger;
 
     public TaskAttachmentService(
@@ -19,13 +20,37 @@ public class TaskAttachmentService : ITaskAttachmentService
         ITaskAttachmentRepository attachmentRepository,
         IFileStorage storage,
         IConfiguration configuration,
+        IHttpContextAccessor httpContextAccessor,
         ILogger<TaskAttachmentService> logger)
     {
         _taskRepository = taskRepository;
         _attachmentRepository = attachmentRepository;
         _storage = storage;
         _configuration = configuration;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
+    }
+
+    /// <summary>The caller's organization, from the gateway-set header.</summary>
+    private Guid CurrentOrganizationId()
+    {
+        var header = _httpContextAccessor.HttpContext?.Request.Headers["X-Organization-Id"].FirstOrDefault();
+        if (string.IsNullOrEmpty(header) || !Guid.TryParse(header, out var organizationId))
+            throw new UnauthorizedAccessException("Organization context required (X-Organization-Id header).");
+        return organizationId;
+    }
+
+    /// <summary>
+    /// The task, if it belongs to the caller's organization. A miss is reported as
+    /// not-found rather than forbidden, so this cannot be used to probe for ids.
+    /// </summary>
+    private async System.Threading.Tasks.Task<Domain.Entities.Task> GetOwnedTaskAsync(Guid taskId)
+    {
+        var organizationId = CurrentOrganizationId();
+        var task = await _taskRepository.GetByIdAsync(taskId);
+        if (task == null || task.OrganizationId != organizationId)
+            throw new KeyNotFoundException($"Task with ID {taskId} not found");
+        return task;
     }
 
     private long MaxBytes =>
@@ -41,9 +66,7 @@ public class TaskAttachmentService : ITaskAttachmentService
         Stream content,
         CancellationToken cancellationToken = default)
     {
-        var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null)
-            throw new KeyNotFoundException($"Task with ID {taskId} not found");
+        var task = await GetOwnedTaskAsync(taskId);
 
         if (sizeBytes <= 0)
             throw new InvalidOperationException("The file is empty.");
@@ -82,9 +105,7 @@ public class TaskAttachmentService : ITaskAttachmentService
 
     public async System.Threading.Tasks.Task<IReadOnlyList<TaskAttachmentReadDto>> GetForTaskAsync(Guid taskId)
     {
-        var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null)
-            throw new KeyNotFoundException($"Task with ID {taskId} not found");
+        await GetOwnedTaskAsync(taskId);
 
         var rows = await _attachmentRepository.GetByTaskIdAsync(taskId);
         return rows.Select(MapToDto).ToList();
@@ -93,7 +114,9 @@ public class TaskAttachmentService : ITaskAttachmentService
     public async System.Threading.Tasks.Task<(Stream Content, string FileName, string ContentType)?> OpenAsync(Guid attachmentId)
     {
         var attachment = await _attachmentRepository.GetByIdAsync(attachmentId);
-        if (attachment == null)
+        // Without this check any caller holding an attachment id could read another
+        // organization's file. Reported as not-found so it reveals nothing.
+        if (attachment == null || attachment.OrganizationId != CurrentOrganizationId())
             return null;
 
         var stream = await _storage.OpenReadAsync(attachment.StorageKey);

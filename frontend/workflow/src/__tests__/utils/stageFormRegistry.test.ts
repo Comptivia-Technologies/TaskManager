@@ -1,4 +1,9 @@
-import { getStageForm, hasStageForm } from '../../utils/stageFormRegistry';
+import {
+  getStageForm,
+  hasStageForm,
+  isAppointedStage,
+  stageFieldLabels,
+} from '../../utils/stageFormRegistry';
 
 describe('stageFormRegistry', () => {
   it('finds a schema by stage name regardless of case or padding', () => {
@@ -45,5 +50,65 @@ describe('assignee fields', () => {
 
   it('no longer asks for the server folder, which is the team lead own work', () => {
     expect(getStageForm('Assign Team').fields.map((f) => f.name)).not.toContain('folderPath');
+  });
+});
+
+describe('line-item stages', () => {
+  const tableField = (stageName: string, fieldName: string) =>
+    getStageForm(stageName).fields.find((f) => f.name === fieldName);
+
+  it('lets the engineer list what procurement must price', () => {
+    const materials = tableField('Verify Site Information', 'materials');
+    expect(materials?.type).toBe('table');
+    expect(materials?.required).toBe(true);
+    expect(materials?.columns?.map((c) => c.name)).toEqual(['item', 'specification', 'unit', 'quantity']);
+  });
+
+  it('carries those items into supplier pricing so they are not retyped', () => {
+    const priced = tableField('Obtain Supplier Prices', 'pricedItems');
+    expect(priced?.prefillFrom).toEqual({
+      stage: 'Verify Site Information',
+      field: 'materials',
+      columns: ['item', 'specification', 'unit', 'quantity'],
+    });
+    expect(priced?.columns?.map((c) => c.name)).toEqual(
+      expect.arrayContaining(['supplier', 'unitPrice', 'leadTime'])
+    );
+  });
+
+  it('builds the BOQ from the supplier pricing', () => {
+    const boq = tableField('Prepare & Check BOQ', 'boqLines');
+    expect(boq?.type).toBe('table');
+    expect(boq?.prefillFrom?.stage).toBe('Obtain Supplier Prices');
+    expect(boq?.prefillFrom?.field).toBe('pricedItems');
+  });
+});
+
+describe('review stages', () => {
+  it.each(['Manager Approval', 'Senior Management Approval'])(
+    '%s only decides and notes, it does not restate the figures',
+    (stageName) => {
+      expect(getStageForm(stageName).fields.map((f) => f.name)).toEqual(['decision', 'reviewNotes']);
+    }
+  );
+});
+
+describe('isAppointedStage', () => {
+  it('is true for stages the team lead appoints someone to', () => {
+    expect(isAppointedStage('Verify Site Information')).toBe(true);
+    expect(isAppointedStage('site visit & scope capture')).toBe(true);
+  });
+
+  it('is false for stages nobody was appointed to, and for nothing', () => {
+    expect(isAppointedStage('Manager Approval')).toBe(false);
+    expect(isAppointedStage(undefined)).toBe(false);
+  });
+});
+
+describe('stageFieldLabels', () => {
+  it('labels both fields and table columns', () => {
+    const labels = stageFieldLabels('Obtain Supplier Prices');
+    expect(labels.recommendedSupplier).toBe('Recommended supplier / basis');
+    expect(labels.unitPrice).toBe('Unit price');
   });
 });

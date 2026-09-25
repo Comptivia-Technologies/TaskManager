@@ -1,165 +1,88 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
+import { FiCornerDownRight, FiUserCheck } from 'react-icons/fi';
 import { Workflow } from '../types';
-import { FiUsers, FiArrowRight, FiCheckCircle, FiClock } from 'react-icons/fi';
-import { formatDateOnlyIST } from '../utils/dateUtils';
+import { getStageForm, hasStageForm } from '../utils/stageFormRegistry';
+import { autoRoutingReason } from '../utils/stageRouting';
+import { TEAM_FALLBACK, teamColors } from '../utils/theme';
 
 interface WorkflowStagesViewProps {
   workflow: Workflow;
+  /** Highlights one stage, e.g. the one picked on the map. */
+  selectedId?: string | null;
+  onSelect?: (stageId: string) => void;
 }
 
-const WorkflowStagesView = ({ workflow }: WorkflowStagesViewProps) => {
-  const [visibleStages, setVisibleStages] = useState<number[]>([]);
-  const sortedStages = useMemo(() => [...(workflow.stages || [])].sort((a, b) => a.stageOrder - b.stageOrder), [workflow.stages]);
-
-  useEffect(() => {
-    // Animate stages appearing one by one
-    const timer = setTimeout(() => {
-      sortedStages.forEach((_, index) => {
-        setTimeout(() => {
-          setVisibleStages((prev) => [...prev, index]);
-        }, index * 150);
-      });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [workflow.workflowId, sortedStages]);
+/**
+ * The workflow as a readable table of stages: who owns each one, what it records,
+ * and how the work reaches the next team. It is the text companion to the map —
+ * everything the diagram shows by position is written out here.
+ */
+const WorkflowStagesView = ({ workflow, selectedId, onSelect }: WorkflowStagesViewProps) => {
+  const stages = useMemo(
+    () => [...(workflow.stages || [])].sort((a, b) => a.stageOrder - b.stageOrder),
+    [workflow.stages]
+  );
+  const colors = useMemo(() => teamColors(stages), [stages]);
+  const uniqueTeams = new Set(stages.map((s) => s.teamName).filter(Boolean)).size;
 
   return (
-    <div className="space-y-4 font-sans">
-      {/* Workflow Overview Card */}
-      <div className="bg-gradient-to-r from-[#434E78]/10 via-[#434E78]/5 to-white rounded-azure-sm p-4 border border-[#434E78]/20 shadow-azure-sm animate-fade-in">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-semibold text-black font-sans">Workflow Overview</h2>
-          <div className="flex items-center gap-3 text-xs">
-            <div className="flex items-center gap-1.5">
-              <FiClock className="text-[#434E78] text-sm" />
-              <span className="text-black/70 font-sans">Created:</span>
-              <span className="text-black font-semibold font-sans">
-                {formatDateOnlyIST(workflow.createdAt)}
+    <div className="font-sans">
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 px-5 py-3 border-b border-line-subtle text-meta text-ink-subtle">
+        <span><span className="font-semibold text-ink tabular">{stages.length}</span> Total Stages</span>
+        <span><span className="font-semibold text-ink tabular">{uniqueTeams}</span> Unique Teams</span>
+      </div>
+      <ol className="divide-y divide-line-subtle">
+        {stages.map((stage) => {
+          const schema = getStageForm(stage.stageName);
+          const custom = hasStageForm(stage.stageName);
+          const tableField = schema.fields.find((f) => f.type === 'table');
+          const next = stages.find((s) => s.stageOrder > stage.stageOrder);
+          const routing = autoRoutingReason(next, stages);
+          const selected = selectedId === stage.stageId;
+          const color = colors.get(stage.teamId) ?? TEAM_FALLBACK;
+          return (
+            <li
+              key={stage.stageId}
+              className={`grid grid-cols-[2.5rem_minmax(0,1fr)] md:grid-cols-[2.5rem_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.2fr)] gap-x-4 gap-y-1 px-5 py-3.5
+                ${selected ? 'bg-primary-subtle' : onSelect ? 'hover:bg-surface-muted' : ''} ${onSelect ? 'cursor-pointer' : ''}`}
+              onClick={onSelect ? () => onSelect(stage.stageId) : undefined}
+            >
+              <span className={`font-mono text-meta tabular pt-0.5 ${selected ? 'text-primary font-semibold' : 'text-ink-subtle'}`}>
+                {String(stage.stageOrder).padStart(2, '0')}
               </span>
-            </div>
-          </div>
-        </div>
-        <p className="text-black/80 text-sm leading-relaxed font-sans">
-          {workflow.description || 'No description provided for this workflow.'}
-        </p>
-      </div>
-
-      {/* Stages Timeline */}
-      <div className="relative">
-        {/* Connection Line */}
-        <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gradient-to-b from-[#434E78]/30 via-[#434E78]/20 to-transparent hidden md:block"></div>
-
-        <div className="space-y-3">
-          {sortedStages.map((stage, index) => {
-            const isVisible = visibleStages.includes(index);
-            const isLast = index === sortedStages.length - 1;
-
-            return (
-              <div
-                key={stage.stageId}
-                className={`relative flex items-start gap-4 animate-slide-in ${
-                  isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-[-20px]'
-                } transition-all duration-500`}
-                style={{ transitionDelay: `${index * 100}ms` }}
-              >
-                {/* Stage Number Circle */}
-                <div className="relative z-10 flex-shrink-0">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
-                      isVisible
-                        ? 'bg-[#434E78] border-white shadow-azure-md scale-100'
-                        : 'bg-[#434E78]/30 border-[#434E78]/20 scale-90'
-                    }`}
-                  >
-                    <span className="text-white text-sm font-bold font-sans">{stage.stageOrder}</span>
-                  </div>
-                  {!isLast && (
-                    <div className="absolute top-10 left-1/2 transform -translate-x-1/2 w-0.5 h-3 bg-[#434E78]/20 hidden md:block"></div>
-                  )}
-                </div>
-
-                {/* Stage Content Card */}
-                <div
-                  className={`flex-1 bg-white rounded-azure-sm border border-[#434E78]/20 shadow-azure-sm p-4 hover:shadow-azure-md transition-all duration-300 hover:border-[#434E78]/40 ${
-                    isVisible ? 'translate-y-0' : 'translate-y-4'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-black mb-1.5 font-sans">
-                        {stage.stageName}
-                      </h3>
-                      {stage.teamName && (
-                        <div className="flex items-center gap-1.5 mt-2">
-                          <FiUsers className="text-[#434E78] text-sm" />
-                          <span className="text-xs text-black/70 font-sans">Team:</span>
-                          <span className="px-2 py-1 bg-[#434E78]/10 text-[#434E78] rounded-azure-sm text-xs font-semibold font-sans border border-[#434E78]/20">
-                            {stage.teamName}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-azure-sm text-xs font-semibold font-sans border border-emerald-200">
-                        #{stage.stageOrder}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Stage Details */}
-                  <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-[#434E78]/10">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-[#434E78]/10 flex items-center justify-center">
-                        <FiCheckCircle className="text-[#434E78] text-sm" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-black/60 font-sans">ID</p>
-                        <p className="text-xs font-semibold text-black font-sans">#{stage.stageId}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-[#434E78]/10 flex items-center justify-center">
-                        <FiArrowRight className="text-[#434E78] text-sm" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-black/60 font-sans">Order</p>
-                        <p className="text-xs font-semibold text-black font-sans">Pos {stage.stageOrder}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className="min-w-0">
+                <h3 className="text-body font-semibold text-ink">{stage.stageName}</h3>
+                <p className="text-meta text-ink-subtle md:hidden">{stage.teamName || 'No team'}</p>
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Summary Card */}
-      <div className="bg-gradient-to-r from-[#434E78]/5 to-white rounded-azure-sm p-4 border border-[#434E78]/20 shadow-azure-sm animate-fade-in">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="text-center p-3 bg-white rounded-azure-sm border border-[#434E78]/10">
-            <div className="text-2xl font-bold text-[#434E78] mb-1 font-sans">
-              {sortedStages.length}
-            </div>
-            <div className="text-xs text-black/70 font-sans">Total Stages</div>
-          </div>
-          <div className="text-center p-3 bg-white rounded-azure-sm border border-[#434E78]/10">
-            <div className="text-2xl font-bold text-[#434E78] mb-1 font-sans">
-              {sortedStages.filter((s) => s.teamName).length}
-            </div>
-            <div className="text-xs text-black/70 font-sans">With Teams</div>
-          </div>
-          <div className="text-center p-3 bg-white rounded-azure-sm border border-[#434E78]/10">
-            <div className="text-2xl font-bold text-[#434E78] mb-1 font-sans">
-              {new Set(sortedStages.map((s) => s.teamName).filter(Boolean)).size}
-            </div>
-            <div className="text-xs text-black/70 font-sans">Unique Teams</div>
-          </div>
-        </div>
-      </div>
+              <div className="hidden md:flex items-center gap-2 min-w-0 text-body text-ink-muted">
+                <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                <span className="truncate">{stage.teamName || 'No team'}</span>
+              </div>
+              <div className="col-start-2 md:col-start-auto min-w-0 text-meta text-ink-muted space-y-0.5">
+                <p>
+                  {custom ? `${schema.fields.length} field${schema.fields.length === 1 ? '' : 's'}` : 'Notes only'}
+                  {tableField ? ` · ${tableField.label.toLowerCase()}` : ''}
+                </p>
+                {next && (
+                  <p className="inline-flex items-start gap-1.5 text-ink-subtle">
+                    {routing ? (
+                      <FiUserCheck aria-hidden="true" className="mt-0.5 shrink-0" />
+                    ) : (
+                      <FiCornerDownRight aria-hidden="true" className="mt-0.5 shrink-0" />
+                    )}
+                    <span>
+                      <span className="font-medium text-ink-muted">{next.stageName}</span>
+                      {routing ? ` ${routing}` : ' — assignee chosen at hand-over'}
+                    </span>
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 };
 
 export default WorkflowStagesView;
-

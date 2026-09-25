@@ -1,5 +1,10 @@
+import { inputClass, readOnlyInputClass } from '../utils/formStyles';
 import { useState } from 'react';
-import { FiX } from 'react-icons/fi';
+import { FiUserPlus } from 'react-icons/fi';
+import Modal from './Modal';
+import Field from './Field';
+import Button from './Button';
+import { SKILL_LABELS } from './SkillMeter';
 import { Member, MemberCreate, Team, User } from '../types';
 
 interface TeamMemberModalProps {
@@ -16,9 +21,6 @@ interface TeamMemberModalProps {
   onAddExisting: (memberId: string) => void;
   onClose: () => void;
 }
-
-const inputClass =
-  'w-full px-3 py-2 border border-[#434E78]/30 rounded-azure-sm focus:outline-none focus:ring-2 focus:ring-[#434E78] focus:border-[#434E78] bg-white text-sm font-sans';
 
 const splitFullName = (fullName: string) => {
   const parts = (fullName || '').trim().split(/\s+/).filter(Boolean);
@@ -60,6 +62,8 @@ const TeamMemberModal = ({
       userId: user.userId,
       firstName: firstName || formData.firstName,
       lastName: lastName || formData.lastName,
+      // The job title comes with the login; it is not a separate thing to maintain.
+      role: user.role || '',
     });
   };
 
@@ -67,105 +71,83 @@ const TeamMemberModal = ({
     (u) => !linkedUserIds.includes(u.userId) || u.userId === formData.userId
   );
 
+  const addingExisting = !isEditMode && mode === 'existing';
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
-      <div className="bg-white rounded-azure-sm shadow-azure-xl p-6 w-full max-w-md border border-[#434E78]/20">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-black font-sans">
-            {isEditMode ? 'Edit Member' : 'Add Member'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-black/70 hover:text-black hover:bg-[#434E78]/10 p-1 rounded-azure-sm transition-colors"
-          >
-            <FiX className="text-lg" />
-          </button>
-        </div>
-
-        {!isEditMode && (
-          <div className="flex gap-2 mb-5">
-            <button
-              type="button"
-              onClick={() => setMode('existing')}
-              className={`flex-1 px-3 py-2 rounded-azure-sm text-sm font-medium border transition-colors font-sans ${
-                mode === 'existing'
-                  ? 'bg-[#434E78] text-white border-[#434E78]'
-                  : 'bg-white text-[#434E78] border-[#434E78]/30 hover:bg-[#434E78]/5'
-              }`}
-            >
-              Existing member
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('new')}
-              className={`flex-1 px-3 py-2 rounded-azure-sm text-sm font-medium border transition-colors font-sans ${
-                mode === 'new'
-                  ? 'bg-[#434E78] text-white border-[#434E78]'
-                  : 'bg-white text-[#434E78] border-[#434E78]/30 hover:bg-[#434E78]/5'
-              }`}
-            >
-              New member
-            </button>
-          </div>
-        )}
-
-        {!isEditMode && mode === 'existing' ? (
-          <div>
-            <div className="mb-4">
-              <label htmlFor="tm-existing" className="block text-black text-sm font-semibold mb-2 font-sans">
-                Member *
-              </label>
-              <select
-                id="tm-existing"
-                value={existingMemberId}
-                onChange={(e) => setExistingMemberId(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select a member...</option>
-                {availableMembers.map((m) => (
-                  <option key={m.memberId} value={m.memberId}>
-                    {m.firstName} {m.lastName}
-                    {m.teamName ? ` — currently ${m.teamName}` : ' — no team'}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-black/60 mt-1 font-sans">
-                {availableMembers.length === 0
-                  ? 'Every member is already on this team. Use "New member" to add someone else.'
-                  : 'A member belongs to one team, so this moves them onto this team.'}
-              </p>
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!existingMemberId}
-                onClick={() => onAddExisting(existingMemberId)}
-                className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Add to team
-              </button>
-            </div>
-          </div>
-        ) : (
-        <form onSubmit={onSubmit}>
-          {isEditMode ? (
-            <div className="mb-4">
-              <label htmlFor="tm-email" className="block text-black text-sm font-semibold mb-2 font-sans">Email</label>
-              <input id="tm-email" type="email" value={formData.email} readOnly className={`${inputClass} bg-gray-50 cursor-not-allowed`} />
-            </div>
+    <Modal
+      isOpen={isOpen}
+      title={isEditMode ? 'Edit Member' : 'Add Member'}
+      icon={<FiUserPlus />}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          {addingExisting ? (
+            <Button variant="primary" disabled={!existingMemberId} onClick={() => onAddExisting(existingMemberId)}>
+              Add to team
+            </Button>
           ) : (
-            <div className="mb-4">
-              <label htmlFor="tm-login" className="block text-black text-sm font-semibold mb-2 font-sans">
-                Login <span className="text-xs text-black/60 font-normal">(from Product Hub)</span> *
-              </label>
+            <Button variant="primary" type="submit" form="team-member-form">
+              {isEditMode ? 'Update' : 'Add'}
+            </Button>
+          )}
+        </>
+      }
+    >
+      {!isEditMode && (
+        <div role="group" aria-label="Who to add" className="grid grid-cols-2 p-0.5 mb-5 rounded-control bg-surface-sunken">
+          {(['existing', 'new'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              aria-pressed={mode === m}
+              onClick={() => setMode(m)}
+              className={`h-8 rounded-[5px] text-meta font-medium cursor-pointer ${
+                mode === m ? 'bg-surface text-ink shadow-azure-sm' : 'text-ink-subtle hover:text-ink'
+              }`}
+            >
+              {m === 'existing' ? 'Existing member' : 'New member'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {addingExisting ? (
+        <Field
+          htmlFor="tm-existing"
+          label="Member"
+          required
+          help={
+            availableMembers.length === 0
+              ? 'Every member is already on this team. Use "New member" to add someone else.'
+              : 'A member belongs to one team, so this moves them onto this team.'
+          }
+        >
+          <select
+            id="tm-existing"
+            value={existingMemberId}
+            onChange={(e) => setExistingMemberId(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">Select a member…</option>
+            {availableMembers.map((m) => (
+              <option key={m.memberId} value={m.memberId}>
+                {m.firstName} {m.lastName}
+                {m.teamName ? ` — currently ${m.teamName}` : ' — no team'}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : (
+        <form id="team-member-form" onSubmit={onSubmit} className="space-y-4">
+          {isEditMode ? (
+            <Field htmlFor="tm-email" label="Email">
+              <input id="tm-email" type="email" value={formData.email} readOnly className={readOnlyInputClass} />
+            </Field>
+          ) : (
+            <Field htmlFor="tm-login" label="Login" hint="(from Product Hub)" required help="Required so this person can see the work assigned to them.">
               <select
                 id="tm-login"
                 value={formData.email}
@@ -173,115 +155,78 @@ const TeamMemberModal = ({
                 className={inputClass}
                 required
               >
-                <option value="">Select a user...</option>
+                <option value="">Select a user…</option>
                 {availableUsers.map((u) => (
                   <option key={u.userId} value={u.email}>
                     {u.fullName} ({u.email})
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-black/60 mt-1 font-sans">
-                Required so this person can see the work assigned to them.
-              </p>
-            </div>
+            </Field>
           )}
 
-          <div className="mb-4">
-            <label htmlFor="tm-first-name" className="block text-black text-sm font-semibold mb-2 font-sans">First Name *</label>
-            <input
-              id="tm-first-name"
-              type="text"
-              value={formData.firstName}
-              onChange={(e) => onChange({ ...formData, firstName: e.target.value })}
-              className={inputClass}
-              required
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field htmlFor="tm-first-name" label="First Name" required>
+              <input
+                id="tm-first-name"
+                type="text"
+                value={formData.firstName}
+                onChange={(e) => onChange({ ...formData, firstName: e.target.value })}
+                className={inputClass}
+                required
+              />
+            </Field>
+            <Field htmlFor="tm-last-name" label="Last Name" required>
+              <input
+                id="tm-last-name"
+                type="text"
+                value={formData.lastName}
+                onChange={(e) => onChange({ ...formData, lastName: e.target.value })}
+                className={inputClass}
+                required
+              />
+            </Field>
           </div>
 
-          <div className="mb-4">
-            <label htmlFor="tm-last-name" className="block text-black text-sm font-semibold mb-2 font-sans">Last Name *</label>
-            <input
-              id="tm-last-name"
-              type="text"
-              value={formData.lastName}
-              onChange={(e) => onChange({ ...formData, lastName: e.target.value })}
-              className={inputClass}
-              required
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field htmlFor="tm-team" label="Team" required>
+              <select
+                id="tm-team"
+                value={formData.teamId ?? ''}
+                onChange={(e) => onChange({ ...formData, teamId: e.target.value || undefined })}
+                className={inputClass}
+                required
+              >
+                {teams.map((team) => (
+                  <option key={team.teamId} value={team.teamId}>
+                    {team.teamName}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field htmlFor="tm-skill-level" label="Skill Level" required>
+              <select
+                id="tm-skill-level"
+                value={formData.skillLevel}
+                onChange={(e) => onChange({ ...formData, skillLevel: parseInt(e.target.value, 10) })}
+                className={inputClass}
+                required
+              >
+                {SKILL_LABELS.map((label, i) => (
+                  <option key={label} value={i + 1}>
+                    {i + 1} — {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
           </div>
 
-          <div className="mb-4">
-            <label htmlFor="tm-team" className="block text-black text-sm font-semibold mb-2 font-sans">Team *</label>
-            <select
-              id="tm-team"
-              value={formData.teamId ?? ''}
-              onChange={(e) => onChange({ ...formData, teamId: e.target.value || undefined })}
-              className={inputClass}
-              required
-            >
-              {teams.map((team) => (
-                <option key={team.teamId} value={team.teamId}>
-                  {team.teamName}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="tm-role" className="block text-black text-sm font-semibold mb-2 font-sans">Role *</label>
-            <input
-              id="tm-role"
-              type="text"
-              value={formData.role}
-              onChange={(e) => onChange({ ...formData, role: e.target.value })}
-              className={inputClass}
-              placeholder="e.g., Engineer, Procurement, Manager"
-              required
-            />
-            <p className="text-xs text-black/60 mt-1 font-sans">
-              A descriptive job title. It does not grant any permissions.
-            </p>
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="tm-skill-level" className="block text-black text-sm font-semibold mb-2 font-sans">Skill Level *</label>
-            <select
-              id="tm-skill-level"
-              value={formData.skillLevel}
-              onChange={(e) => onChange({ ...formData, skillLevel: parseInt(e.target.value, 10) })}
-              className={inputClass}
-              required
-            >
-              <option value={1}>1 - Beginner</option>
-              <option value={2}>2 - Junior</option>
-              <option value={3}>3 - Intermediate</option>
-              <option value={4}>4 - Advanced</option>
-              <option value={5}>5 - Expert</option>
-            </select>
-            <p className="text-xs text-black/60 mt-1 font-sans">
-              Skill level (1-5) used for workload calculations
-            </p>
-          </div>
-
-          <div className="flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-[#434E78]/30 rounded-azure-sm hover:bg-[#434E78]/5 text-black font-medium text-sm transition-colors font-sans"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-[#434E78] text-white rounded-azure-sm hover:bg-[#434E78]/90 font-medium text-sm shadow-azure-sm transition-colors font-sans"
-            >
-              {isEditMode ? 'Update' : 'Add'}
-            </button>
-          </div>
+          <Field htmlFor="tm-role" label="Role" help="Taken from the user's role. Change it where roles are assigned, not here.">
+            <input id="tm-role" type="text" value={formData.role || '—'} readOnly className={readOnlyInputClass} />
+          </Field>
         </form>
-        )}
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 };
 

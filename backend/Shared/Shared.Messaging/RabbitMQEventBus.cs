@@ -263,6 +263,12 @@ public class RabbitMQEventBus : IEventBus, IDisposable
         channel.BasicQos(0, 10, false);
         channel.QueueDeclare(queueName, durable: true, exclusive: false, autoDelete: false);
 
+        // A parked queue beside each consumer queue. Declared here rather than as a
+        // dead-letter argument on the queue itself, because adding an argument to a
+        // queue that already exists fails with PRECONDITION_FAILED and takes the
+        // channel with it. Failed messages are published here explicitly instead.
+        channel.QueueDeclare(DeadLetterQueueName(queueName), durable: true, exclusive: false, autoDelete: false);
+
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.Received += async (_, ea) => await HandleMessageAsync(queueName, channel, ea);
         channel.BasicConsume(queueName, autoAck: false, consumer);
@@ -345,16 +351,122 @@ public class RabbitMQEventBus : IEventBus, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to process message from queue {QueueName}", queueName);
-            var retryCount = GetRetryCount(ea.BasicProperties, ea.Redelivered);
-            if (ea.Redelivered || retryCount + 1 >= _options.MaxReceiveCount)
-            {
-                channel.BasicNack(ea.DeliveryTag, false, requeue: false);
-                return;
-            }
+            // Attempts are counted on the message rather than taken from the broker.
+            // Relying on Redelivered meant an ordinary consumer restart consumed the
+            // whole retry budget and the message was dropped on its next failure.
+            var attempt = GetAttempt(ea.BasicProperties) + 1;
+            _logger.LogError(ex,
+                "Failed to process message from queue {QueueName}. Attempt {Attempt} of {Max}",
+                queueName, attempt, _options.MaxReceiveCount);
 
-            channel.BasicNack(ea.DeliveryTag, false, requeue: true);
+            try
+            {
+                if (attempt >= _options.MaxReceiveCount)
+                {
+                    ParkMessage(queueName, ea, attempt, ex);
+                }
+                else
+                {
+                    RepublishForRetry(queueName, ea, attempt);
+                }
+
+                // The copy is safely on a queue, so the original is finished with.
+                channel.BasicAck(ea.DeliveryTag, false);
+            }
+            catch (Exception republishEx)
+            {
+                // Could not hand the message on, so leave it to the broker to redeliver
+                // rather than acknowledging work that was never done.
+                _logger.LogError(republishEx,
+                    "Could not requeue or park a failed message. Returning it to {QueueName}", queueName);
+                channel.BasicNack(ea.DeliveryTag, false, requeue: true);
+            }
         }
+    }
+
+    internal static string DeadLetterQueueName(string queueName) => $"{queueName}.dlq";
+
+    /// <summary>
+    /// Puts the message back on its own queue with the attempt count incremented.
+    /// Published through the default exchange, which routes by queue name.
+    /// </summary>
+    private void RepublishForRetry(string queueName, BasicDeliverEventArgs ea, int attempt)
+    {
+        lock (_publishLock)
+        {
+            EnsurePublishChannel();
+            var properties = CopyProperties(ea.BasicProperties);
+            properties.Headers![AttemptHeader] = attempt;
+            _publishChannel!.BasicPublish("", queueName, properties, ea.Body.ToArray());
+        }
+
+        _logger.LogWarning(
+            "Returned message to {QueueName} for attempt {Attempt}", queueName, attempt + 1);
+    }
+
+    /// <summary>
+    /// Moves a message that has exhausted its attempts onto the parked queue, with
+    /// the reason attached. Nothing consumes it: it is there to be looked at.
+    /// </summary>
+    private void ParkMessage(string queueName, BasicDeliverEventArgs ea, int attempt, Exception ex)
+    {
+        var deadLetterQueue = DeadLetterQueueName(queueName);
+
+        lock (_publishLock)
+        {
+            EnsurePublishChannel();
+            var properties = CopyProperties(ea.BasicProperties);
+            properties.Headers![AttemptHeader] = attempt;
+            properties.Headers["x-failed-queue"] = queueName;
+            properties.Headers["x-failed-at"] = DateTime.UtcNow.ToString("O");
+            properties.Headers["x-failure-reason"] = Truncate(ex.Message, 512);
+            _publishChannel!.BasicPublish("", deadLetterQueue, properties, ea.Body.ToArray());
+        }
+
+        _logger.LogError(
+            "Message parked on {DeadLetterQueue} after {Attempt} attempts. DetailType: {DetailType}, CorrelationId: {CorrelationId}",
+            deadLetterQueue, attempt, GetHeader(ea.BasicProperties, "DetailType") ?? ea.BasicProperties.Type,
+            GetHeader(ea.BasicProperties, "CorrelationId"));
+    }
+
+    private void EnsurePublishChannel()
+    {
+        if (_publishChannel is { IsOpen: true }) return;
+        RecreatePublishChannel();
+    }
+
+    private IBasicProperties CopyProperties(IBasicProperties source)
+    {
+        var properties = _publishChannel!.CreateBasicProperties();
+        properties.Persistent = true;
+        properties.Type = source.Type;
+        properties.CorrelationId = source.CorrelationId;
+        properties.ContentType = source.ContentType;
+        properties.Headers = source.Headers == null
+            ? new Dictionary<string, object>()
+            : new Dictionary<string, object>(source.Headers);
+        return properties;
+    }
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max];
+
+    private const string AttemptHeader = "x-attempt";
+
+    /// <summary>How many times this message has already been tried and failed.</summary>
+    private static int GetAttempt(IBasicProperties properties)
+    {
+        if (properties.Headers == null || !properties.Headers.TryGetValue(AttemptHeader, out var value) || value == null)
+            return 0;
+
+        return value switch
+        {
+            int i => i,
+            long l => (int)l,
+            byte[] bytes when int.TryParse(Encoding.UTF8.GetString(bytes), out var parsed) => parsed,
+            string text when int.TryParse(text, out var parsed) => parsed,
+            _ => 0
+        };
     }
 
     private static Guid GetCorrelationIdFromEvent(object eventData, Type eventType)
@@ -382,22 +494,6 @@ public class RabbitMQEventBus : IEventBus, IDisposable
         }
 
         return null;
-    }
-
-    private static int GetRetryCount(IBasicProperties properties, bool redelivered)
-    {
-        if (properties.Headers == null || !properties.Headers.TryGetValue("x-delivery-count", out var value) || value == null)
-        {
-            return redelivered ? 1 : 0;
-        }
-
-        return value switch
-        {
-            int i => i,
-            long l => (int)l,
-            byte[] bytes when int.TryParse(Encoding.UTF8.GetString(bytes), out var parsed) => parsed,
-            _ => redelivered ? 1 : 0
-        };
     }
 
     private static string? GetHeader(IBasicProperties properties, string key)

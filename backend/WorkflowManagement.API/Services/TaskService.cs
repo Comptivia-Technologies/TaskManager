@@ -178,12 +178,9 @@ public class TaskService : ITaskService
         var orgId = _orgAccessor.GetCurrentOrganizationId();
         if (!orgId.HasValue)
             throw new UnauthorizedAccessException("Organization context required.");
-        var task = await _taskRepository.GetByIdAsync(id);
-        if (task == null || task.OrganizationId != orgId.Value)
-            return null;
-
-        var tasks = await _taskRepository.GetTasksWithDetailsByOrganizationAsync(orgId.Value);
-        var taskWithDetails = tasks.FirstOrDefault(t => t.TaskId == id);
+        // One row with its joins, rather than every task in the organization filtered
+        // in memory. This is the lookup the stage handlers use on every transition.
+        var taskWithDetails = await _taskRepository.GetTaskWithDetailsAsync(id, orgId.Value);
         if (taskWithDetails == null)
             return null;
 
