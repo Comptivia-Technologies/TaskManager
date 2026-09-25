@@ -51,4 +51,16 @@ describe('missingRequiredFields', () => {
   it('ignores optional fields', () => {
     expect(missingRequiredFields({ title: 't', fields: [{ name: 'a', label: 'A', type: 'text' }] }, {})).toEqual([]);
   });
+
+  it('treats an empty assignee as Auto, which satisfies a required field', () => {
+    const assignees: StageFormSchema = {
+      title: 'Assign team',
+      fields: [
+        { name: 'owner', label: 'Site visit owner', type: 'assignee', required: true },
+        { name: 'due', label: 'Site visit due', type: 'date', required: true },
+      ],
+    };
+    expect(missingRequiredFields(assignees, {})).toEqual(['Site visit due']);
+    expect(missingRequiredFields(assignees, { owner: '', due: '2026-09-09' })).toEqual([]);
+  });
 });

@@ -102,6 +102,8 @@ export const missingRequiredFields = (schema: StageFormSchema, values: StageForm
       const value = values[field.name];
       if (field.type === 'checkbox') return value !== true;
       if (field.type === 'table') return rowsOf(value).length === 0;
+      // An empty assignee is Auto — the least loaded member — not a blank answer.
+      if (field.type === 'assignee') return false;
       return value === undefined || value === null || String(value).trim() === '';
     })
     .map((field) => field.label);

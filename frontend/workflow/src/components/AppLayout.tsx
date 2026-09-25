@@ -49,7 +49,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== 'k' || !(event.metaKey || event.ctrlKey)) return;
+      if (event.key?.toLowerCase() !== 'k' || !(event.metaKey || event.ctrlKey)) return;
       event.preventDefault();
       setPaletteOpen((wasOpen) => !wasOpen);
     };

@@ -193,11 +193,7 @@ const MyEnquiries = () => {
     setCreateErrors({});
   };
 
-  const openCreate = () => {
-    // A single workflow is the usual case; making someone pick it is a wasted step.
-    if (workflows.length === 1) setNewWorkflowId(workflows[0].workflowId);
-    setCreateOpen(true);
-  };
+  const openCreate = () => setCreateOpen(true);
 
   const waitForFirstStage = async (taskId: string) => {
     for (let attempt = 0; attempt < 10; attempt += 1) {

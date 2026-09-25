@@ -46,6 +46,45 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('keeps focus on the field being edited when the parent re-renders', () => {
+    const { rerender } = render(
+      <Modal isOpen title="Edit member" onClose={jest.fn()}>
+        <input aria-label="First name" />
+        <input aria-label="Last name" />
+      </Modal>
+    );
+    const last = screen.getByLabelText('Last name');
+    last.focus();
+
+    rerender(
+      <Modal isOpen title="Edit member" onClose={jest.fn()}>
+        <input aria-label="First name" />
+        <input aria-label="Last name" />
+      </Modal>
+    );
+
+    expect(screen.getByLabelText('Last name')).toHaveFocus();
+  });
+
+  it('Escape uses the latest onClose after a re-render', () => {
+    const first = jest.fn();
+    const second = jest.fn();
+    const { rerender } = render(
+      <Modal isOpen title="Edit member" onClose={first}>
+        <input aria-label="First name" />
+      </Modal>
+    );
+    rerender(
+      <Modal isOpen title="Edit member" onClose={second}>
+        <input aria-label="First name" />
+      </Modal>
+    );
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalled();
+  });
+
   it('returns focus to whatever opened it', () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);

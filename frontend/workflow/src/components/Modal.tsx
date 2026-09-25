@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m, useReducedMotion } from 'framer-motion';
 import { FiX } from 'react-icons/fi';
 import { backdropVariants, dialogVariants, instant, sheetVariants } from '../utils/motion';
@@ -75,14 +75,18 @@ const useIsSmallScreen = () => {
 const Modal = ({ isOpen, title, children, onClose, size = 'md', description, footer, icon, tone = 'primary' }: ModalProps) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const reduceMotion = useReducedMotion();
   const isSheet = useIsSmallScreen();
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -105,10 +109,14 @@ const Modal = ({ isOpen, title, children, onClose, size = 'md', description, foo
         event.preventDefault();
         last.focus();
       }
-    },
-    [onClose]
-  );
+    };
 
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen]);
+
+  // Runs only when the dialog opens or closes. A new onClose from the parent
+  // must not repeat this, or every keystroke pulls focus back to the first field.
   useEffect(() => {
     if (!isOpen) return undefined;
 
@@ -122,16 +130,14 @@ const Modal = ({ isOpen, title, children, onClose, size = 'md', description, foo
     );
     (target ?? panelRef.current)?.focus();
 
-    document.addEventListener('keydown', handleKeyDown, true);
     const { overflow } = document.body.style;
     document.body.style.overflow = 'hidden';
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown, true);
       document.body.style.overflow = overflow;
       previouslyFocused.current?.focus();
     };
-  }, [isOpen, handleKeyDown]);
+  }, [isOpen]);
 
   // Variants carry their own enter/exit timings; this only overrides them to nothing
   // when the viewer has asked for reduced motion.
